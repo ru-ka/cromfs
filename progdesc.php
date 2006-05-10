@@ -34,7 +34,7 @@ and <a href=\"http://sourceforge.net/projects/cramfs/\">Cramfs</a>.
 ", 'overview:1. Overview' => "
 
 <ul>
- <li>Data, inodes and directories are stored compressed</li>
+ <li>Data, inodes, directories and block lists are stored compressed</li>
  <li>Duplicate inodes, files and even duplicate file portions are detected and stored only once
    <ul>
     <li>Especially suitable for gigabyte-class archives of
@@ -66,6 +66,9 @@ and <a href=\"http://sourceforge.net/projects/cramfs/\">Cramfs</a>.
  <li>The cromfs-driver has a large memory footprint.
   It is aimed for desktop and server environments, but not embedded.</li>
  <li>Ownerships are not saved.</li>
+ <li>Running multiple instances of mkcromfs at same time is not possible,
+  because it uses temporary files in /tmp, filenames of which are always
+  the same.</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created

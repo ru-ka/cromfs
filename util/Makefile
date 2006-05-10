@@ -5,8 +5,6 @@ include Makefile.sets
 CXXFLAGS += -O3
 
 OBJS += lzma/C/7zip/Compress/LZMA/LZMAEncoder.o
-OBJS += lzma/C/7zip/Compress/LZMA_Alone/LzmaRam.o
-OBJS += lzma/C/7zip/Compress/Branch/BranchX86.o
 OBJS += lzma/C/7zip/Compress/LZ/LZInWindow.o
 OBJS += lzma/C/7zip/Compress/RangeCoder/RangeCoderBit.o
 OBJS += lzma/C/7zip/Common/StreamUtils.o

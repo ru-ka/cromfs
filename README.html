@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Compressed ROM filesystem</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.0.0.
+  This is the documentation of cromfs-1.0.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#h1">Comparing to other filesystems</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;5. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -48,7 +48,7 @@ and <a href="http://sourceforge.net/projects/cramfs/">Cramfs</a>.
 </div><H2 id="overview" class="level2"><a name="overview"></a>2. Overview</H2><div class="level2" id="divoverview">
 
 <ul>
- <li>Data, inodes and directories are stored compressed</li>
+ <li>Data, inodes, directories and block lists are stored compressed</li>
  <li>Duplicate inodes, files and even duplicate file portions are detected and stored only once
    <ul>
     <li>Especially suitable for gigabyte-class archives of
@@ -80,6 +80,9 @@ and <a href="http://sourceforge.net/projects/cramfs/">Cramfs</a>.
  <li>The cromfs-driver has a large memory footprint.
   It is aimed for desktop and server environments, but not embedded.</li>
  <li>Ownerships are not saved.</li>
+ <li>Running multiple instances of mkcromfs at same time is not possible,
+  because it uses temporary files in /tmp, filenames of which are always
+  the same.</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -196,9 +199,9 @@ and is distributed under the terms of the
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Wed, 10 May 2006 23:30:01 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Thu, 11 May 2006 01:18:20 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Wed, 10 May 2006 23:40:13 +0300</small>
+  at Thu, 11 May 2006 01:34:03 +0300</small>
  </p>
 </body>
 </html>

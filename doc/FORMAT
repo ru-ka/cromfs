@@ -7,8 +7,8 @@ Note: All integers are encoded in little-endian byte order.
 OVERALL STRUCTURE
 
 OBJECT: SUPERBLOCK
-	0000	u64	CROMFS SIGNATURE "CROMFS00"
-	0008	u64	Location of BLKTAB within the filesystem
+	0000	u64	CROMFS SIGNATURE "CROMFS01"
+	0008	u64	Location of BLKDATA within the filesystem
 	0010	u64	Location of FBLKTAB within the filesystem
 	0018	u64	Location of the Inotab inode within the filesystem
 	0020	u64	Location of the Root directory within the filesystem
@@ -17,7 +17,7 @@ OBJECT: SUPERBLOCK
 	0030	u64	Bytes of file data on disk
 	0...	INODE	Root directory
 	0...	INODE	Inotab (only the "list of blocks" is used)
-	0...	BLOCK[]   BLKTAB = all blocks of the filesystem (indexed by block number)
+	0...	BLKDATA	LZMA-compressed array of BLOCK entries.
 	0...	FBLOCK[] FBLKTAB = compressed storage
 
 ---------------------------
@@ -27,6 +27,9 @@ STRUCT: FBLOCK
 	0004	char[]	(FSIZE-4) bytes of LZMA-compressed data
 	0009	u64	length of uncompressed data (located within LZMA-compressed data)
 
+STRUCT: BLKDATA (LZMA-compressed)
+	0000	BLOCK[]  BLKTAB = all blocks of the filesystem (indexed by block number)
+	
 STRUCT: BLOCK
 	0000	u32	FBLOCK number (0=first block, 1=second block, etc)
 	0004	u32	starting offset within the _uncompressed data_ for this BSIZE of data

@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cstdlib>
 
-#include <sys/mman.h>
 #include <unistd.h>
 #include <cerrno>
 
@@ -47,6 +46,31 @@ static const std::string DumpBlock(const cromfs_block_storage& block)
     return s.str();
 }
 
+static const std::vector<unsigned char> LZMADeCompress
+    (const std::vector<unsigned char>& buf)
+{
+    if(buf.size() <= 5+8) return std::vector<unsigned char> ();
+    
+    /* FIXME: not endianess-safe */
+    uint_least64_t out_sizemax = *(const uint_least64_t*)&buf[5];
+    
+    std::vector<unsigned char> result(out_sizemax);
+    
+    CLzmaDecoderState state;
+    LzmaDecodeProperties(&state.Properties, &buf[0], LZMA_PROPERTIES_SIZE);
+    state.Probs = new CProb[LzmaGetNumProbs(&state.Properties)];
+    
+    SizeT in_done;
+    SizeT out_done;
+    LzmaDecode(&state, &buf[13], buf.size()-13, &in_done,
+               &result[0], result.size(), &out_done);
+    
+    delete[] state.Probs;
+    
+    result.resize(out_done);
+    return result;
+}
+
 void cromfs::reread_superblock()
 {
     char Buf[64];
@@ -55,8 +79,6 @@ void cromfs::reread_superblock()
     uint_fast64_t sig  = R64(Buf+0x0000);
     if(sig != CROMFS_SIGNATURE) throw EINVAL;
     
-    if(blktab != NULL) munmap(blktab, sblock.blktab_size);
-    blktab = NULL;
     cache_fblocks.clear();
 
     sblock.blktab_offs             = R64(Buf+0x0008);
@@ -85,18 +107,19 @@ void cromfs::reread_superblock()
     inotab  = read_uncompressed_inode(sblock.inotab_offs);
     rootdir = read_uncompressed_inode(sblock.rootdir_offs);
     
-    void* m = mmap(NULL, sblock.blktab_size, PROT_READ, MAP_SHARED, fd, sblock.blktab_offs);
-    if(m == (void*)-1)
+    std::vector<unsigned char> blktab_compressed(sblock.blktab_size);
+    if(pread(fd, &blktab_compressed[0], blktab_compressed.size(), sblock.blktab_offs)
+    != blktab_compressed.size())
     {
-        throw errno;
+        throw EINVAL;
     }
+
+    blktab_compressed = LZMADeCompress(blktab_compressed);
     
-    blktab = (cromfs_block_storage*) m;
+    blktab.resize(blktab_compressed.size() / sizeof(blktab[0]));
+    std::memcpy(&blktab[0], &blktab_compressed[0], blktab.size() * sizeof(blktab[0]));
     
 #if READBLOCK_DEBUG
-    fprintf(stderr, "blktab is at %p, size %llu bytes\n",
-        m, sblock.blktab_size);
-
     for(unsigned a=0; a<sblock.blktab_size / 8; ++a)
     {
         fprintf(stderr, "block %u: %s\n", a, DumpBlock(blktab[a]).c_str());
@@ -383,12 +406,11 @@ const cromfs_dirinfo cromfs::read_dir(const cromfs_inode_internal& inode,
     return result;
 }
 
-cromfs::cromfs(int fild) : fd(fild), blktab(NULL)
+cromfs::cromfs(int fild) : fd(fild)
 {
     reread_superblock();
 }
 
 cromfs::~cromfs()
 {
-    if(blktab != NULL) munmap(blktab, sblock.blktab_size);
 }

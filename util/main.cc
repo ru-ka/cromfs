@@ -151,15 +151,17 @@ public:
           inotab_inode.blocklist = Blockify(inotab_source); }
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
+        std::vector<unsigned char> raw_blktab
+            ((unsigned char*)&*blocks.begin(),
+             (unsigned char*)&*blocks.end() /* Not really standard here */
+            );
+        raw_blktab = LZMACompress(raw_blktab);
+        
         unsigned char Superblock[0x38];
         uint_fast64_t root_ino_addr   = sizeof(Superblock);
         uint_fast64_t inotab_ino_addr = root_ino_addr + raw_root_inode.size();
         uint_fast64_t blktab_addr = inotab_ino_addr + raw_inotab_inode.size();
-        
-        /* Round up so that mmap() works nicely */
-        blktab_addr = (blktab_addr + 0xFFF) &~ 0xFFF;
-        
-        uint_fast64_t fblktab_addr = blktab_addr + blocks.size()*sizeof(blocks[0]);
+        uint_fast64_t fblktab_addr = blktab_addr + raw_blktab.size();
 
         W64(Superblock+0x00, CROMFS_SIGNATURE);
         W64(Superblock+0x08, blktab_addr);
@@ -175,12 +177,9 @@ public:
         write(fd, Superblock, sizeof(Superblock));
         write(fd, &raw_root_inode[0],   raw_root_inode.size());
         write(fd, &raw_inotab_inode[0], raw_inotab_inode.size());
-        
+
         lseek64(fd, blktab_addr, SEEK_SET);
-        for(unsigned a=0; a<blocks.size(); ++a)
-        {
-            write(fd, &blocks[a], sizeof(cromfs_block_storage));
-        }
+        write(fd, &raw_blktab[0],       raw_blktab.size());
         
         for(unsigned a=0; a<fblocks.size(); ++a)
         {
@@ -488,9 +487,17 @@ private:
     }
     
     bool block_is(const cromfs_block_storage& block,
-                  const std::vector<unsigned char>& data) const
+                  const std::vector<unsigned char>& data)
     {
-        std::vector<unsigned char> fblockdata = fblocks[block.fblocknum].get_raw();
+        cromfs_fblock_internal& block = fblocks[block.fblocknum];
+        std::vector<unsigned char> fblockdata = block.get_raw();
+        
+        if(!block.is_uncompressed())
+        {
+            /* Try to speedup consequent lookups */
+            /* This might hurt more than help, though */
+            block.put_raw(fblockdata);
+        }
         
         ssize_t size      = data.size();
         ssize_t remaining = fblockdata.size()-block.startoffs;
@@ -570,7 +577,7 @@ private:
             result.startoffs = new_data_offset;
             fblock_index.erase(i);
             
-            if(new_remaining_room >= 64) /* Minimum free space in the block */
+            if(new_remaining_room >= 31) /* Minimum free space in the block */
             {
                 CompressOneRandomlyButNot(
                     fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum))
@@ -591,7 +598,7 @@ private:
         cromfs_fblock_internal new_fblock;
         new_fblock.put(data, fblock_new_compressed);
         
-        if(new_remaining_room >= 64)
+        if(new_remaining_room >= 31)
         {
             CompressOneRandomlyButNot(
                 fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum))

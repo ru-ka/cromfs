@@ -1,4 +1,4 @@
-VERSION=1.0.0
+VERSION=1.0.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -37,20 +37,13 @@ ARCHFILES=\
 	util/lzma/C/7zip/Compress/LZ/BinTree/BinTreeMain.h \
 	util/lzma/C/7zip/Compress/LZ/BinTree/BinTree.h \
 	util/lzma/C/7zip/Compress/LZ/IMatchFinder.h \
-	util/lzma/C/7zip/Compress/LZ/LZOutWindow.h \
 	util/lzma/C/7zip/Compress/LZ/StdAfx.h \
 	util/lzma/C/7zip/Compress/LZ/LZInWindow.cpp \
 	util/lzma/C/7zip/Compress/LZ/LZInWindow.h \
 	util/lzma/C/7zip/Compress/LZMA/LZMA.h \
 	util/lzma/C/7zip/Compress/LZMA/StdAfx.h \
 	util/lzma/C/7zip/Compress/LZMA/LZMAEncoder.h \
-	util/lzma/C/7zip/Compress/LZMA/LZMADecoder.h \
 	util/lzma/C/7zip/Compress/LZMA/LZMAEncoder.cpp \
-	util/lzma/C/7zip/Compress/Branch/BranchX86.c \
-	util/lzma/C/7zip/Compress/Branch/BranchX86.h \
-	util/lzma/C/7zip/Compress/LZMA_Alone/StdAfx.h \
-	util/lzma/C/7zip/Compress/LZMA_Alone/LzmaRam.h \
-	util/lzma/C/7zip/Compress/LZMA_Alone/LzmaRam.cpp \
 	util/lzma/C/7zip/Compress/RangeCoder/RangeCoderBit.cpp \
 	util/lzma/C/7zip/Compress/RangeCoder/StdAfx.h \
 	util/lzma/C/7zip/Compress/RangeCoder/RangeCoder.h \
@@ -72,7 +65,6 @@ ARCHFILES=\
 	util/lzma/C/Common/MyCom.h \
 	util/lzma/C/Common/CRC.cpp \
 	util/lzma/C/Common/Types.h
-
 
 include Makefile.sets
 

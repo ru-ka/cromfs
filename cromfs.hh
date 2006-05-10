@@ -40,7 +40,7 @@ private:
     
     std::map<cromfs_fblocknum_t, cromfs_cached_fblock> cache_fblocks;
     
-    cromfs_block_storage* blktab; // mmapped
+    std::vector<cromfs_block_storage> blktab;
 
 private:
     cromfs(cromfs&);
