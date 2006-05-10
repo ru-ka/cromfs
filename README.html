@@ -1,0 +1,204 @@
+<html><head><meta http-equiv="Content-type" content="text/html; charset=iso-8859-1">
+ <title>Compressed ROM filesystem</title>
+ <style type="text/css"><!--
+TABLE.toc {border:0px}
+A:link,A:visited{text-decoration:none;color:#2A3B83}
+A:hover{text-decoration:underline;color:#002040}
+A:active{text-decoration:underline;color:#004060;background:#CCD8FF}
+TD.toc   {font-size:80%; font-family:Tahoma; text-align:left}
+H1       {font-size:250%; font-weight:bold} .level1 {text-align:center}
+H2       {font-size:200%; font-weight:bold} .level2 {margin-left:1%}
+H3       {font-size:160%; font-weight:bold} .level3 {margin-left:2%}
+H4       {font-size:145%; font-weight:bold} .level4 {margin-left:3%}
+H5       {font-size:130%; font-weight:bold} .level5 {margin-left:4%}
+H6       {font-size:110%; font-weight:bold} .level5 {margin-left:5%}
+BODY{background:white;color:black}
+CODE{font-family:lucida console,courier new,courier;color:#105000}
+PRE.smallerpre{font-family:lucida console,courier new,courier;font-size:80%;color:#500010;margin-left:30px}
+SMALL    {font-size:70%}
+.nonmail { visibility:hidden;position:absolute; top:0px;left:0px }
+.ismail  { font-weight:normal }
+--></style></head>
+ <body>
+  <h1>Compressed ROM filesystem</h1>
+  <h2 class=level2> 0. Contents </h2>
+  
+  This is the documentation of cromfs-1.0.0.
+<div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#h1">Comparing to other filesystems</a><br></td>
+<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;5. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#download">Downloading</a><br></td>
+</tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
+
+Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
+for permanently archiving gigabytes of big files that have lots of redundancy.
+
+ <p/>
+
+In terms of compression it is much similar to
+<a href="http://www.7-zip.com/">7-zip</a> files, except that practical
+realtime access can be provided for the whole archive contents; the user
+does not need to launch a program to decompress a single file, nor does
+he need to wait while the system decompresses 500 files from a 1000-file
+archive to get him the 1 file he wanted to open.
+
+ <p/>
+The creation of cromfs was inspired
+from <a href="http://squashfs.sourceforge.net/">Squashfs</a>
+and <a href="http://sourceforge.net/projects/cramfs/">Cramfs</a>.
+
+</div><H2 id="overview" class="level2"><a name="overview"></a>2. Overview</H2><div class="level2" id="divoverview">
+
+<ul>
+ <li>Data, inodes and directories are stored compressed</li>
+ <li>Duplicate inodes, files and even duplicate file portions are detected and stored only once
+   <ul>
+    <li>Especially suitable for gigabyte-class archives of
+     thousands of nearly-identical megabyte-class files.</li>
+   </ul>
+  </li>
+ <li>Files are stored in solid blocks, meaning that parts of different
+  files are compressed together for effective compression</li>
+ <li>All inode types recognized by Linux are supported. This includes
+  also the fifo, devices and symlinks.</li>
+ <li>The <a href="http://www.7-zip.com/sdk.html">LZMA compression</a> is used.
+  In the general case, LZMA compresses better than gzip and bzip2.</li>
+ <li>As with usual filesystems, the files on a cromfs volume can be accessed
+  in arbitrary order; the waits to open a specific file are small, despite
+  the files being semisolidly archived.</li>
+</ul>
+
+</div><H2 id="limits" class="level2"><a name="limits"></a>3. Limitations</H2><div class="level2" id="divlimits">
+
+<ul>
+ <li>Filesystems are write-once, read-only. It is not possible to append
+  to a previously-created filesystem, nor it is to mount it read-write.</li>
+ <li>Max filesize: 2^64 bytes (16777216 TB), but 256 TB with default settings.</li>
+ <li>Max number of files in a directory: 2^30 (smaller if filenames are longer, but still more than 100000 in almost all cases)</li>
+ <li>Max number of inodes (all files, dirs etc combined): 2^60, but depends on file sizes</li>
+ <li>Max filesystem size: 2^64 bytes (16777216 TB)</li>
+ <li>There are no "." and ".." entries in directories.</li>
+ <li>mkcromfs is slow. You must be patient.</li>
+ <li>The cromfs-driver has a large memory footprint.
+  It is aimed for desktop and server environments, but not embedded.</li>
+ <li>Ownerships are not saved.</li>
+</ul>
+
+Development status: Pre-beta. The Cromfs project has been created
+very recently and it hasn't been yet tested extensively. There is no
+warranty against data loss or anything else, so use at your own risk.
+
+</div><H2 id="h1" class="level2"><a name="h1"></a>4. Comparing to other filesystems</H2><div class="level2" id="divh1">
+
+This is all very biased, hypothetical, and by no means
+a scientific study, but here goes:
+
+<table border=1 class=fscom>
+ <tr align=left>
+  <th>Feature</th>
+   <th>Cromfs</th>
+   <th>Cramfs</th>
+   <th>Squashfs (3.0)</th>
+  </tr>
+ <tr align=left>
+  <th>Compression unit</th>
+   <td>adjustable (1 MB default)</td>
+   <td>4 kB</td>
+   <td>adjustable (64 kB max)</td>
+  </tr>
+ <tr align=left>
+  <th>Files are compressed</th>
+   <td>together (up to block limit)</td>
+   <td>individually</td>
+   <td>individually</td>
+  </tr>
+ <tr align=left>
+  <th>Maximum file size</th>
+   <td>16 EB</td>
+   <td>16 MB</td>
+   <td>16 EB</td>
+  </tr>
+ <tr align=left>
+  <th>Duplicate whole file detection</th>
+   <td>Yes</td>
+   <td>No (but hardlinks are detected)</td>
+   <td>Yes</td>
+  </tr>
+ <tr align=left>
+  <th>Near-identical file detection</th>
+   <td>Yes (identical blocks)</td>
+   <td>No</td>
+   <td>No</td>
+  </tr>
+ <tr align=left>
+  <th>Compression method</th>
+   <td>LZMA</td>
+   <td>gzip</td>
+   <td>gzip</td>
+  </tr>
+ <tr align=left>
+  <th>Ownerships</th>
+   <td>not saved</th>
+   <td>saved (but gid truncated to 8 bits)</th>
+   <td>saved</th>
+ <tr align=left>
+  <th>Endianess-safety</th>
+   <td>works on little-endian only</td>
+   <td>safe, but not exchangeable</td>
+   <td>safe</td>
+ <tr align=left>
+  <th>Kernelspace/userspace</th>
+   <td>user (fuse)</td>
+   <td>kernel</td>
+   <td>kernel</td>
+</table>
+
+</div><H2 id="usage" class="level2"><a name="usage"></a>5. Getting started</H2><div class="level2" id="divusage">
+
+<ol>
+ <li>Install the development requirements: make, gnu-c++, fuse and openssl-dev</li>
+ <li>Compile: Command "make" to build "cromfs-driver" and "util/mkcromfs"</li>
+ <li>Create a sample filesystem:
+  <pre>$ util/mkcromfs . sample.cromfs</pre>
+   </li>
+ <li>Mount the sample filesystem:
+  <pre>$ mkdir sample
+$ ./cromfs-driver sample.cromfs sample &</pre>
+   </li>
+ <li>Observe the sample filesystem:
+  <pre>$ cd sample
+$ ls -al</pre>
+   </li>
+ <li>Unmounting the filesystem:
+  <pre>$ cd ..
+$ fusermount -u sample</pre>
+    or, type "fg" and press ctrl-c to terminate the driver.
+   </li>
+</ol>
+
+</div><H2 id="copying" class="level2"><a name="copying"></a>6. Copying</H2><div class="level2" id="divcopying">
+
+cromfs has been written by Joel Yliluoma, a.k.a.
+<a href="http://iki.fi/bisqwit/">Bisqwit</a>,<br>
+and is distributed under the terms of the
+<a href="http://www.gnu.org/licenses/licenses.html#GPL">General Public License</a> (GPL).
+
+</div><H2 id="requ" class="level2"><a name="requ"></a>7. Requirements</H2><div class="level2" id="divrequ">
+
+<ul>
+ <li>GNU make and gcc-c++ are required to recompile the source code.</li>
+ <li>The openssl development library is required for MD5 calculation.</li>
+ <li>The filesystem works under the <a href="http://fuse.sourceforge.net/">Fuse</a>
+  user-space filesystem framework. You need to install both the Fuse kernel
+  module and the userspace programs before mounting Cromfs volumes.</li>
+</ul>
+
+</div><H2 id="download" class="level2"><a name="download"></a>8. Downloading</H2><div class="level2" id="divdownload">
+   The official home page of cromfs
+   is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
+   Check there for new versions.
+</div> <p align=right><small>Generated from
+       <tt>progdesc.php</tt> (last updated: Wed, 10 May 2006 23:30:01 +0300)<br>
+  with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
+  at Wed, 10 May 2006 23:40:13 +0300</small>
+ </p>
+</body>
+</html>
