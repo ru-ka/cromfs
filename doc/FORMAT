@@ -55,11 +55,13 @@ STRUCT: ENTRY
 	0000	u64	inode number
 	0008	char[]	file name, nul-terminated
 
-ALL FILES ARE COMPRESSED
+ALL FILES ARE COMPRESSED (the content is spread across different FBLOCKs)
 
 FILE CONTENT WHEN: INOTAB
 	0000	INODE[] all inodes of the filesystem
 	                the beginning of each inode is at offset ((inodenumber-2) * 4)
+	                inodenumber 1 is the root directory (not stored in INOTAB),
+	                and inodenumber 0 is error.
 
 FILE CONTENT WHEN: DIRECTORY
 	0000	u32	number of files in directory

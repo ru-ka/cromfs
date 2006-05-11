@@ -47,9 +47,10 @@ static const std::string DumpInode(const cromfs_inode_internal& inode)
       << ")time(" << inode.time
       << ")links(" << inode.links
       << ")rdev(" << std::hex << inode.rdev
-      << ")size(" << inode.bytesize
-      << ")nblocks(" << inode.blocklist.size()
-      << ")";
+      << ")size(" << inode.bytesize;
+   
+    if(!inode.blocklist.empty()) s << ")nblocks(" << inode.blocklist.size();
+    s << ")";
     
     return s.str();
 }

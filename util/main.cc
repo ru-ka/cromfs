@@ -5,13 +5,14 @@
 #include <cstdlib>
 #include <map>
 #include <algorithm>
-#include <sys/time.h>
+#include <sstream>
 
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "lzma.hh"
 
@@ -44,7 +45,7 @@ public:
     {
         static int pid = getpid();
         char Buf[4096];
-        std::sprintf(Buf, "/tmp/fblock_%d-%d", pid, fblock_disk_id);
+        std::sprintf(Buf, "/home/bisqwit/fblock_%d-%d", pid, fblock_disk_id);
         return Buf;
     }
     
@@ -77,8 +78,13 @@ public:
     {
         is_compressed = false;
         FILE* fp = std::fopen(getfn().c_str(), "wb");
-        std::fwrite(&raw[0], 1, raw.size(), fp);
+        size_t res = std::fwrite(&raw[0], 1, raw.size(), fp);
         std::fclose(fp);
+        if(res != raw.size())
+        {
+            // Possibly, out of disk space? Try to save compressed instead.
+            put_compressed(LZMACompress(raw));
+        }
     }
     void put_compressed(const std::vector<unsigned char>& compressed)
     {
@@ -141,6 +147,20 @@ private:
     }
 };
 
+const std::string ReportSize(uint_fast64_t size)
+{
+    std::stringstream st;
+    st.flags(std::ios_base::fixed);
+    st.precision(2);
+    if(size < 90000llu) st << size << " bytes";
+    else if(size < 1500000llu)    st << (size/1e3) << " kB";
+    else if(size < 1500000000llu) st << (size/1e6) << " MB";
+    else if(size < 1500000000000llu) st << (size/1e9) << " GB";
+    else if(size < 1500000000000000llu) st << (size/1e12) << " TB";
+    else st << (size/1e15) << " PB";
+    return st.str();
+}
+
 class cromfs
 {
 public:
@@ -170,14 +190,14 @@ public:
           inotab_inode.blocklist = Blockify(inotab_source); }
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
-        fprintf(stderr, "Compressing %u blocks (%u bytes each)...",
+        fprintf(stderr, "Compressing %u block records (%u bytes each)...",
             blocks.size(), sizeof(blocks[0])); fflush(stderr);
         std::vector<unsigned char> raw_blktab
             ((unsigned char*)&*blocks.begin(),
              (unsigned char*)&*blocks.end() /* Not really standard here */
             );
         raw_blktab = LZMACompress(raw_blktab);
-        fprintf(stderr, " compressed into %u bytes\n", raw_blktab.size());
+        fprintf(stderr, " compressed into %s\n", ReportSize(raw_blktab.size()).c_str());
         
         unsigned char Superblock[0x38];
         uint_fast64_t root_ino_addr   = sizeof(Superblock);
@@ -203,6 +223,9 @@ public:
         lseek64(fd, blktab_addr, SEEK_SET);
         write(fd, &raw_blktab[0],       raw_blktab.size());
         
+        uint_fast64_t compressed_total = 0;
+        uint_fast64_t uncompressed_total = 0;
+        
         for(unsigned a=0; a<fblocks.size(); ++a)
         {
             fprintf(stderr, "\rWriting fblock %u...", a); fflush(stderr);
@@ -210,15 +233,32 @@ public:
             lseek64(fd, fblktab_addr + (uint_fast64_t)a * FSIZE, SEEK_SET);
             
             char Buf[64];
-            std::vector<unsigned char> fblock = fblocks[a].get_compressed();
+            std::vector<unsigned char> fblock, fblock_raw;
+            fblocks[a].get(fblock_raw, fblock);
             
             fprintf(stderr, " %u bytes       ", fblock.size());
             
             W64(Buf, fblock.size());
             write(fd, Buf, 4);
             write(fd, &fblock[0], fblock.size());
+            
+            compressed_total   += FSIZE;
+            uncompressed_total += fblock_raw.size();
         }
-        fprintf(stderr, "%u fblocks were written\n", fblocks.size());
+        fprintf(stderr,
+            "\n%u fblocks were written: %s = %.2f %% of %s\n",
+            fblocks.size(),
+            ReportSize(compressed_total).c_str(),
+            compressed_total * 100.0 / (double)uncompressed_total,
+            ReportSize(uncompressed_total).c_str()
+           );
+        uint_fast64_t file_size = lseek64(fd, 0, SEEK_CUR);
+        fprintf(stderr,
+            "Filesystem size: %s = %.2f %% of original %s\n",
+            ReportSize(file_size).c_str(),
+            file_size * 100.0 / (double)bytes_of_files,
+            ReportSize(bytes_of_files).c_str()
+               );
     }
     
     void WalkRootDir(const std::string& path)
@@ -260,13 +300,21 @@ private:
         DIR* dir = opendir(path.c_str());
         if(!dir) { std::perror(path.c_str()); return dirinfo; }
         
+        std::vector<std::string> entries;
         while(dirent* ent = readdir(dir))
         {
-            struct stat st;
             const std::string entname = ent->d_name;
-            const std::string pathname = path + "/" + entname;
-
             if(entname == "." || entname == "..") continue;
+            entries.push_back(entname);
+        }
+        
+        std::sort(entries.begin(), entries.end());
+        
+        for(unsigned a=0; a<entries.size(); ++a)
+        {
+            const std::string& entname = entries[a];
+            struct stat st;
+            const std::string pathname = path + "/" + entname;
             
             printf("%s ...\n", pathname.c_str());
             
@@ -339,6 +387,8 @@ private:
             {
                 /* A hardlink was found! */
                 
+                printf("- reusing inode %ld (hardlink)\n", (long)inonum);
+                
                 /* Reuse the same inode number. */
                 dirinfo[entname] = inonum;
                 
@@ -364,7 +414,8 @@ private:
             uint_fast64_t eat = nbytes;
             if(eat > BSIZE) eat = BSIZE;
             
-            printf("Blockify: %llu/%llu\n", eat, nbytes);
+            std::printf(" - %llu/%llu... ", eat, nbytes);
+            std::fflush(stdout);
             
             std::vector<unsigned char> buf = data.read(eat);
             blocklist.push_back(find_or_create_block(buf));
@@ -504,6 +555,7 @@ private:
                 
                 if(block_is(block, data))
                 {
+                    printf(" reused block %u\n", (unsigned)blocknum);
                     return blocknum;
                 }
                 ++i;
@@ -511,6 +563,7 @@ private:
                 || i->first != md5) break;
             }
         }
+        
         cromfs_block_storage block = create_new_block(data);
         cromfs_blocknum_t blockno = blocks.size();
         block_index.insert(std::make_pair(md5, blockno));
@@ -540,8 +593,10 @@ private:
     
     const cromfs_block_storage create_new_block(const std::vector<unsigned char>& data)
     {
+        const std::vector<unsigned char> compressed_data = LZMACompress(data);
+        
         /* Guess how many bytes of room this block needs in a fblock */
-        uint_fast32_t guess_compressed_size = LZMACompress(data).size();
+        uint_fast32_t guess_compressed_size = compressed_data.size();
         
         fblock_index_type::iterator i = fblock_index.lower_bound(guess_compressed_size);
         while(i != fblock_index.end())
@@ -574,11 +629,12 @@ private:
                 /* Store uncompressed, use the estimated compressed size */
                 fblock.put_raw(fblock_data_raw);
 
-                fprintf(stderr, "newdata=%u (compr %u), try block %u (deco %u); GUESS: got %u, remain=%d\n",
-                    data.size(),
+                printf(" in(%u), out(%u: ?->%u became %u->%u (GUESS), remain %u)\n",
                     guess_compressed_size,
-                    old_compressed_size_guess, fblock_data_raw.size(),
-                    new_block_size_guess, new_remaining_room);
+                    (unsigned)fblocknum,
+                    old_compressed_size_guess,
+                    fblock_data_raw.size(), new_block_size,
+                    new_remaining_room);
             }
             else
             {
@@ -587,11 +643,12 @@ private:
 
                 new_remaining_room = (FSIZE-4) - new_block_size;
                 
-                fprintf(stderr, "newdata=%u (compr %u), try block %u (deco %u); got %u, remain=%d\n",
-                    data.size(),
+                printf(" in(%u), out(%u: ?->%u became %u->%u, remain %u)\n",
                     guess_compressed_size,
-                    old_compressed_size_guess, fblock_data_raw.size(),
-                    fblock_new_compressed.size(), new_remaining_room);
+                    (unsigned)fblocknum,
+                    old_compressed_size_guess,
+                    fblock_data_raw.size(), new_block_size,
+                    new_remaining_room);
                     
                 if(new_remaining_room < 0)
                 {
@@ -614,7 +671,6 @@ private:
             if(new_remaining_room >= 31 || fblock.is_uncompressed())
             {
                 i = fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
-                CompressOneRandomlyButNot(i);
             }
          #if 0
             else if(fblock.is_uncompressed())
@@ -626,14 +682,15 @@ private:
                 EnsureCompressed(i);
             }
          #endif
+            CompressOneRandomly();
             
             return result;
         }
         
         /* Create a new fblock */
-        std::vector<unsigned char> fblock_new_compressed = LZMACompress(data);
+        const std::vector<unsigned char>& fblock_new_compressed = compressed_data;
         int_fast32_t new_remaining_room = (FSIZE-4) - fblock_new_compressed.size();
-       
+        
         cromfs_block_storage result;
         result.fblocknum = fblocks.size();
         result.startoffs = 0;
@@ -644,9 +701,7 @@ private:
         {
             new_fblock.put(data, fblock_new_compressed);
 
-            CompressOneRandomlyButNot(
-                fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum))
-                                     );
+            fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
         }
         else
         {
@@ -655,6 +710,13 @@ private:
              */
             new_fblock.put_compressed(fblock_new_compressed);
         }
+        
+        printf(" in(%u), out(%u: new, remain %u)\n",
+            fblock_new_compressed.size(),
+            result.fblocknum,
+            new_remaining_room);
+        
+        CompressOneRandomly();
         
         fblocks.push_back(new_fblock);
         return result;
@@ -749,20 +811,17 @@ private:
         return false;
     }
 
-    void CompressOneRandomlyButNot(fblock_index_type::iterator i)
+    void CompressOneRandomly()
     {
         static unsigned counter = 0;
-        if(!counter) counter = 100; else { --counter; return; }
+        if(!counter) counter = 20; else { --counter; return; }
     
         if(fblocks.empty()) return;
         
         size_t count = std::rand() % fblock_index.size();
         fblock_index_type::iterator j = fblock_index.begin();
         std::advance(j, count);
-        if(j != fblock_index.end() && j != i)
-        {
-            EnsureCompressed(j);
-        }
+        if(j != fblock_index.end()) EnsureCompressed(j);
     }
 
 private:
@@ -895,6 +954,7 @@ int main(int argc, char** argv)
     fs.WalkRootDir(path.c_str());
     fprintf(stderr, "Writing %s...\n", outfn.c_str());
     
+    ftruncate(fd, 0);
     fs.WriteTo(fd);
     close(fd);
 

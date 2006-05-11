@@ -72,6 +72,7 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
  <li>The cromfs-driver has a large memory footprint. It is not
    suitable for very size-constrained systems.</li>
  <li>Ownerships are not saved.</li>
+ <li>Maximum filename length: 4095 bytes</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
