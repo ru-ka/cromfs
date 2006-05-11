@@ -1,5 +1,5 @@
 <html><head><meta http-equiv="Content-type" content="text/html; charset=iso-8859-1">
- <title>Compressed ROM filesystem</title>
+ <title>Cromfs: Compressed ROM filesystem for Linux (user-space)</title>
  <style type="text/css"><!--
 TABLE.toc {border:0px}
 A:link,A:visited{text-decoration:none;color:#2A3B83}
@@ -20,19 +20,17 @@ SMALL    {font-size:70%}
 .ismail  { font-weight:normal }
 --></style></head>
  <body>
-  <h1>Compressed ROM filesystem</h1>
+  <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.0.3.
+  This is the documentation of cromfs-1.0.4.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#compare">Comparing to other filesystems</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;5. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
 
 Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
 for permanently archiving gigabytes of big files that have lots of redundancy.
-
  <p/>
-
 In terms of compression it is much similar to
 <a href="http://www.7-zip.com/">7-zip</a> files, except that practical
 realtime access (albeit much slower than on most other filesystems) can be
@@ -40,7 +38,6 @@ provided for the whole archive contents; the user does not need to launch
 a program to decompress a single file, nor does he need to wait while the
 system decompresses 500 files from a 1000-file archive to get him the 1 file
 he wanted to open.
-
  <p/>
 The creation of cromfs was inspired
 from <a href="http://squashfs.sourceforge.net/">Squashfs</a>
@@ -117,9 +114,9 @@ a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Maximum file size</th>
-   <td>16 EB</td>
-   <td>16 MB</td>
-   <td>16 EB</td>
+   <td>16 EB (2^44 MB)</td>
+   <td>16 MB (2^4 MB)</td>
+   <td>16 EB (2^44 MB)</td>
   </tr>
  <tr align=left>
   <th>Duplicate whole file detection</th>
@@ -226,10 +223,12 @@ cromfs has been written by Joel Yliluoma, a.k.a.
 <a href="http://iki.fi/bisqwit/">Bisqwit</a>,<br>
 and is distributed under the terms of the
 <a href="http://www.gnu.org/licenses/licenses.html#GPL">General Public License</a> (GPL).
+ <br/>
+The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
-by e-mail at:<span id=eml30><b id=eml16 class=nonmail>0i3/f@</b><span id=eml17 class=ismail>Joel</span><span id=eml18 class=nonmail><b>ypiOe3e</b></span><span id=eml19 class=ismail> Yli</span><b id=eml20 class=nonmail>qy@vhhVe</b><span id=eml21 class=ismail>luom</span><span id=eml22 class=nonmail><b>0Qnjuh.</b></span><span id=eml23 class=ismail>a &lt;bi</span><b id=eml24 class=nonmail>egue</b><span id=eml25 class=ismail>sqwi</span><span id=eml26 class=nonmail><b>kt7/.@k</b></span><span id=eml27 class=ismail>t@ik</span><b id=eml28 class=nonmail>eWjVnVcpf</b><span id=eml29 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=16;i<30;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml31><b id=eml17 class=nonmail>5o</b><span id=eml18 class=ismail>Joel</span><span id=eml19 class=nonmail><b>v9dL9ku</b></span><span id=eml20 class=ismail> Yli</span><b id=eml21 class=nonmail>l</b><span id=eml22 class=ismail>luom</span><span id=eml23 class=nonmail><b>xxxk.MQ.e</b></span><span id=eml24 class=ismail>a &lt;bi</span><b id=eml25 class=nonmail>orezp</b><span id=eml26 class=ismail>sqwi</span><span id=eml27 class=nonmail><b>f@q2p</b></span><span id=eml28 class=ismail>t@ik</span><b id=eml29 class=nonmail>Xe5v/@</b><span id=eml30 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=17;i<31;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
 
 </div><H2 id="requ" class="level2"><a name="requ"></a>8. Requirements</H2><div class="level2" id="divrequ">
@@ -247,9 +246,9 @@ s='';for(i=16;i<30;){document.getElementById('eml'+i++).innerHTML='';s+=document
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Thu, 11 May 2006 22:14:25 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Thu, 11 May 2006 23:05:42 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Thu, 11 May 2006 22:13:10 +0300</small>
+  at Thu, 11 May 2006 23:04:26 +0300</small>
  </p>
 </body>
 </html>

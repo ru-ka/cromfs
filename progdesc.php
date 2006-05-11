@@ -1,9 +1,9 @@
 <?php
 require_once '/WWW/email.php';
 
-//TITLE=Compressed ROM filesystem
+//TITLE=Compressed ROM filesystem for Linux
 
-$title = 'Compressed ROM filesystem';
+$title = 'Cromfs: Compressed ROM filesystem for Linux (user-space)';
 $progname = 'cromfs';
 
 function usagetext($prog)
@@ -18,9 +18,7 @@ $text = array(
 
 Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
 for permanently archiving gigabytes of big files that have lots of redundancy.
-
  <p/>
-
 In terms of compression it is much similar to
 <a href=\"http://www.7-zip.com/\">7-zip</a> files, except that practical
 realtime access (albeit much slower than on most other filesystems) can be
@@ -28,7 +26,6 @@ provided for the whole archive contents; the user does not need to launch
 a program to decompress a single file, nor does he need to wait while the
 system decompresses 500 files from a 1000-file archive to get him the 1 file
 he wanted to open.
-
  <p/>
 The creation of cromfs was inspired
 from <a href=\"http://squashfs.sourceforge.net/\">Squashfs</a>
@@ -105,9 +102,9 @@ a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Maximum file size</th>
-   <td>16 EB</td>
-   <td>16 MB</td>
-   <td>16 EB</td>
+   <td>16 EB (2^44 MB)</td>
+   <td>16 MB (2^4 MB)</td>
+   <td>16 EB (2^44 MB)</td>
   </tr>
  <tr align=left>
   <th>Duplicate whole file detection</th>
@@ -214,6 +211,8 @@ cromfs has been written by Joel Yliluoma, a.k.a.
 <a href=\"http://iki.fi/bisqwit/\">Bisqwit</a>,<br>
 and is distributed under the terms of the
 <a href=\"http://www.gnu.org/licenses/licenses.html#GPL\">General Public License</a> (GPL).
+ <br/>
+The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
 ".GetEmail('by e-mail at:', 'Joel Yliluoma', 'bisqwi'. 't@iki.fi')."

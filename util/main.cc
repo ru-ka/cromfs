@@ -25,6 +25,10 @@
 #define DEFAULT_FSIZE 1048576
 #define DEFAULT_BSIZE 65536
 
+static bool DecompressWhenLookup = false;
+static unsigned RandomCompressPeriod = 20;
+static uint_fast32_t MinimumFreeSpace = 31;
+
 class cromfs_fblock_internal
 {
 private:
@@ -45,7 +49,7 @@ public:
     {
         static int pid = getpid();
         char Buf[4096];
-        std::sprintf(Buf, "/home/bisqwit/fblock_%d-%d", pid, fblock_disk_id);
+        std::sprintf(Buf, "/tmp/fblock_%d-%d", pid, fblock_disk_id);
         return Buf;
     }
     
@@ -577,7 +581,7 @@ private:
         cromfs_fblock_internal& fblock = fblocks[block.fblocknum];
         std::vector<unsigned char> fblockdata = fblock.get_raw();
         
-        if(!fblock.is_uncompressed())
+        if(DecompressWhenLookup && !fblock.is_uncompressed())
         {
             /* Try to speedup consequent lookups */
             /* This might hurt more than help, though */
@@ -668,7 +672,8 @@ private:
             fblock_index.erase(i);
             
             /* Minimum free space in the block */
-            if(new_remaining_room >= 31 || fblock.is_uncompressed())
+            if((uint_fast32_t)new_remaining_room >= MinimumFreeSpace
+            || fblock.is_uncompressed())
             {
                 i = fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
             }
@@ -697,7 +702,7 @@ private:
         
         cromfs_fblock_internal new_fblock;
         
-        if(new_remaining_room >= 31)
+        if(new_remaining_room >= (int_fast32_t)MinimumFreeSpace)
         {
             new_fblock.put(data, fblock_new_compressed);
 
@@ -798,7 +803,7 @@ private:
             enum { keep,remove,reinsert} decision=keep;
             
             if((uint_fast32_t)new_remaining_room != i->first) decision=reinsert;
-            if(new_remaining_room < 31) decision=remove;
+            if(new_remaining_room < (int_fast32_t)MinimumFreeSpace) decision=remove;
             
             if(decision >= remove)
                 fblock_index.erase(i);
@@ -814,7 +819,7 @@ private:
     void CompressOneRandomly()
     {
         static unsigned counter = 0;
-        if(!counter) counter = 20; else { --counter; return; }
+        if(!counter) counter = RandomCompressPeriod; else { --counter; return; }
     
         if(fblocks.empty()) return;
         
@@ -861,13 +866,19 @@ int main(int argc, char** argv)
         int option_index = 0;
         static struct option long_options[] =
         {
-            {"help",     0, 0,'h'},
-            {"version",  0, 0,'V'},
-            {"fsize",    1, 0,'f'},
-            {"bsize",    1, 0,'b'},
+            {"help",        0, 0,'h'},
+            {"version",     0, 0,'V'},
+            {"fsize",       1, 0,'f'},
+            {"bsize",       1, 0,'b'},
+            {"decompresslookups",
+                            0, 0,'e'},
+            {"randomcompressperiod",
+                            1, 0,'r'},
+            {"minfreespace",
+                            1, 0,'s'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -882,20 +893,32 @@ int main(int argc, char** argv)
                     "mkcromfs v"VERSION" - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Usage: mkcromfs [<options>] <input_path> <target_image>\n"
-                    " --help, -h           This help\n"
-                    " --version, -V        Displays version information\n"
-                    " --fsize, -f <size>   Set the size of compressed data clusters\n"
-                    "                      (default: 1048576)\n"
-                    "                      Larger cluster size improves compression,\n"
-                    "                      but increases the memory usage during mount,\n"
-                    "                      and makes the filesystem a lot slower to generate.\n"
-                    "                      Should be set at least twice as large as bsize.\n"
-                    " --bsize, -b <size>   Set the size of file fragments\n"
-                    "                      (default: 65536)\n"
-                    "                      Smaller fragment size improves the merging\n"
-                    "                      of identical file content, but causes a larger\n"
-                    "                      block table to be generated, and slows down the\n"
-                    "                      creation of the filesystem.\n"
+                    " --help, -h         This help\n"
+                    " --version, -V      Displays version information\n"
+                    " --fsize, -f <size>\n"
+                    "     Set the size of compressed data clusters. Default: 1048576\n"
+                    "     Larger cluster size improves compression, but increases the memory\n"
+                    "     usage during mount, and makes the filesystem a lot slower to generate.\n"
+                    "     Should be set at least twice as large as bsize.\n"
+                    " --bsize, -b <size>\n"
+                    "     Set the size of file fragments. Default: 65536\n"
+                    "     Smaller fragment size improves the merging of identical file content,\n"
+                    "     but causes a larger block table to be generated, and slows down the\n"
+                    "     creation of the filesystem.\n"
+                    " --decompresslookups, -e\n"
+                    "     Save decompressed data into a temporary file when it needs to be\n"
+                    "     looked up for identical block verification. Speeds up mkcromfs\n"
+                    "     somewhat, but may require as much free diskspace as the source\n"
+                    "     files are together.\n"
+                    " --randomcompressperiod, -r <value>\n"
+                    "     Interval for randomly picking one fblock to compress. Default: 20\n"
+                    "     The value has neglible effect on the compression ratio of the\n"
+                    "     filesystem, but smaller values mean slower filesystem creation\n"
+                    "     and bigger values mean more diskspace used by temporary files.\n"
+                    " --minfreespace, -s <value>\n"
+                    "     Minimum free space in a fblock to consider it a candidate. Default: 31\n"
+                    "     Bigger values speed up the compression, but will cause some space\n"
+                    "     being wasted that could have been used.\n"
                     "\n");
                 return 0;
             }
@@ -907,6 +930,11 @@ int main(int argc, char** argv)
                 if(FSIZE < 64)
                 {
                     fprintf(stderr, "mkcromfs: The minimum allowed fsize is 64. You gave %ld%s.\n", FSIZE, arg);
+                    return -1;
+                }
+                if(FSIZE > 0x7FFFFFFF)
+                {
+                    fprintf(stderr, "mkcromfs: The maximum allowed fsize is 0x7FFFFFFF. You gave 0x%lX%s.\n", FSIZE, arg);
                     return -1;
                 }
                 break;
@@ -923,6 +951,35 @@ int main(int argc, char** argv)
                 }
                 break;
             }
+            case 'e':
+            {
+                DecompressWhenLookup = true;
+                break;
+            }
+            case 'r':
+            {
+                char* arg = optarg;
+                long val = strtol(arg, &arg, 10);
+                if(val < 1)
+                {
+                    fprintf(stderr, "mkcromfs: The minimum allowed randomcompressperiod is 1. You gave %ld%s.\n", val, arg);
+                    return -1;
+                }
+                RandomCompressPeriod = val;
+                break;
+            }
+            case 's':
+            {
+                char* arg = optarg;
+                long val = strtol(arg, &arg, 10);
+                if(val < 4)
+                {
+                    fprintf(stderr, "mkcromfs: The minimum allowed minfreespace is 4. You gave %ld%s.\n", val, arg);
+                    return -1;
+                }
+                MinimumFreeSpace = val;
+                break;
+            }
         }
     }
     if(argc != optind+2)
@@ -937,7 +994,21 @@ int main(int argc, char** argv)
             "mkcromfs: Warning: Your fsize %ld is smaller than your bsize %ld.\n"
             "  This is a bad idea, and causes problems especially\n"
             "  if your files aren't easy to compress.\n",
-            FSIZE, BSIZE);
+            (long)FSIZE, (long)BSIZE);
+    }
+    if((long)MinimumFreeSpace >= BSIZE)
+    {
+        fprintf(stderr,
+            "mkcromfs: Warning: Your minfreespace %ld is quite high when compared\n"
+            "  to your bsize %ld. It looks like a bad idea.\n",
+            (long)MinimumFreeSpace, (long)BSIZE);
+    }
+    if((long)MinimumFreeSpace > FSIZE)
+    {
+        fprintf(stderr,
+            "mkcromfs: Error: Your minfreespace %ld is larger than your fsize %ld.\n"
+            "  It is not possible to create a cromfs volume under those constraints.\n",
+            (long)MinimumFreeSpace, (long)FSIZE);
     }
     
     path  = argv[optind+0];
