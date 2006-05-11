@@ -1,29 +1,24 @@
-#define FUSE_USE_VERSION 26
+/*
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+Licence: GPL
+
+main.c: The main module. This provides the bindings for the cromfs
+operations for Fuse (struct fuse_lowlevel_ops), and the option parsing.
+
+It is written in C because GNU C++ does not support the syntax
+used to initialize the cromfs_oper struct.
+
+*/
+
 #define _LARGEFILE64_SOURCE
 
-#include <fuse_lowlevel.h>
+#include "cromfs-ops.hh"
 
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 
-void* cromfs_create(int fd);
-void cromfs_uncreate(void* userdata);
-
-
-void cromfs_statfs(fuse_req_t req);
-void cromfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name);
-void cromfs_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *);
-void cromfs_access(fuse_req_t req, fuse_ino_t ino, int mask);
-void cromfs_readlink(fuse_req_t req, fuse_ino_t ino);
-void cromfs_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi);
-void cromfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
-                 struct fuse_file_info *fi);
-void cromfs_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi);
-void cromfs_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
-                    struct fuse_file_info *fi);
-
-struct fuse_lowlevel_ops cromfs_oper =
+static const struct fuse_lowlevel_ops cromfs_oper =
 {
     .statfs  = cromfs_statfs,
     

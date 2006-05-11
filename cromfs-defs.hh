@@ -1,3 +1,14 @@
+/*
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+Licence: GPL
+
+cromfs-defs.hh: The structures used by the cromfs filesystem engine
+in cromfs.cc and util/main.cc.
+
+See doc/FORMAT for the documentation of the filesystem structure.
+
+*/
+
 #include <stdint.h>
 
 #include <vector>
@@ -18,6 +29,7 @@ struct cromfs_inode_internal
     uint_fast32_t mode;
     uint_fast32_t time;
     uint_fast32_t links;
+    uint_fast32_t rdev;
     uint_fast64_t bytesize;
     std::vector<cromfs_blocknum_t> blocklist;
 };

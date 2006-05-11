@@ -1,7 +1,18 @@
-#define FUSE_USE_VERSION 26
-#include <fuse_lowlevel.h>
+/*
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+Licence: GPL
+
+cromfs-ops.cc: The filesystem access functions for Fuse. It translates
+the calls of Fuse into operations performed by the cromfs class.
+
+C++ exceptions are used to report errors: "throw errno;" is frequently
+used in the cromfs class, and these functions forward it to Fuse using
+the fuse_reply_err() function.
+
+*/
 
 #include "cromfs.hh"
+#include "cromfs-ops.hh"
 
 #include <cerrno>
 #include <fcntl.h>
@@ -15,7 +26,7 @@
 
 #define CROMFS_CTX_END() \
     } \
-    /*catch(romfs_exception e) \
+    catch(romfs_exception e) \
     { \
         fuse_reply_err(req, e); \
         return; \
@@ -23,10 +34,14 @@
     catch(std::bad_alloc) \
     { \
         fuse_reply_err(req, ENOMEM); \
-    }*/catch(char){}
+    }/*catch(char){}*/
 
 
 #define READDIR_DEBUG   0
+
+static const double TIMEOUT_CONSTANT = 0x7FFFFFFF;
+
+static bool trace_ops = false;
 
 extern "C" {
     void* cromfs_create(int fd)
@@ -40,13 +55,13 @@ extern "C" {
             }
             fs = new cromfs(fd);
         }
-        catch(char){}
-        /*catch(romfs_exception e)
+        /*catch(char){}*/
+        catch(romfs_exception e)
         {
             errno=e;
             perror("cromfs");
             return NULL;
-        }*/
+        }
         return (void*)fs;
     }
     void cromfs_uncreate(void* userdata)
@@ -57,7 +72,7 @@ extern "C" {
 
     void cromfs_statfs(fuse_req_t req)
     {
-        fprintf(stderr, "statfs\n");
+        if(trace_ops) fprintf(stderr, "statfs\n");
         CROMFS_CTX(fs)
         
         const cromfs_superblock_internal& sblock = fs.get_superblock();
@@ -85,32 +100,32 @@ extern "C" {
         attr.st_ino     = ino;
         attr.st_mode    = i.mode;
         attr.st_nlink   = i.links;
-        attr.st_uid     = 0;
-        attr.st_gid     = 0;
+        attr.st_uid     = getuid();
+        attr.st_gid     = getgid();
         attr.st_size    = i.bytesize;
         attr.st_blksize = 4096;
         attr.st_blocks  = (i.bytesize + attr.st_blksize - 1) / (attr.st_blksize);
         attr.st_atime   = i.time;
         attr.st_mtime   = i.time;
         attr.st_ctime   = i.time;
+        attr.st_rdev    = i.rdev;
     }
 
     void cromfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     {
-        fprintf(stderr, "lookup(%d,%s)\n", parent, name);
+        if(trace_ops) fprintf(stderr, "lookup(%d,%s)\n", parent, name);
+        
         CROMFS_CTX(fs)
         
-        const cromfs_inode_internal i = fs.read_inode_and_blocks(parent);
-
-        const cromfs_dirinfo filelist = fs.read_dir(i, 0, ~0U);
+        const cromfs_dirinfo filelist = fs.read_dir(parent,  0, ~0U);
         cromfs_dirinfo::const_iterator j = filelist.find(name);
         bool found = j != filelist.end();
         
         fuse_entry_param pa;
         pa.ino        = found ? j->second : 0;
         pa.generation = j->second;
-        pa.attr_timeout  = +1.0;
-        pa.entry_timeout = +1.0;
+        pa.attr_timeout  = TIMEOUT_CONSTANT;
+        pa.entry_timeout = TIMEOUT_CONSTANT;
         
         stat_inode(pa.attr, j->second, fs.read_inode(j->second));
         
@@ -121,21 +136,23 @@ extern "C" {
 
     void cromfs_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *)
     {
-        fprintf(stderr, "getattr(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "getattr(%d)\n", ino);
+        
         CROMFS_CTX(fs)
 
         const cromfs_inode_internal i = fs.read_inode(ino);
         struct stat attr;
         
         stat_inode(attr, ino, i);
-        fuse_reply_attr(req, &attr, +1.0);
+        fuse_reply_attr(req, &attr, TIMEOUT_CONSTANT);
         
         CROMFS_CTX_END()
     }
 
     void cromfs_access(fuse_req_t req, fuse_ino_t ino, int mask)
     {
-        fprintf(stderr, "access(%d,%d)\n", ino, mask);
+        if(trace_ops) fprintf(stderr, "access(%d,%d)\n", ino, mask);
+        
         CROMFS_CTX(fs)
 
         fuse_reply_err(req, 0);
@@ -163,7 +180,8 @@ extern "C" {
 
     void cromfs_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
     {
-        fprintf(stderr, "open(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "open(%d)\n", ino);
+        
         CROMFS_CTX(fs)
 
         fi->keep_cache = 1;
@@ -181,7 +199,8 @@ extern "C" {
     void cromfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                      struct fuse_file_info *fi)
     {
-        fprintf(stderr, "read(%d, %ld, %u)\n", ino, (long)size, (unsigned)off);
+        if(trace_ops) fprintf(stderr, "read(%d, %ld, %u)\n", ino, (long)size, (unsigned)off);
+        
         CROMFS_CTX(fs)
         
         const cromfs_inode_internal i = fs.read_inode_and_blocks(ino);
@@ -196,7 +215,8 @@ extern "C" {
 
     void cromfs_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
     {
-        fprintf(stderr, "opendir(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "opendir(%d)\n", ino);
+        
         CROMFS_CTX(fs)
         fi->keep_cache = 1;
         const cromfs_inode_internal i = fs.read_inode(ino);
@@ -211,15 +231,14 @@ extern "C" {
     void cromfs_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                         struct fuse_file_info *fi)
     {
-        fprintf(stderr, "readdir(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "readdir(%d)\n", ino);
+        
         CROMFS_CTX(fs)
         if(size <= 0)
         {
             fuse_reply_err(req, EINVAL);
             return;
         }
-
-        const cromfs_inode_internal i = fs.read_inode_and_blocks(ino);
 
         std::vector<char> dirbuf(size);
         
@@ -231,15 +250,15 @@ extern "C" {
         while(size > 0)
         {
             unsigned dir_count = (size + size_per_elem - 1) / size_per_elem;
-            cromfs_dirinfo dirinfo = fs.read_dir(i, off, dir_count);
+            cromfs_dirinfo dirinfo = fs.read_dir(ino, off, dir_count);
             for(cromfs_dirinfo::const_iterator
                 i = dirinfo.begin();
                 i != dirinfo.end();
                 ++i)
             {
 #if READDIR_DEBUG
-                fprintf(stderr, "- encoding dir entry '%s' (%ld)\n",
-                    i->first.c_str(),
+                fprintf(stderr, "- encoding dir entry @%ld '%s' (%ld)\n",
+                    (long)off, i->first.c_str(),
                     (long) i->second);
 #endif
                     

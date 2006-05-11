@@ -14,8 +14,8 @@ struct datasource_file: public datasource_t
 {
     datasource_file(int fild) : fd(fild)
     {
-        struct stat st;
-        fstat(fd, &st);
+        struct stat64 st;
+        fstat64(fd, &st);
         siz = st.st_size;
     }
     virtual const std::vector<unsigned char> read(uint_least64_t n)

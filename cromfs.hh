@@ -19,11 +19,14 @@ public:
     
     const cromfs_inode_internal read_inode_and_blocks(cromfs_inodenum_t inonum);
     
-    const cromfs_dirinfo read_dir(const cromfs_inode_internal& inode,
+    const cromfs_dirinfo read_dir(cromfs_inodenum_t inonum,
                                   uint_fast32_t dir_offset, uint_fast32_t dir_count);
+
+    void forget_blktab();
 
 private:
     void reread_superblock();
+    void reread_blktab();
     
     void read_block(cromfs_blocknum_t ind, unsigned offset,
                     unsigned char* target, unsigned size);

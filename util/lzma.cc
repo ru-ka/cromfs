@@ -6,6 +6,37 @@
 #include <vector>
 #include <algorithm>
 
+
+static UInt32 SelectDictionarySizeFor(unsigned datasize)
+{
+#ifdef __GNUC__
+    /* gnu c can optimize this switch statement into a fast binary
+     * search, but it cannot do so for the list of the if statements.
+     */
+    switch(datasize)
+    {
+        case 0 ... 512 : return 512;
+        case 513 ... 1024: return 2048;
+        case 1025 ... 4096: return 8192;
+        case 4097 ... 16384: return 32768;
+        case 16385 ... 65536: return 528288;
+        case 65537 ... 528288: return 1048576*4;
+        case 528289 ... 786432: return 1048576*16;
+        default: return 1048576*32;
+    }
+#else
+    if(datasize <= 512) return 512;
+    if(datasize <= 1024) return 1024;
+    if(datasize <= 4096) return 4096;
+    if(datasize <= 16384) return 32768; 
+    if(datasize <= 65536) return 528288;
+    if(datasize <= 528288) return 1048576*4;
+    if(datasize <= 786432) reutrn 1048576*16;
+    return 32*1048576;
+#endif
+}
+
+
 class CInStreamRam: public ISequentialInStream, public CMyUnknownImp
 {
     const std::vector<unsigned char>& input;
@@ -70,9 +101,7 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 {
     if(buf.empty()) return buf;
     
-    const UInt32 dictionarysize = buf.size();
-    
-    //const UInt32 dictionarysize = std::max((unsigned long)buf.size(), 32*1048576UL);
+    const UInt32 dictionarysize = SelectDictionarySizeFor(buf.size());
     
     NCompress::NLZMA::CEncoder *encoderSpec = new NCompress::NLZMA::CEncoder;
     CMyComPtr<ICompressCoder> encoder = encoderSpec;

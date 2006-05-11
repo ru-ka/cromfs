@@ -2,15 +2,16 @@
 
 #include <vector>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <algorithm>
-#include <cerrno>
 #include <sys/time.h>
 
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <errno.h>
 
 #include "lzma.hh"
 
@@ -41,9 +42,15 @@ public:
 
     const std::string getfn() const
     {
+        static int pid = getpid();
         char Buf[4096];
-        std::sprintf(Buf, "/tmp/fblock-%d", fblock_disk_id);
+        std::sprintf(Buf, "/tmp/fblock_%d-%d", pid, fblock_disk_id);
         return Buf;
+    }
+    
+    void Delete()
+    {
+        ::unlink(getfn().c_str());
     }
     
     void get(std::vector<unsigned char>& raw,
@@ -84,14 +91,19 @@ public:
     void put(const std::vector<unsigned char>& raw,
              const std::vector<unsigned char>& compressed)
     {
+        /* This method can choose freely whether to store
+         * in compressed or uncompressed format. We choose
+         * compressed, because recompression would take a
+         * lot of time, but decompression is fast.
+         */
+        
+        put_compressed(compressed);
+        /*
         if(is_compressed)
-        {
             put_compressed(compressed);
-        }
         else
-        {
             put_raw(raw);
-        }
+        */
     }
 
 private:
@@ -138,6 +150,13 @@ public:
         BSIZE = bsize;
         bytes_of_files = 0;
     }
+    ~cromfs()
+    {
+        for(unsigned a=0; a<fblocks.size(); ++a)
+        {
+            fblocks[a].Delete();
+        }
+    }
     
     void WriteTo(int fd)
     {
@@ -151,11 +170,14 @@ public:
           inotab_inode.blocklist = Blockify(inotab_source); }
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
+        fprintf(stderr, "Compressing %u blocks (%u bytes each)...",
+            blocks.size(), sizeof(blocks[0])); fflush(stderr);
         std::vector<unsigned char> raw_blktab
             ((unsigned char*)&*blocks.begin(),
              (unsigned char*)&*blocks.end() /* Not really standard here */
             );
         raw_blktab = LZMACompress(raw_blktab);
+        fprintf(stderr, " compressed into %u bytes\n", raw_blktab.size());
         
         unsigned char Superblock[0x38];
         uint_fast64_t root_ino_addr   = sizeof(Superblock);
@@ -183,14 +205,20 @@ public:
         
         for(unsigned a=0; a<fblocks.size(); ++a)
         {
+            fprintf(stderr, "\rWriting fblock %u...", a); fflush(stderr);
+            
             lseek64(fd, fblktab_addr + (uint_fast64_t)a * FSIZE, SEEK_SET);
             
             char Buf[64];
             std::vector<unsigned char> fblock = fblocks[a].get_compressed();
+            
+            fprintf(stderr, " %u bytes       ", fblock.size());
+            
             W64(Buf, fblock.size());
             write(fd, Buf, 4);
             write(fd, &fblock[0], fblock.size());
         }
+        fprintf(stderr, "%u fblocks were written\n", fblocks.size());
     }
     
     void WalkRootDir(const std::string& path)
@@ -230,7 +258,7 @@ private:
         cromfs_dirinfo dirinfo;
         
         DIR* dir = opendir(path.c_str());
-        if(!dir) { perror(path.c_str()); return dirinfo; }
+        if(!dir) { std::perror(path.c_str()); return dirinfo; }
         
         while(dirent* ent = readdir(dir))
         {
@@ -244,7 +272,7 @@ private:
             
             if(lstat(pathname.c_str(), &st) < 0)
             {
-                perror(pathname.c_str());
+                std::perror(pathname.c_str());
                 continue;
             }
             
@@ -256,6 +284,8 @@ private:
                 inode.mode     = st.st_mode;
                 inode.time     = st.st_mtime;
                 inode.links    = 1; //st.st_nlink;
+                inode.bytesize = 0;
+                inode.rdev     = 0;
                 
                 if(S_ISDIR(st.st_mode))
                 {
@@ -272,7 +302,7 @@ private:
                 {
                     std::vector<unsigned char> Buf(4096);
                     int res = readlink(pathname.c_str(), (char*)&Buf[0], Buf.size());
-                    if(res < 0) { perror(pathname.c_str()); continue; }
+                    if(res < 0) { std::perror(pathname.c_str()); continue; }
                     Buf.resize(res);
                     
                     datasource_vector f(Buf);
@@ -283,8 +313,8 @@ private:
                 }
                 else if(S_ISREG(st.st_mode))
                 {
-                    int fd = open(pathname.c_str(), O_RDONLY);
-                    if(fd < 0) { perror(pathname.c_str()); continue; }
+                    int fd = open(pathname.c_str(), O_RDONLY | O_LARGEFILE);
+                    if(fd < 0) { std::perror(pathname.c_str()); continue; }
                     
                     datasource_file f(fd);
                     inode.bytesize  = f.size();
@@ -294,9 +324,9 @@ private:
                     
                     close(fd);
                 }
-                else
+                else if(S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode))
                 {
-                    inode.bytesize  = 0;
+                    inode.rdev      = st.st_rdev;
                 }
                 
                 cromfs_inodenum_t inonum = find_or_create_inode(inode);
@@ -358,6 +388,7 @@ private:
         W32(&inodata[0x00], inode.mode);
         W32(&inodata[0x04], inode.time);
         W32(&inodata[0x08], inode.links);
+        W32(&inodata[0x0C], inode.rdev);
         W64(&inodata[0x10], inode.bytesize);
         
         if(ignore_blocks) return;
@@ -387,6 +418,7 @@ private:
         inode.mode     = R32(&inodata[0x00]);
         inode.time     = R32(&inodata[0x04]);
         inode.links    = R32(&inodata[0x08]);
+        inode.rdev     = R32(&inodata[0x0C]);
         inode.bytesize = R64(&inodata[0x10]);
         
         return inode;
@@ -489,14 +521,14 @@ private:
     bool block_is(const cromfs_block_storage& block,
                   const std::vector<unsigned char>& data)
     {
-        cromfs_fblock_internal& block = fblocks[block.fblocknum];
-        std::vector<unsigned char> fblockdata = block.get_raw();
+        cromfs_fblock_internal& fblock = fblocks[block.fblocknum];
+        std::vector<unsigned char> fblockdata = fblock.get_raw();
         
-        if(!block.is_uncompressed())
+        if(!fblock.is_uncompressed())
         {
             /* Try to speedup consequent lookups */
             /* This might hurt more than help, though */
-            block.put_raw(fblockdata);
+            fblock.put_raw(fblockdata);
         }
         
         ssize_t size      = data.size();
@@ -536,7 +568,8 @@ private:
             int_fast32_t new_remaining_room;
             new_remaining_room = (FSIZE-4) - new_block_size;
             
-            if(new_remaining_room > (int_fast32_t)BSIZE)
+            if(new_remaining_room > (int_fast32_t)BSIZE
+            || new_remaining_room > (int_fast32_t)data.size()*4)
             {
                 /* Store uncompressed, use the estimated compressed size */
                 fblock.put_raw(fblock_data_raw);
@@ -577,12 +610,22 @@ private:
             result.startoffs = new_data_offset;
             fblock_index.erase(i);
             
-            if(new_remaining_room >= 31) /* Minimum free space in the block */
+            /* Minimum free space in the block */
+            if(new_remaining_room >= 31 || fblock.is_uncompressed())
             {
-                CompressOneRandomlyButNot(
-                    fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum))
-                                         );
+                i = fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
+                CompressOneRandomlyButNot(i);
             }
+         #if 0
+            else if(fblock.is_uncompressed())
+            {
+                /* Ensure it is compressed, because without an iterator,
+                 * the EnsureCompressed engine won't find it.
+                 */
+                i = fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
+                EnsureCompressed(i);
+            }
+         #endif
             
             return result;
         }
@@ -596,13 +639,21 @@ private:
         result.startoffs = 0;
         
         cromfs_fblock_internal new_fblock;
-        new_fblock.put(data, fblock_new_compressed);
         
         if(new_remaining_room >= 31)
         {
+            new_fblock.put(data, fblock_new_compressed);
+
             CompressOneRandomlyButNot(
                 fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum))
                                      );
+        }
+        else
+        {
+            /* Ensure it is compressed, because without an iterator,
+             * the EnsureCompressed engine won't find it.
+             */
+            new_fblock.put_compressed(fblock_new_compressed);
         }
         
         fblocks.push_back(new_fblock);
@@ -633,7 +684,7 @@ private:
             }
         }
     
-        /* Append, to the end, all the remaining data */
+        /* Append all the remaining data to the end */
         unsigned common_context_length = std::min(data.size(), target.size() - result);
        // fprintf(stderr, "target=%u data=%u result=%u length=%u\n",
        //     target.size(), data.size(), result, common_context_length);
@@ -682,12 +733,15 @@ private:
                 fprintf(stderr, "Integrity failure %d\n", new_remaining_room);
             }
             
-            if((uint_fast32_t)new_remaining_room != i->first)
-            {
+            enum { keep,remove,reinsert} decision=keep;
+            
+            if((uint_fast32_t)new_remaining_room != i->first) decision=reinsert;
+            if(new_remaining_room < 31) decision=remove;
+            
+            if(decision >= remove)
                 fblock_index.erase(i);
-                
+            if(decision >= reinsert)
                 i = fblock_index.insert(std::make_pair(new_remaining_room, fblocknum));
-            }
             
             fblock.put_compressed(compressed);
             return true;
@@ -698,7 +752,7 @@ private:
     void CompressOneRandomlyButNot(fblock_index_type::iterator i)
     {
         static unsigned counter = 0;
-        if(!counter) counter = 20; else { --counter; return; }
+        if(!counter) counter = 100; else { --counter; return; }
     
         if(fblocks.empty()) return;
         
@@ -710,8 +764,13 @@ private:
             EnsureCompressed(j);
         }
     }
+
+private:
+    cromfs(cromfs&);
+    void operator=(const cromfs&);
 };
 
+/*
 static void TestCompression()
 {
     std::vector<unsigned char> buf;
@@ -728,6 +787,7 @@ static void TestCompression()
     for(unsigned a=0; a<buf.size(); ++a) fprintf(stderr, " %02X", buf[a]);
     fprintf(stderr, "\n");
 }
+*/
 
 int main(int argc, char** argv)
 {
@@ -824,13 +884,21 @@ int main(int argc, char** argv)
     path  = argv[optind+0];
     outfn = argv[optind+1];
     
+    int fd = open(outfn.c_str(), O_WRONLY | O_CREAT | O_LARGEFILE, 0644);
+    if(fd < 0)
+    {
+        std::perror(outfn.c_str());
+        return errno;
+    }
+
     cromfs fs(FSIZE, BSIZE);
     fs.WalkRootDir(path.c_str());
     fprintf(stderr, "Writing %s...\n", outfn.c_str());
     
-    int fd = open(outfn.c_str(), O_WRONLY | O_CREAT, 0644);
     fs.WriteTo(fd);
     close(fd);
+
+    fprintf(stderr, "End\n");
     
     return 0;
 }

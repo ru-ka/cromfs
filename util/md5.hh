@@ -1,5 +1,6 @@
 #include <openssl/md5.h>
 #include <cstdio>
+#include <cstring>
 
 #undef MD5
 typedef class MD5

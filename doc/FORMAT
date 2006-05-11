@@ -1,6 +1,11 @@
-Note: Inode 1 is assumed to be the root directory.
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+Licence: GPL
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+cromfs filesystem structure / format description.
 
 --------------------------------
+Note: Inode 1 is assumed to be the root directory by the kernel.
 
 Note: All integers are encoded in little-endian byte order.
 
@@ -29,7 +34,11 @@ STRUCT: FBLOCK
 
 STRUCT: BLKDATA (LZMA-compressed)
 	0000	BLOCK[]  BLKTAB = all blocks of the filesystem (indexed by block number)
-	
+	(Note: To handle BLKDATA effeciently, it must be decompressed entirely
+	into the RAM when the block lists are needed. This typically might consume
+	several megabytes of RAM. However, cromfs-driver deallocates the
+	data periodically when the filesystem has been idle for some time.)
+
 STRUCT: BLOCK
 	0000	u32	FBLOCK number (0=first block, 1=second block, etc)
 	0004	u32	starting offset within the _uncompressed data_ for this BSIZE of data
@@ -38,7 +47,7 @@ STRUCT: INODE
 	0000	u32	mode
 	0004	u32	mtime
 	0008	u32	links (hardlink count)
-	000C	u32	unused
+	000C	u32	rdev, if a device
 	0010	u64	size in bytes
 	0018	u32[]	list of blocks
 
