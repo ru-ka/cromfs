@@ -128,6 +128,42 @@ void cromfs::reread_superblock()
     
     forget_blktab();
     reread_blktab();
+    
+    reread_fblktab();
+    
+    if(fblktab.empty()) throw EINVAL;
+}
+
+void cromfs::reread_fblktab()
+{
+    fblktab.clear();
+    
+    uint_fast64_t startpos = sblock.fblktab_offs;
+    for(;;)
+    {
+        unsigned char Buf[4];
+        ssize_t r = pread64(fd, Buf, 4, startpos);
+        if(r == 0) break;
+        if(r < 0) throw errno;
+        if(r < 4) throw EINVAL;
+        
+        cromfs_fblock_internal fblock;
+        fblock.filepos = startpos+4;
+        fblock.length  = R32(Buf);
+        
+        if(fblock.length <= 13 || fblock.length > CROMFS_FSIZE-4)
+        {
+            throw EINVAL;
+        }
+
+#if FBLOCK_DEBUG
+        fprintf(stderr, "fblock %u is %u bytes at %llu\n",
+            fblktab.size(), fblock.length, fblock.filepos);
+#endif
+        fblktab.push_back(fblock);
+        
+        startpos += 4 + fblock.length;
+    }
 }
 
 void cromfs::forget_blktab()
@@ -174,8 +210,9 @@ static void cromfs_setup_alarm(cromfs& obj)
 void cromfs::reread_blktab()
 {
     std::vector<unsigned char> blktab_compressed(sblock.blktab_size);
-    if(pread64(fd, &blktab_compressed[0], blktab_compressed.size(), sblock.blktab_offs)
-    != blktab_compressed.size())
+    
+    ssize_t r = pread64(fd, &blktab_compressed[0], blktab_compressed.size(), sblock.blktab_offs);
+    if(r != (ssize_t)blktab_compressed.size())
     {
         throw EINVAL;
     }
@@ -313,7 +350,8 @@ void cromfs::read_block(cromfs_blocknum_t ind, unsigned offset,
 cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
 {
     std::map<cromfs_fblocknum_t, cromfs_cached_fblock>::iterator
-        i = cache_fblocks.find(ind);
+    i = cache_fblocks.find(ind);
+
     if(i != cache_fblocks.end())
     {
         return i->second;
@@ -329,44 +367,29 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
         cache_fblocks.erase(i);
     }
     
-    unsigned char Buf[CROMFS_FSIZE];
-    ssize_t r = pread64(fd, Buf, sizeof(Buf), sblock.fblktab_offs + ind * CROMFS_FSIZE);
-    if(r == -1) throw errno;
+    if(fblktab.empty()) reread_fblktab();
     
-    uint_fast32_t comp_size = R32(Buf+0);   SizeT comp_got;
-    uint_fast64_t orig_size = R64(Buf+4+5); SizeT orig_got;
+    uint_fast32_t comp_size = fblktab[ind].length; SizeT comp_got;
     
+    std::vector<unsigned char> Buf(comp_size);
+    ssize_t r = pread64(fd, &Buf[0], comp_size, fblktab[ind].filepos);
 #if FBLOCK_DEBUG
-    fprintf(stderr,
-        "Got a fblock\n"
-        "- asked for %u bytes, got %d. comp_size=%u, orig_size=%llu\n",
-        sizeof(Buf),
-        r, comp_size, orig_size);
+    fprintf(stderr, "- reading fblock %u (%u bytes) from %llu: got %ld\n",
+        (unsigned)ind, (unsigned)comp_size, fblktab[ind].filepos, (long)r);
 #endif
+    if(r < 0) throw errno;
+    if((uint_fast32_t)r < comp_size) throw EIO;
 
-    if(r < (ssize_t)(comp_size+4))
-    {
-#if FBLOCK_DEBUG
-        fprintf(stderr, "- that was a short read\n");
-#endif
-        throw EIO;
-    }
-    if(comp_size <= 13)
-    {
-#if FBLOCK_DEBUG
-        fprintf(stderr, "- that is a too small fblock\n");
-#endif
-        throw EIO;
-    }
+    uint_fast64_t orig_size = R64(&Buf[5]);        SizeT orig_got;
     
     cromfs_cached_fblock& result = cache_fblocks[ind];
     result.resize(orig_size);
 
     CLzmaDecoderState state;
-    LzmaDecodeProperties(&state.Properties, &Buf[4], LZMA_PROPERTIES_SIZE);
+    LzmaDecodeProperties(&state.Properties, &Buf[0], LZMA_PROPERTIES_SIZE);
     state.Probs = new CProb[LzmaGetNumProbs(&state.Properties)];
     
-    LzmaDecode(&state, Buf+4+5+8,  comp_size-5-8, &comp_got,
+    LzmaDecode(&state, &Buf[5+8],  comp_size-5-8, &comp_got,
                        &result[0], orig_size,     &orig_got);
     
     delete[] state.Probs;

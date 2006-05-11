@@ -1,8 +1,8 @@
-VERSION=1.0.4
+VERSION=1.0.5
 
 include Makefile.sets
 
-CXXFLAGS += -O3
+CXXFLAGS += -O3 -fno-inline
 
 OBJS += lzma/C/7zip/Compress/LZMA/LZMAEncoder.o
 OBJS += lzma/C/7zip/Compress/LZ/LZInWindow.o

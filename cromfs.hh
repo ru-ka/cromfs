@@ -27,6 +27,7 @@ public:
 private:
     void reread_superblock();
     void reread_blktab();
+    void reread_fblktab();
     
     void read_block(cromfs_blocknum_t ind, unsigned offset,
                     unsigned char* target, unsigned size);
@@ -43,6 +44,7 @@ private:
     
     std::map<cromfs_fblocknum_t, cromfs_cached_fblock> cache_fblocks;
     
+    std::vector<cromfs_fblock_internal> fblktab;
     std::vector<cromfs_block_storage> blktab;
 
 private:

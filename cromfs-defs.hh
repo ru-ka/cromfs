@@ -33,6 +33,12 @@ struct cromfs_inode_internal
     uint_fast64_t bytesize;
     std::vector<cromfs_blocknum_t> blocklist;
 };
+struct cromfs_fblock_internal
+{
+    uint_fast64_t filepos;
+    uint_fast32_t length;
+};
+
 struct cromfs_block_storage
 {
     uint_least32_t fblocknum __attribute__((packed));

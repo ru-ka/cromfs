@@ -14,6 +14,7 @@ used to initialize the cromfs_oper struct.
 
 #include "cromfs-ops.hh"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -42,11 +43,13 @@ int main(int argc, char *argv[])
 {
     char *mountpoint;
     int fd = open(argv[1], O_RDONLY); --argc; ++argv;
+    
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     
     void* userdata = cromfs_create(fd);
     if(!userdata)
     {
+        fprintf(stderr, "cromfs_create failed. Usage: cromfs-driver <image> <directory>\n");
         return -1;
     }
     fd = -1;
@@ -80,7 +83,11 @@ int main(int argc, char *argv[])
         fuse_session_destroy(se);
     }
     close(fd);
+#if FUSE_VERSION >= 26
     fuse_unmount(mountpoint, fd);
+#else
+    fuse_unmount(mountpoint);
+#endif
     
     cromfs_uncreate(userdata);
     

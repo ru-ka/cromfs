@@ -240,7 +240,11 @@ extern "C" {
             return;
         }
 
+#if FUSE_VERSION >= 26
         std::vector<char> dirbuf(size);
+#else
+        std::vector<char> dirbuf(size + 4096);
+#endif
         
         /* Estimate that each dir entry is about 64 bytes in size by average */
         unsigned size_per_elem = 64;
@@ -268,12 +272,20 @@ extern "C" {
                 
                 ++off;
                 
+#if FUSE_VERSION >= 26
                 size_t ent_size = fuse_add_direntry(
                     req,
                     &dirbuf[dirbuf_head], size,
                     i->first.c_str(),
                     &attr,
                     off);
+#else
+                size_t ent_size = fuse_add_dirent(
+                    &dirbuf[dirbuf_head],
+                    i->first.c_str(),
+                    &attr,
+                    off) - &dirbuf[dirbuf_head];
+#endif
                 
                 if(ent_size > size)
                 {

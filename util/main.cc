@@ -28,14 +28,15 @@
 static bool DecompressWhenLookup = false;
 static unsigned RandomCompressPeriod = 20;
 static uint_fast32_t MinimumFreeSpace = 31;
+static bool TryHardToReachFSIZE = false;
 
-class cromfs_fblock_internal
+class mkcromfs_fblock
 {
 private:
     int fblock_disk_id;
     bool is_compressed;
 public:
-    cromfs_fblock_internal()
+    mkcromfs_fblock()
     {
         static int disk_id = 0;
         fblock_disk_id = disk_id++;
@@ -230,11 +231,11 @@ public:
         uint_fast64_t compressed_total = 0;
         uint_fast64_t uncompressed_total = 0;
         
+        lseek64(fd, fblktab_addr, SEEK_SET);
+            
         for(unsigned a=0; a<fblocks.size(); ++a)
         {
             fprintf(stderr, "\rWriting fblock %u...", a); fflush(stderr);
-            
-            lseek64(fd, fblktab_addr + (uint_fast64_t)a * FSIZE, SEEK_SET);
             
             char Buf[64];
             std::vector<unsigned char> fblock, fblock_raw;
@@ -578,7 +579,7 @@ private:
     bool block_is(const cromfs_block_storage& block,
                   const std::vector<unsigned char>& data)
     {
-        cromfs_fblock_internal& fblock = fblocks[block.fblocknum];
+        mkcromfs_fblock& fblock = fblocks[block.fblocknum];
         std::vector<unsigned char> fblockdata = fblock.get_raw();
         
         if(DecompressWhenLookup && !fblock.is_uncompressed())
@@ -609,7 +610,7 @@ private:
             const uint_fast32_t      old_compressed_size_guess = (FSIZE-4) - old_room;
             
             const cromfs_fblocknum_t fblocknum = i->second;
-            cromfs_fblock_internal& fblock = fblocks[fblocknum];
+            mkcromfs_fblock& fblock = fblocks[fblocknum];
             
             std::vector<unsigned char> fblock_data_raw = fblock.get_raw();
             uint_fast32_t new_data_offset = AppendOrOverlapBlock(fblock_data_raw, data);
@@ -672,21 +673,12 @@ private:
             fblock_index.erase(i);
             
             /* Minimum free space in the block */
-            if((uint_fast32_t)new_remaining_room >= MinimumFreeSpace
+            if((TryHardToReachFSIZE
+               && (uint_fast32_t)new_remaining_room >= MinimumFreeSpace)
             || fblock.is_uncompressed())
             {
                 i = fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
             }
-         #if 0
-            else if(fblock.is_uncompressed())
-            {
-                /* Ensure it is compressed, because without an iterator,
-                 * the EnsureCompressed engine won't find it.
-                 */
-                i = fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
-                EnsureCompressed(i);
-            }
-         #endif
             CompressOneRandomly();
             
             return result;
@@ -700,7 +692,7 @@ private:
         result.fblocknum = fblocks.size();
         result.startoffs = 0;
         
-        cromfs_fblock_internal new_fblock;
+        mkcromfs_fblock new_fblock;
         
         if(new_remaining_room >= (int_fast32_t)MinimumFreeSpace)
         {
@@ -721,9 +713,10 @@ private:
             result.fblocknum,
             new_remaining_room);
         
+        fblocks.push_back(new_fblock);
+
         CompressOneRandomly();
         
-        fblocks.push_back(new_fblock);
         return result;
     }
 
@@ -765,7 +758,7 @@ private:
     std::multimap<MD5c, cromfs_blocknum_t> block_index;
     
     typedef std::multimap<uint_fast32_t, cromfs_fblocknum_t> fblock_index_type;
-    std::vector<cromfs_fblock_internal> fblocks;
+    std::vector<mkcromfs_fblock> fblocks;
     fblock_index_type fblock_index;
 
     std::vector<unsigned char> inotab;
@@ -789,7 +782,13 @@ private:
     bool EnsureCompressed(fblock_index_type::iterator i)
     {
         cromfs_fblocknum_t fblocknum = i->second;
-        cromfs_fblock_internal& fblock = fblocks[fblocknum];
+
+        /*
+        fprintf(stderr, "Trying fblocknum %u / %u\n",
+            fblocknum, fblocks.size());
+        */
+        
+        mkcromfs_fblock& fblock = fblocks[fblocknum];
         if(fblock.is_uncompressed())
         {
             const std::vector<unsigned char> compressed = fblock.get_compressed();
@@ -821,11 +820,13 @@ private:
         static unsigned counter = 0;
         if(!counter) counter = RandomCompressPeriod; else { --counter; return; }
     
-        if(fblocks.empty()) return;
+        if(fblock_index.empty()) return;
         
         size_t count = std::rand() % fblock_index.size();
+        
         fblock_index_type::iterator j = fblock_index.begin();
         std::advance(j, count);
+        
         if(j != fblock_index.end()) EnsureCompressed(j);
     }
 
@@ -876,9 +877,10 @@ int main(int argc, char** argv)
                             1, 0,'r'},
             {"minfreespace",
                             1, 0,'s'},
+            {"tryhard",     0, 0,'H'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:er:s:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:H", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -919,6 +921,12 @@ int main(int argc, char** argv)
                     "     Minimum free space in a fblock to consider it a candidate. Default: 31\n"
                     "     Bigger values speed up the compression, but will cause some space\n"
                     "     being wasted that could have been used.\n"
+                    " --tryhard, -H\n"
+                    "     Try hard to reach full blocks of fsize bytes.\n"
+                    "     Without this option, chances are that most of the fblocks will\n"
+                    "     end up being about (fsize-bsize) in size. Which is usually not\n"
+                    "     a problem if you increase fsize by the amount of bsize to\n"
+                    "     compensate. :)\n"
                     "\n");
                 return 0;
             }
@@ -978,6 +986,11 @@ int main(int argc, char** argv)
                     return -1;
                 }
                 MinimumFreeSpace = val;
+                break;
+            }
+            case 'H':
+            {
+                TryHardToReachFSIZE = true;
                 break;
             }
         }

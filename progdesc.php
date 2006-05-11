@@ -224,7 +224,8 @@ Patches and other related material can be submitted
  <li>The openssl development library is required for MD5 calculation.</li>
  <li>The filesystem works under the <a href=\"http://fuse.sourceforge.net/\">Fuse</a>
   user-space filesystem framework. You need to install both the Fuse kernel
-  module and the userspace programs before mounting Cromfs volumes.</li>
+  module and the userspace programs before mounting Cromfs volumes.<br />
+  You need version fuse version 2.6.0 or newer. (2.5.2 <i>might</i> work.)</li>
 </ul>
 
 ");
