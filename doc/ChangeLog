@@ -1,0 +1,59 @@
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+Changelog
+
+1.0.6	2006-05-12 Joel Yliluoma <bisqwit@iki.fi>
+- Another compilation fix
+- Documentation updates
+- mkcromfs's temporary directory now configurable
+ (recognizes the environment variable TEMP or TMP)
+- mkcromfs optimization: Uses mmapping to compare portions of files.
+ Most effective when used together with --decompresslookups.
+
+1.0.5.1	2006-05-12 Joel Yliluoma <bisqwit@iki.fi>
+- A compilation fix
+
+1.0.5	2006-05-11 Joel Yliluoma <bisqwit@iki.fi>
+- Added compatibility for older versions of Fuse
+ (2.5.2 now supported, previously only compiled on 2.6.0)
+- Changed filesystem format: FBLOCKs are now stored without padding.
+ This will result in better compression, and opens opportunities
+ to make mkcromfs faster.
+- Added commandline option in mkcromfs:
+ --tryhard
+
+1.0.4	2006-05-11 Joel Yliluoma <bisqwit@iki.fi>
+- Documentation updates
+- Fixed mkcromfs error from 1.0.3 version
+- Added commandline options in mkcromfs:
+ --decompresslookups, --randomcompressperiod and --minfreespace
+
+1.0.3   2006-05-11 Joel Yliluoma <bisqwit@iki.fi>
+- Documentation updates
+- Broken mkcromfs release
+- Added statistics reporting in mkcromfs at end
+
+1.0.2
+- Added support for block devices and character devices
+- Documentation updates
+- Added commandline options in mkcromfs: --bsize, --fsize
+- Fixed exception handling in cromfs-driver
+- Changed cromfs-driver so that uid/gid now refer to the one
+ who mounted the filesystem, not root
+- Disabled the tracing output in cromfs-driver by default
+- Changed attribute cache timeout to ~infinite
+- Added periodical deallocation of BLKTAB
+- Added cache of read_dir() when it's used by lookup()
+- Misc tuning in mkcromfs
+- mkcromfs now can stand running multiple instances at same time
+- Changed the LZMA dictionary size selection method (heavier settings now)
+
+1.0.1
+- Changed the LZMA implementation slightly more straight-forward
+- Changed filesystem format: BLKTAB is now compressed within BLKDATA
+- A slight speed optimization (later to become the "decompresslookups" option)
+
+1.0.0
+- Initial release

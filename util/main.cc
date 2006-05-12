@@ -13,6 +13,7 @@
 #include <getopt.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <sys/mman.h>
 
 #include "lzma.hh"
 
@@ -45,13 +46,22 @@ public:
     }
     
     bool is_uncompressed() const { return !is_compressed; }
+    
+    static const std::string GetTempDir()
+    {
+        const char* t;
+        t = std::getenv("TEMP"); if(t) return t;
+        t = std::getenv("TMP"); if(t) return t;
+        return "/tmp";
+    }
 
     const std::string getfn() const
     {
-        static int pid = getpid();
+        static const int pid = getpid();
+        static const std::string tmpdir = GetTempDir();
         char Buf[4096];
-        std::sprintf(Buf, "/tmp/fblock_%d-%d", pid, fblock_disk_id);
-        return Buf;
+        std::sprintf(Buf, "/fblock_%d-%d", pid, fblock_disk_id);
+        return tmpdir + Buf;
     }
     
     void Delete()
@@ -77,6 +87,69 @@ public:
         std::vector<unsigned char> compressed;
         get(NULL, &compressed);
         return compressed;
+    }
+    
+    int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs)
+    {
+        if(is_compressed)
+        {
+            /* If the file is compressed, we must decompress it
+             * to the RAM before it can be compared at all.
+             * We now decompress it in its whole entirety.
+             */
+            std::vector<unsigned char> raw;
+            get(&raw, NULL);
+            if(DecompressWhenLookup) put_raw(raw);
+
+            ssize_t size      = data.size();
+            ssize_t remaining = raw.size() - offs;
+            if(remaining < size) return -1;
+            return std::memcmp(&raw[offs], &data[0], size);
+        }
+        
+        /* mmap only works when the starting offset is aligned
+         * on a page boundary. Therefore, we force it to align.
+         */
+        uint_fast32_t prev_offs = offs & ~4095; /* 4095 is assumed to be page size-1 */
+        /* Because of aligning, calculate the amount of bytes
+         * that were mmapped but are not part of the comparison.
+         */
+        uint_fast32_t ignore = offs - prev_offs;
+        
+        int result = -1;
+        int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
+        if(fd >= 0)
+        {
+            /* Try to use mmap. This way, only the portion of file
+             * that actually needs to be compared, will be accessed.
+             * If we are comparing an 1M block and memcmp detects a
+             * difference within the first 3 bytes, only about 4 kB
+             * of the file will be read. This is really fast.
+             */
+            void* p = mmap(NULL, ignore+data.size(), PROT_READ, MAP_SHARED, fd, prev_offs);
+            if(p != (void*)-1)
+            {
+                close(fd);
+                const char* pp = (const char*)p;
+                result = std::memcmp(&data[0], pp + ignore, data.size());
+                munmap(p, ignore+data.size());
+            }
+            else
+            {
+                /* If mmap didn't like our idea, try to use pread
+                 * instead. pread is llseek+read combined. This should
+                 * work if anything is going to work at all.
+                 */
+                std::vector<unsigned char> tmpbuf(data.size());
+                ssize_t r = pread(fd, &tmpbuf[0], data.size(), offs);
+                close(fd);
+                if(r != (ssize_t)data.size())
+                    result = -1;
+                else
+                    result = std::memcmp(&data[0], &tmpbuf[0], data.size());
+            }
+        }
+        return result;
     }
     
     void put_raw(const std::vector<unsigned char>& raw)
@@ -579,21 +652,7 @@ private:
     bool block_is(const cromfs_block_storage& block,
                   const std::vector<unsigned char>& data)
     {
-        mkcromfs_fblock& fblock = fblocks[block.fblocknum];
-        std::vector<unsigned char> fblockdata = fblock.get_raw();
-        
-        if(DecompressWhenLookup && !fblock.is_uncompressed())
-        {
-            /* Try to speedup consequent lookups */
-            /* This might hurt more than help, though */
-            fblock.put_raw(fblockdata);
-        }
-        
-        ssize_t size      = data.size();
-        ssize_t remaining = fblockdata.size()-block.startoffs;
-        if(remaining < size) return false;
-        
-        return std::memcmp(&fblockdata[block.startoffs], &data[0], size) == 0;
+        return fblocks[block.fblocknum].compare_raw_portion(data, block.startoffs) == 0;
     }
     
     const cromfs_block_storage create_new_block(const std::vector<unsigned char>& data)

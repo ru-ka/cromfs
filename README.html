@@ -23,9 +23,9 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.0.5.1.
-<div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#compare">Comparing to other filesystems</a><br></td>
-<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;5. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#download">Downloading</a><br></td>
+  This is the documentation of cromfs-1.0.6.
+<div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br></td>
+<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
 
 Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
@@ -43,7 +43,11 @@ The creation of cromfs was inspired
 from <a href="http://squashfs.sourceforge.net/">Squashfs</a>
 and <a href="http://sourceforge.net/projects/cramfs/">Cramfs</a>.
 
-</div><H2 id="overview" class="level2"><a name="overview"></a>2. Overview</H2><div class="level2" id="divoverview">
+</div><H2 id="news" class="level2"><a name="news"></a>2. News</H2><div class="level2" id="divnews">
+
+See the <a href="http://bisqwit.iki.fi/src/cromfs-changelog.txt">ChangeLog</a>.
+
+</div><H2 id="overview" class="level2"><a name="overview"></a>3. Overview</H2><div class="level2" id="divoverview">
 
 <ul>
  <li>Data, inodes, directories and block lists are stored compressed</li>
@@ -61,13 +65,14 @@ and <a href="http://sourceforge.net/projects/cramfs/">Cramfs</a>.
  <li>As with usual filesystems, the files on a cromfs volume can be accessed
   in arbitrary order; the waits to open a specific file are small, despite
   the files being semisolidly archived.</li>
+ <li>Works on 64-bit and 32-bit systems.</li>
 </ul>
 
 See <a href="http://bisqwit.iki.fi/src/cromfs-format.txt"
 >the documentation of the cromfs format</a> for technical details
 (also included in the source package as doc/FORMAT).
 
-</div><H2 id="limits" class="level2"><a name="limits"></a>3. Limitations</H2><div class="level2" id="divlimits">
+</div><H2 id="limits" class="level2"><a name="limits"></a>4. Limitations</H2><div class="level2" id="divlimits">
 
 <ul>
  <li>Filesystem is write-once, read-only. It is not possible to append
@@ -88,7 +93,7 @@ Development status: Pre-beta. The Cromfs project has been created
 very recently and it hasn't been yet tested extensively. There is no
 warranty against data loss or anything else, so use at your own risk.
 
-</div><H2 id="compare" class="level2"><a name="compare"></a>4. Comparing to other filesystems</H2><div class="level2" id="divcompare">
+</div><H2 id="compare" class="level2"><a name="compare"></a>5. Comparing to other filesystems</H2><div class="level2" id="divcompare">
 
 This is all very biased, hypothetical, and by no means
 a scientific study, but here goes:
@@ -168,7 +173,7 @@ a scientific study, but here goes:
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
 </table>
 
-</div><H2 id="usage" class="level2"><a name="usage"></a>5. Getting started</H2><div class="level2" id="divusage">
+</div><H2 id="usage" class="level2"><a name="usage"></a>6. Getting started</H2><div class="level2" id="divusage">
 
 <ol>
  <li>Install the development requirements: make, gcc-c++, fuse and openssl-dev
@@ -199,7 +204,7 @@ $ fusermount -u sample</pre>
    </li>
 </ol>
 
-</div><H2 id="tips" class="level2"><a name="tips"></a>6. Tips</H2><div class="level2" id="divtips">
+</div><H2 id="tips" class="level2"><a name="tips"></a>7. Tips</H2><div class="level2" id="divtips">
 
 To improve the compression, try these tips:
 <ul>
@@ -217,7 +222,7 @@ To improve the compression, try these tips:
      are compressed has effect on the compressibility.</li>
 </ul>
 
-</div><H2 id="copying" class="level2"><a name="copying"></a>7. Copying</H2><div class="level2" id="divcopying">
+</div><H2 id="copying" class="level2"><a name="copying"></a>8. Copying</H2><div class="level2" id="divcopying">
 
 cromfs has been written by Joel Yliluoma, a.k.a.
 <a href="http://iki.fi/bisqwit/">Bisqwit</a>,<br>
@@ -227,11 +232,11 @@ and is distributed under the terms of the
 The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
-by e-mail at:<span id=eml23><b id=eml9 class=nonmail>inzvfue</b><span id=eml10 class=ismail>Joel</span><span id=eml11 class=nonmail><b>@mre7@uz9</b></span><span id=eml12 class=ismail> Yli</span><b id=eml13 class=nonmail>okl</b><span id=eml14 class=ismail>luom</span><span id=eml15 class=nonmail><b>2i2kaee@jq</b></span><span id=eml16 class=ismail>a &lt;bi</span><b id=eml17 class=nonmail>t7</b><span id=eml18 class=ismail>sqwi</span><span id=eml19 class=nonmail><b>ghv.kga@z</b></span><span id=eml20 class=ismail>t@ik</span><b id=eml21 class=nonmail>GY</b><span id=eml22 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=9;i<23;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml28><b id=eml14 class=nonmail>Ltn9</b><span id=eml15 class=ismail>Joel</span><span id=eml16 class=nonmail><b>9vgerB2nl@</b></span><span id=eml17 class=ismail> Yli</span><b id=eml18 class=nonmail>ur@</b><span id=eml19 class=ismail>luom</span><span id=eml20 class=nonmail><b>k.1nSg@</b></span><span id=eml21 class=ismail>a &lt;bi</span><b id=eml22 class=nonmail>n5c@w</b><span id=eml23 class=ismail>sqwi</span><span id=eml24 class=nonmail><b>8@</b></span><span id=eml25 class=ismail>t@ik</span><b id=eml26 class=nonmail>v5</b><span id=eml27 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=14;i<28;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
 
-</div><H2 id="requ" class="level2"><a name="requ"></a>8. Requirements</H2><div class="level2" id="divrequ">
+</div><H2 id="requ" class="level2"><a name="requ"></a>9. Requirements</H2><div class="level2" id="divrequ">
 
 <ul>
  <li>GNU make and gcc-c++ are required to recompile the source code.</li>
@@ -242,14 +247,14 @@ s='';for(i=9;i<23;){document.getElementById('eml'+i++).innerHTML='';s+=document.
   You need version fuse version 2.6.0 or newer. (2.5.2 <i>might</i> work.)</li>
 </ul>
 
-</div><H2 id="download" class="level2"><a name="download"></a>9. Downloading</H2><div class="level2" id="divdownload">
+</div><H2 id="download" class="level2"><a name="download"></a>10. Downloading</H2><div class="level2" id="divdownload">
    The official home page of cromfs
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Fri, 12 May 2006 00:34:01 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Fri, 12 May 2006 15:07:35 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Fri, 12 May 2006 12:48:52 +0300</small>
+  at Fri, 12 May 2006 15:07:41 +0300</small>
  </p>
 </body>
 </html>

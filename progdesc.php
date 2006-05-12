@@ -31,6 +31,10 @@ The creation of cromfs was inspired
 from <a href=\"http://squashfs.sourceforge.net/\">Squashfs</a>
 and <a href=\"http://sourceforge.net/projects/cramfs/\">Cramfs</a>.
 
+", 'news:1. News' => "
+
+See the <a href=\"http://bisqwit.iki.fi/src/cromfs-changelog.txt\">ChangeLog</a>.
+
 ", 'overview:1. Overview' => "
 
 <ul>
@@ -49,6 +53,7 @@ and <a href=\"http://sourceforge.net/projects/cramfs/\">Cramfs</a>.
  <li>As with usual filesystems, the files on a cromfs volume can be accessed
   in arbitrary order; the waits to open a specific file are small, despite
   the files being semisolidly archived.</li>
+ <li>Works on 64-bit and 32-bit systems.</li>
 </ul>
 
 See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"

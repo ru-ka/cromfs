@@ -5,7 +5,8 @@
 
 #include <vector>
 #include <algorithm>
-#include <cstdint>
+
+#include <stdint.h>
 
 
 static UInt32 SelectDictionarySizeFor(unsigned datasize)
