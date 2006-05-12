@@ -179,6 +179,7 @@ static void cromfs_alarm(int sig)
     if(!cromfs_alarm_obj) return;
     cromfs_alarm_obj->forget_blktab();
     std::signal(SIGALRM, cromfs_alarm);
+    std::signal(SIGCONT, cromfs_alarm);
 }
 
 static void cromfs_setup_alarm(cromfs& obj)
