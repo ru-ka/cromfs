@@ -24,7 +24,7 @@ the fuse_reply_err() function.
     CROMFS_CTXP(obj, fuse_req_userdata(req)); \
     try {
 
-#define REPLY_ERR(err) fuse_reply_err(err)
+#define REPLY_ERR(err) fuse_reply_err(req, err)
 /*#define REPLY_ERR(err) throw err*/
 
 #define CROMFS_CTX_END() \
@@ -117,7 +117,7 @@ extern "C" {
 
     void cromfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     {
-        if(trace_ops) fprintf(stderr, "lookup(%d,%s)\n", parent, name);
+        if(trace_ops) fprintf(stderr, "lookup(%d,%s)\n", (int)parent, name);
         
         CROMFS_CTX(fs)
         
@@ -144,7 +144,7 @@ extern "C" {
 
     void cromfs_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *)
     {
-        if(trace_ops) fprintf(stderr, "getattr(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "getattr(%d)\n", (int)ino);
         
         CROMFS_CTX(fs)
 
@@ -159,7 +159,7 @@ extern "C" {
 
     void cromfs_access(fuse_req_t req, fuse_ino_t ino, int mask)
     {
-        if(trace_ops) fprintf(stderr, "access(%d,%d)\n", ino, mask);
+        if(trace_ops) fprintf(stderr, "access(%d,%d)\n", (int)ino, mask);
         
         CROMFS_CTX(fs)
 
@@ -188,7 +188,7 @@ extern "C" {
 
     void cromfs_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
     {
-        if(trace_ops) fprintf(stderr, "open(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "open(%d)\n", (int)ino);
         
         CROMFS_CTX(fs)
 
@@ -207,7 +207,7 @@ extern "C" {
     void cromfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                      struct fuse_file_info *fi)
     {
-        if(trace_ops) fprintf(stderr, "read(%d, %ld, %u)\n", ino, (long)size, (unsigned)off);
+        if(trace_ops) fprintf(stderr, "read(%d, %ld, %u)\n", (int)ino, (long)size, (unsigned)off);
         
         CROMFS_CTX(fs)
         
@@ -223,7 +223,7 @@ extern "C" {
 
     void cromfs_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
     {
-        if(trace_ops) fprintf(stderr, "opendir(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "opendir(%d)\n", (int)ino);
         
         CROMFS_CTX(fs)
         fi->keep_cache = 1;
@@ -239,7 +239,7 @@ extern "C" {
     void cromfs_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                         struct fuse_file_info *fi)
     {
-        if(trace_ops) fprintf(stderr, "readdir(%d)\n", ino);
+        if(trace_ops) fprintf(stderr, "readdir(%d)\n", (int)ino);
         
         CROMFS_CTX(fs)
         if(size <= 0)

@@ -512,14 +512,14 @@ public:
           inotab_inode.blocklist = Blockify(inotab_source); }
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
-        fprintf(stderr, "Compressing %u block records (%u bytes each)...",
-            (unsigned)blocks.size(), (unsigned)sizeof(blocks[0])); fflush(stderr);
+        printf("Compressing %u block records (%u bytes each)...",
+            (unsigned)blocks.size(), (unsigned)sizeof(blocks[0])); fflush(stdout);
         std::vector<unsigned char> raw_blktab
             ((unsigned char*)&*blocks.begin(),
              (unsigned char*)&*blocks.end() /* Not really standard here */
             );
         raw_blktab = LZMACompress(raw_blktab);
-        fprintf(stderr, " compressed into %s\n", ReportSize(raw_blktab.size()).c_str());
+        printf(" compressed into %s\n", ReportSize(raw_blktab.size()).c_str()); fflush(stdout);
         
         unsigned char Superblock[0x38];
         uint_fast64_t root_ino_addr   = sizeof(Superblock);
@@ -552,17 +552,19 @@ public:
             
         for(unsigned a=0; a<fblocks.size(); ++a)
         {
-            fprintf(stderr, "\rWriting fblock %u...", a); fflush(stderr);
+            std::printf("\rWriting fblock %u...", a); std::fflush(stdout);
             
             char Buf[64];
             std::vector<unsigned char> fblock, fblock_raw;
             fblocks[a].get(fblock_raw, fblock);
             
-            fprintf(stderr, " %u bytes       ", (unsigned)fblock.size());
+            std::printf(" %u bytes       ", (unsigned)fblock.size());
             
             W64(Buf, fblock.size());
             write(fd, Buf, 4);
             write(fd, &fblock[0], fblock.size());
+            
+            std::fflush(stdout);
             
             compressed_total   += fblock.size();
             uncompressed_total += fblock_raw.size();
@@ -573,7 +575,7 @@ public:
              */
             fblocks[a].Delete();
         }
-        fprintf(stderr,
+        std::printf(
             "\n%u fblocks were written: %s = %.2f %% of %s\n",
             fblocks.size(),
             ReportSize(compressed_total).c_str(),
@@ -581,7 +583,7 @@ public:
             ReportSize(uncompressed_total).c_str()
            );
         uint_fast64_t file_size = lseek64(fd, 0, SEEK_CUR);
-        fprintf(stderr,
+        std::printf(
             "Filesystem size: %s = %.2f %% of original %s\n",
             ReportSize(file_size).c_str(),
             file_size * 100.0 / (double)bytes_of_files,

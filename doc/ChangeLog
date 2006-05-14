@@ -4,6 +4,9 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.0.1	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
+- A compilation fix (thanks to Cu Van Chuoi)
+
 1.1.0	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
 - Removed OpenSSL dependency
 - Replaced MD5 with CRC32 for smaller memory usage in mkcromfs
