@@ -1,4 +1,4 @@
-VERSION=1.0.6
+VERSION=1.1.0
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -18,7 +18,8 @@ ARCHFILES=\
 	\
 	util/datasource.hh \
 	util/lzma.cc util/lzma.hh \
-	util/md5.hh util/main.cc \
+	util/crc32.h util/crc32.cc \
+	util/main.cc \
 	\
 	util/lzma/ORIGIN \
 	util/lzma/LGPL.txt \

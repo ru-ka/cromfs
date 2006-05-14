@@ -24,26 +24,30 @@ the fuse_reply_err() function.
     CROMFS_CTXP(obj, fuse_req_userdata(req)); \
     try {
 
+#define REPLY_ERR(err) fuse_reply_err(err)
+/*#define REPLY_ERR(err) throw err*/
+
 #define CROMFS_CTX_END() \
     } \
     catch(romfs_exception e) \
     { \
-        fuse_reply_err(req, e); \
+        REPLY_ERR(e); \
         return; \
     } \
     catch(std::bad_alloc) \
     { \
-        fuse_reply_err(req, ENOMEM); \
+        REPLY_ERR(ENOMEM); \
     }/*catch(char){}*/
 
 
-#define READDIR_DEBUG   0
+#define READDIR_DEBUG   1
 
 static const double TIMEOUT_CONSTANT = 0x7FFFFFFF;
 
 static bool trace_ops = false;
 
 extern "C" {
+
     void* cromfs_create(int fd)
     {
         cromfs* fs = NULL;
@@ -127,7 +131,11 @@ extern "C" {
         pa.attr_timeout  = TIMEOUT_CONSTANT;
         pa.entry_timeout = TIMEOUT_CONSTANT;
         
-        stat_inode(pa.attr, j->second, fs.read_inode(j->second));
+        cromfs_inode_internal ino = fs.read_inode(j->second);
+        
+        fprintf(stderr, "lookup: using inode: %s\n", DumpInode(ino).c_str());
+        
+        stat_inode(pa.attr, j->second, ino);
         
         fuse_reply_entry(req, &pa);
         
@@ -155,7 +163,7 @@ extern "C" {
         
         CROMFS_CTX(fs)
 
-        fuse_reply_err(req, 0);
+        REPLY_ERR(0);
         
         CROMFS_CTX_END()
     }
@@ -169,7 +177,7 @@ extern "C" {
         int nread = fs.read_file_data(i, 0, (unsigned char*)Buf, sizeof(Buf)-1);
         if(nread < 0)
         {
-            fuse_reply_err(req, nread);
+            REPLY_ERR(nread);
             return;
         }
         Buf[nread] = 0;
@@ -187,9 +195,9 @@ extern "C" {
         fi->keep_cache = 1;
         const cromfs_inode_internal i = fs.read_inode(ino);
         if(S_ISDIR(i.mode))
-            fuse_reply_err(req, EISDIR);
+            REPLY_ERR(EISDIR);
         else if ((fi->flags & 3) != O_RDONLY)
-            fuse_reply_err(req, EACCES);
+            REPLY_ERR(EACCES);
         else
             fuse_reply_open(req, fi);
         
@@ -221,7 +229,7 @@ extern "C" {
         fi->keep_cache = 1;
         const cromfs_inode_internal i = fs.read_inode(ino);
         if(!S_ISDIR(i.mode))
-            fuse_reply_err(req, ENOTDIR);
+            REPLY_ERR(ENOTDIR);
         else
             fuse_reply_open(req, fi);
         
@@ -236,7 +244,7 @@ extern "C" {
         CROMFS_CTX(fs)
         if(size <= 0)
         {
-            fuse_reply_err(req, EINVAL);
+            REPLY_ERR(EINVAL);
             return;
         }
 

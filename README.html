@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.0.6.
+  This is the documentation of cromfs-1.1.0.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -176,7 +176,7 @@ a scientific study, but here goes:
 </div><H2 id="usage" class="level2"><a name="usage"></a>6. Getting started</H2><div class="level2" id="divusage">
 
 <ol>
- <li>Install the development requirements: make, gcc-c++, fuse and openssl-dev
+ <li>Install the development requirements: make, gcc-c++ and fuse
   <ul>
    <li>Remember that for fuse to work, the kernel must also contain the fuse support.
     Do "modprobe fuse", and check if you have "/dev/fuse" and check if it works.
@@ -214,12 +214,45 @@ To improve the compression, try these tips:
      Note: The value does not need to be a power of two.
   </li>
  <li>Adjust the fblock size (--fsize) in mkcromfs. Larger values
-     cause almost always better compression. However, the filesystem
-     must decompress each fblock as a single unit into the RAM.
-     Larger fblock sizes increase the RAM usage of the filesystem.<br />
-     Conversely, you can decrease the fblock size in order to save RAM.</li>
- <li>Sort your files. Sometimes the order in which the files
-     are compressed has effect on the compressibility.</li>
+     cause almost always better compression.</li>
+ <li>Adjust the --autoindexratio option (-a). A bigger value will
+     increase the chances of mkcromfs finding an identical block
+     from something it already processed (if your data has that
+     opportunity). Finding that two blocks are identical always
+     means better compression.</li>
+ <li>Sort your files. Files which have similar or partially
+     identical content should be processed right after one other.</li>
+</ul>
+To improve the filesystem generation speed, try these tips:
+<ul>
+ <li>Use the --decompresslookups option (-e), if you have the
+     diskspace to spare.</li>
+ <li>Use the TEMP environment variable to control where the temp
+     files are written. Example: <code>TEMP=~/cromfs-temp ./mkcromfs ...</code></li>
+ <li>Use larger block size (--bsize). Smaller blocks mean more blocks
+     which means more work. Larger blocks are less work.</li>
+</ul>
+To control the memory usage, use these tips:
+<ul>
+ <li>Adjust the fblock size (--fsize). The memory used by cromfs-driver
+     is directly proportional to the size of your fblocks. It keeps at
+     most 10 fblocks decompressed in the RAM at a time. If your fblocks
+     are 4 MB in size, it will use 40 MB at max.</li>
+ <li>In mkcromfs, adjust the --autoindexratio option (-a). This will
+     not have effect on the memory usage of cromfs-driver, but it will
+     control the memory usage of mkcromfs. If you have lots of RAM, you
+     should use bigger --autoindexratio (because it will improve the chances
+     of getting better compression results), and use smaller if you have less RAM.</li>
+</ul>
+To control the filesystem speed, use these tips:
+<ul>
+ <li>The speed of the underlying storage affects.</li>
+ <li>The bigger your fblocks (--fsize), the bigger the latencies are.
+   cromfs-driver caches the decompressed fblocks, but opening a non-cached
+   fblock requires decompressing it entirely, which will block the user
+   process for that period of time.</li>
+ <li>Use the most powerful compiler and compiler settings available
+   for building cromfs-driver.</li>
 </ul>
 
 </div><H2 id="copying" class="level2"><a name="copying"></a>8. Copying</H2><div class="level2" id="divcopying">
@@ -232,29 +265,29 @@ and is distributed under the terms of the
 The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
-by e-mail at:<span id=eml28><b id=eml14 class=nonmail>Ltn9</b><span id=eml15 class=ismail>Joel</span><span id=eml16 class=nonmail><b>9vgerB2nl@</b></span><span id=eml17 class=ismail> Yli</span><b id=eml18 class=nonmail>ur@</b><span id=eml19 class=ismail>luom</span><span id=eml20 class=nonmail><b>k.1nSg@</b></span><span id=eml21 class=ismail>a &lt;bi</span><b id=eml22 class=nonmail>n5c@w</b><span id=eml23 class=ismail>sqwi</span><span id=eml24 class=nonmail><b>8@</b></span><span id=eml25 class=ismail>t@ik</span><b id=eml26 class=nonmail>v5</b><span id=eml27 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=14;i<28;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml30><b id=eml16 class=nonmail>7@</b><span id=eml17 class=ismail>Joel</span><span id=eml18 class=nonmail><b>g/del@u</b></span><span id=eml19 class=ismail> Yli</span><b id=eml20 class=nonmail>eHv</b><span id=eml21 class=ismail>luom</span><span id=eml22 class=nonmail><b>SvuYeke</b></span><span id=eml23 class=ismail>a &lt;bi</span><b id=eml24 class=nonmail>lW81veFvH</b><span id=eml25 class=ismail>sqwi</span><span id=eml26 class=nonmail><b>@ocqb@k</b></span><span id=eml27 class=ismail>t@ik</span><b id=eml28 class=nonmail>0N1b1m</b><span id=eml29 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=16;i<30;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
 
 </div><H2 id="requ" class="level2"><a name="requ"></a>9. Requirements</H2><div class="level2" id="divrequ">
 
 <ul>
  <li>GNU make and gcc-c++ are required to recompile the source code.</li>
- <li>The openssl development library is required for MD5 calculation.</li>
  <li>The filesystem works under the <a href="http://fuse.sourceforge.net/">Fuse</a>
   user-space filesystem framework. You need to install both the Fuse kernel
   module and the userspace programs before mounting Cromfs volumes.<br />
   You need version fuse version 2.6.0 or newer. (2.5.2 <i>might</i> work.)</li>
 </ul>
 
+
 </div><H2 id="download" class="level2"><a name="download"></a>10. Downloading</H2><div class="level2" id="divdownload">
    The official home page of cromfs
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Fri, 12 May 2006 15:07:35 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Sun, 14 May 2006 05:51:48 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Fri, 12 May 2006 15:07:41 +0300</small>
+  at Sun, 14 May 2006 05:52:08 +0300</small>
  </p>
 </body>
 </html>

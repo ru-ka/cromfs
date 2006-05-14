@@ -17,7 +17,7 @@ OBJECT: SUPERBLOCK
 	0010	u64	Location of FBLKTAB within the filesystem (must be last)
 	0018	u64	Location of the Inotab inode within the filesystem
 	0020	u64	Location of the Root directory within the filesystem
-	0028	u32	FSIZE Maximum size of FBLOCK (default: 1M)
+	0028	u32	FSIZE Maximum size of uncompressed FBLOCK (default: 2M)
 	002C	u32	BSIZE Size of uncompressed blocks (default: 64k)
 	0030	u64	Bytes of file data on disk (only there for statvfs)
 	0...	INODE	Root directory
@@ -33,6 +33,9 @@ STRUCT: FBLOCK
 	0009	u64	length of uncompressed data (this field is part of the LZMA stream)
 	(Note: Since cromfs version 1.0.5, FBLOCKs are variable-length.
 	 Previously they were all of FSIZE size.)
+	(Note: Since cromfs version 1.1.0, FSIZE indicates the maximum size of
+	 uncompressed FBLOCKs. Previously it indicated the maximum size of compressed
+	 FBLOCKs.)
 
 STRUCT: BLKDATA (LZMA-compressed)
 	0000	BLOCK[]  BLKTAB = all blocks of the filesystem (indexed by block number)

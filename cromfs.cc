@@ -36,10 +36,11 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #define INODE_DEBUG     0
 #define READFILE_DEBUG  0
 #define READDIR_DEBUG   0
+#define DEBUG_INOTAB    0
 
-#define BLKTAB_CACHE_TIMEOUT 60
+#define BLKTAB_CACHE_TIMEOUT 0
 
-static const std::string DumpInode(const cromfs_inode_internal& inode)
+const std::string DumpInode(const cromfs_inode_internal& inode)
 {
     std::stringstream s;
     
@@ -54,7 +55,7 @@ static const std::string DumpInode(const cromfs_inode_internal& inode)
     
     return s.str();
 }
-static const std::string DumpBlock(const cromfs_block_storage& block)
+const std::string DumpBlock(const cromfs_block_storage& block)
 {
     std::stringstream s;
     
@@ -120,8 +121,8 @@ void cromfs::reread_superblock()
         sblock.fblktab_offs,
         sblock.inotab_offs,
         sblock.rootdir_offs,
-        (unsigned)sblock.compressed_block_size,
-        (unsigned)sblock.uncompressed_block_size);
+        (unsigned)CROMFS_FSIZE,
+        (unsigned)CROMFS_BSIZE);
     
     inotab  = read_uncompressed_inode(sblock.inotab_offs);
     rootdir = read_uncompressed_inode(sblock.rootdir_offs);
@@ -132,6 +133,17 @@ void cromfs::reread_superblock()
     reread_fblktab();
     
     if(fblktab.empty()) throw EINVAL;
+    
+    #if DEBUG_INOTAB
+    cromfs_inodenum_t maxinode = 2+inotab.bytesize/4;
+    for(cromfs_inodenum_t a=2; a<maxinode; )
+    {
+        cromfs_inode_internal result = read_inode(a);
+        fprintf(stderr, "inode %u: %s\n", (unsigned)a, DumpInode(result).c_str());
+        uint_fast64_t nblocks = (result.bytesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
+        a+=(0x18 + 4*nblocks) / 4;
+    }
+    #endif
 }
 
 void cromfs::reread_fblktab()
@@ -151,7 +163,7 @@ void cromfs::reread_fblktab()
         fblock.filepos = startpos+4;
         fblock.length  = R32(Buf);
         
-        if(fblock.length <= 13 || fblock.length > CROMFS_FSIZE-4)
+        if(fblock.length <= 13)
         {
             throw EINVAL;
         }
@@ -198,7 +210,7 @@ static void cromfs_setup_alarm(cromfs& obj)
     // Will setup a signal that will free the memory consumed by blktab
     // after a period of inuse
     cromfs_alarm_obj = &obj;
-    alarm(BLKTAB_CACHE_TIMEOUT);
+    if(BLKTAB_CACHE_TIMEOUT) alarm(BLKTAB_CACHE_TIMEOUT);
     /*
     timer.it_interval.tv_sec  = 0;
     timer.it_interval.tv_usec = 0;
@@ -224,7 +236,7 @@ void cromfs::reread_blktab()
     std::memcpy(&blktab[0], &blktab_compressed[0], blktab.size() * sizeof(blktab[0]));
     
 #if READBLOCK_DEBUG
-    for(unsigned a=0; a<sblock.blktab_size / 8; ++a)
+    for(unsigned a=0; a<blktab.size(); ++a)
     {
         fprintf(stderr, "block %u: %s\n", a, DumpBlock(blktab[a]).c_str());
     }
@@ -379,7 +391,11 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
         (unsigned)ind, (unsigned)comp_size, fblktab[ind].filepos, (long)r);
 #endif
     if(r < 0) throw errno;
-    if((uint_fast32_t)r < comp_size) throw EIO;
+    if((uint_fast32_t)r < comp_size)
+    {
+        //fprintf(stderr, "GORE!!! 1\n");
+        throw EIO;
+    }
 
     uint_fast64_t orig_size = R64(&Buf[5]);        SizeT orig_got;
     
@@ -402,6 +418,7 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
             (uint_fast64_t)orig_got, (uint_fast64_t)orig_size,
             (uint_fast64_t)comp_got);
 #endif
+        //fprintf(stderr, "GORE!!! 2\n");
         throw EIO;
         result.resize(orig_got);
     }
@@ -438,15 +455,25 @@ int_fast64_t cromfs::read_file_data(const cromfs_inode_internal& inode,
 #if READFILE_DEBUG
         fprintf(stderr,
             "Reading bytes from offset %llu to %p (%llu bytes):\n"
-            "- reading block %llu, offset %u (consume %llu), file remain %lld\n",
+            "- reading block %llu (%u), offset %u (consume %llu), file remain %lld\n",
                 offset, target, size,
-                begin_block_index,
+                begin_block_index, (unsigned)inode.blocklist[begin_block_index],
                 begin_block_offset, consume_bytes,
                 remain_file_bytes);
 #endif
 
         read_block(inode.blocklist[begin_block_index], begin_block_offset,
                    target, consume_bytes);
+#if READFILE_DEBUG
+        if(consume_bytes <= 24)
+        {
+            fprintf(stderr, "got:");
+            for(unsigned a=0; a<consume_bytes; ++a)
+                fprintf(stderr, " %02X", target[a]);
+            fprintf(stderr, "\n");
+        }
+#endif
+
 
         target += consume_bytes;
         size   -= consume_bytes;
@@ -483,6 +510,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
             dir_offset, dir_count);
         fprintf(stderr, "- directory has no blocks\n");
 #endif
+        //fprintf(stderr, "GORE!!! 3\n");
         throw EIO;
     }
     uint_fast32_t num_files = R32(DirHeader);

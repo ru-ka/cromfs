@@ -1,7 +1,8 @@
-VERSION=1.0.6
+VERSION=1.1.0
 
 include Makefile.sets
 
+#CXXFLAGS += -O3 -fno-inline -g
 CXXFLAGS += -O3
 
 OBJS += lzma/C/7zip/Compress/LZMA/LZMAEncoder.o
@@ -12,7 +13,7 @@ OBJS += lzma/C/7zip/Common/OutBuffer.o
 OBJS += lzma/C/Common/Alloc.o
 OBJS += lzma/C/Common/CRC.o
 
-OBJS += lzma.o main.o
+OBJS += lzma.o main.o crc32.o
 
 LDLIBS += -lssl
 	

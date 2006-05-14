@@ -164,7 +164,7 @@ a scientific study, but here goes:
 ", 'usage:1. Getting started' => "
 
 <ol>
- <li>Install the development requirements: make, gcc-c++, fuse and openssl-dev
+ <li>Install the development requirements: make, gcc-c++ and fuse
   <ul>
    <li>Remember that for fuse to work, the kernel must also contain the fuse support.
     Do \"modprobe fuse\", and check if you have \"/dev/fuse\" and check if it works.
@@ -202,12 +202,45 @@ To improve the compression, try these tips:
      Note: The value does not need to be a power of two.
   </li>
  <li>Adjust the fblock size (--fsize) in mkcromfs. Larger values
-     cause almost always better compression. However, the filesystem
-     must decompress each fblock as a single unit into the RAM.
-     Larger fblock sizes increase the RAM usage of the filesystem.<br />
-     Conversely, you can decrease the fblock size in order to save RAM.</li>
- <li>Sort your files. Sometimes the order in which the files
-     are compressed has effect on the compressibility.</li>
+     cause almost always better compression.</li>
+ <li>Adjust the --autoindexratio option (-a). A bigger value will
+     increase the chances of mkcromfs finding an identical block
+     from something it already processed (if your data has that
+     opportunity). Finding that two blocks are identical always
+     means better compression.</li>
+ <li>Sort your files. Files which have similar or partially
+     identical content should be processed right after one other.</li>
+</ul>
+To improve the filesystem generation speed, try these tips:
+<ul>
+ <li>Use the --decompresslookups option (-e), if you have the
+     diskspace to spare.</li>
+ <li>Use the TEMP environment variable to control where the temp
+     files are written. Example: <code>TEMP=~/cromfs-temp ./mkcromfs ...</code></li>
+ <li>Use larger block size (--bsize). Smaller blocks mean more blocks
+     which means more work. Larger blocks are less work.</li>
+</ul>
+To control the memory usage, use these tips:
+<ul>
+ <li>Adjust the fblock size (--fsize). The memory used by cromfs-driver
+     is directly proportional to the size of your fblocks. It keeps at
+     most 10 fblocks decompressed in the RAM at a time. If your fblocks
+     are 4 MB in size, it will use 40 MB at max.</li>
+ <li>In mkcromfs, adjust the --autoindexratio option (-a). This will
+     not have effect on the memory usage of cromfs-driver, but it will
+     control the memory usage of mkcromfs. If you have lots of RAM, you
+     should use bigger --autoindexratio (because it will improve the chances
+     of getting better compression results), and use smaller if you have less RAM.</li>
+</ul>
+To control the filesystem speed, use these tips:
+<ul>
+ <li>The speed of the underlying storage affects.</li>
+ <li>The bigger your fblocks (--fsize), the bigger the latencies are.
+   cromfs-driver caches the decompressed fblocks, but opening a non-cached
+   fblock requires decompressing it entirely, which will block the user
+   process for that period of time.</li>
+ <li>Use the most powerful compiler and compiler settings available
+   for building cromfs-driver.</li>
 </ul>
 
 ", 'copying:1. Copying' => "
@@ -226,12 +259,12 @@ Patches and other related material can be submitted
 
 <ul>
  <li>GNU make and gcc-c++ are required to recompile the source code.</li>
- <li>The openssl development library is required for MD5 calculation.</li>
  <li>The filesystem works under the <a href=\"http://fuse.sourceforge.net/\">Fuse</a>
   user-space filesystem framework. You need to install both the Fuse kernel
   module and the userspace programs before mounting Cromfs volumes.<br />
   You need version fuse version 2.6.0 or newer. (2.5.2 <i>might</i> work.)</li>
 </ul>
+
 
 ");
 include '/WWW/progdesc.php';

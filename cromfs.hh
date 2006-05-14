@@ -1,5 +1,7 @@
 #include "cromfs-defs.hh"
 
+#include <string>
+
 typedef int romfs_exception;
 
 class cromfs
@@ -51,3 +53,6 @@ private:
     cromfs(cromfs&);
     void operator=(const cromfs&);
 };
+
+const std::string DumpInode(const cromfs_inode_internal& inode);
+const std::string DumpBlock(const cromfs_block_storage& block);

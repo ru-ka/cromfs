@@ -4,6 +4,23 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.0	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
+- Removed OpenSSL dependency
+- Replaced MD5 with CRC32 for smaller memory usage in mkcromfs
+  (This has no effect in data integrity; a hash is just a hash.)
+- Worked around an instability problem when used together with reiserfs4
+  (mmapping a sparse file as read-write with copy-on-write mapping,
+   and changing that underlying file, seems to under some circumstances
+   cause kernel crash and kernel BUGs when the underlying filesystem is
+   reiser4.)
+- Disabled the auto deallocator hack for now; it hasn't worked properly.
+- Changed FSIZE semantics: fsize now denotes the maximum uncompressed
+ fblock size, not the maximum compressed fblock size. This made mkcromfs
+ somewhat easier in design, and probably more useful for the users too.
+- Removed mkcromfs option: --tryhard
+- Added mkcromfs option: --autoindexratio
+- Documentation updates
+
 1.0.6	2006-05-12 Joel Yliluoma <bisqwit@iki.fi>
 - Another compilation fix
 - Documentation updates

@@ -11,6 +11,8 @@
 
 static UInt32 SelectDictionarySizeFor(unsigned datasize)
 {
+    return datasize;
+   #if 0
 #ifdef __GNUC__
     /* gnu c can optimize this switch statement into a fast binary
      * search, but it cannot do so for the list of the if statements.
@@ -36,6 +38,7 @@ static UInt32 SelectDictionarySizeFor(unsigned datasize)
     if(datasize <= 786432) reutrn 1048576*16;
     return 32*1048576;
 #endif
+   #endif
 }
 
 

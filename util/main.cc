@@ -21,52 +21,60 @@
 
 #include "datasource.hh"
 
-#include "md5.hh"
-
-#define DEFAULT_FSIZE 1048576
-#define DEFAULT_BSIZE 65536
+#include "crc32.h"
 
 static bool DecompressWhenLookup = false;
 static unsigned RandomCompressPeriod = 20;
-static uint_fast32_t MinimumFreeSpace = 31;
-static bool TryHardToReachFSIZE = false;
+static uint_fast32_t MinimumFreeSpace = 200;
+static uint_fast32_t AssumedFastCompressionThreshold = 30000;
+static uint_fast32_t AutoIndexPeriod = 256;
+
+static long FSIZE = 1048576*2;
+static long BSIZE = 65536;
+
+static const char* GetTempDir()
+{
+    const char* t;
+    t = std::getenv("TEMP"); if(t) return t;
+    t = std::getenv("TMP"); if(t) return t;
+    return "/tmp";
+}
+static const std::string tmpdir = GetTempDir();
+
+#define DEBUG_APPEND  0
+#define DEBUG_OVERLAP 0
 
 class mkcromfs_fblock
 {
 private:
     int fblock_disk_id;
     bool is_compressed;
+    uint_fast64_t filesize;
 public:
     mkcromfs_fblock()
     {
         static int disk_id = 0;
         fblock_disk_id = disk_id++;
+        filesize = 0;
         
         is_compressed = true;
     }
     
     bool is_uncompressed() const { return !is_compressed; }
     
-    static const std::string GetTempDir()
-    {
-        const char* t;
-        t = std::getenv("TEMP"); if(t) return t;
-        t = std::getenv("TMP"); if(t) return t;
-        return "/tmp";
-    }
-
     const std::string getfn() const
     {
         static const int pid = getpid();
-        static const std::string tmpdir = GetTempDir();
         char Buf[4096];
         std::sprintf(Buf, "/fblock_%d-%d", pid, fblock_disk_id);
+        //fprintf(stderr, "Buf='%s' tmpdir='%s'\n", Buf, tmpdir.c_str());
         return tmpdir + Buf;
     }
     
     void Delete()
     {
         ::unlink(getfn().c_str());
+        filesize = 0;
     }
     
     void get(std::vector<unsigned char>& raw,
@@ -91,6 +99,12 @@ public:
     
     int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs)
     {
+        /* Notice: offs + data.size() may be larger than the fblock size.
+         * This can happen if there is a collision in the checksum index. A smaller
+         * block might have been indexed, and it matches to a larger request.
+         * We must check for that case, and reject if it is so.
+         */
+    
         if(is_compressed)
         {
             /* If the file is compressed, we must decompress it
@@ -106,6 +120,8 @@ public:
             if(remaining < size) return -1;
             return std::memcmp(&raw[offs], &data[0], size);
         }
+        
+        if(offs + data.size() > filesize) return -1;
         
         /* mmap only works when the starting offset is aligned
          * on a page boundary. Therefore, we force it to align.
@@ -156,19 +172,21 @@ public:
     {
         is_compressed = false;
         FILE* fp = std::fopen(getfn().c_str(), "wb");
-        size_t res = std::fwrite(&raw[0], 1, raw.size(), fp);
+        size_t res = std::fwrite(&raw[0], 1, filesize=raw.size(), fp);
         std::fclose(fp);
         if(res != raw.size())
         {
+            fprintf(stderr, "fwrite: res=%d, should be %d\n", res, raw.size());
             // Possibly, out of disk space? Try to save compressed instead.
             put_compressed(LZMACompress(raw));
         }
     }
+    
     void put_compressed(const std::vector<unsigned char>& compressed)
     {
         is_compressed = true;
         FILE* fp = std::fopen(getfn().c_str(), "wb");
-        std::fwrite(&compressed[0], 1, compressed.size(), fp);
+        std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
         std::fclose(fp);
     }
 
@@ -189,7 +207,225 @@ public:
             put_raw(raw);
         */
     }
+    
+    struct AppendInfo
+    {
+        uint_fast32_t AppendBaseOffset;
+        uint_fast32_t AppendedSize;
+        uint_fast32_t OldSize;
+    private:
+        unsigned char* Buffer;
+        uint_fast32_t MapSize;
+    public:
+        AppendInfo() : Buffer(0), MapSize(0) { }
+        ~AppendInfo() { Dispose(); }
+        void MapFrom(int fd,uint_fast32_t size)
+        {
+            Dispose();
+            
+            /* This mmap seems to cause various system instability. */
+            /* The idea here is to provide a RAM copy of the file - larger
+             * than the actual file, with copy-on-write mapping so that
+             * the actual file is not affected. But it seems like it doesn't
+             * always work nicely. It once crashed my server, and in another
+             * session, it caused a segmentation fault that could not be traced
+             * by gdb or valgrind. --Bisqwit
+             * Ps: In both cases, the underlying filesystem was Reiser4.
+             * The crashing problem did not seem to occur with Ext2fs.
+             */
+            void*p = (void*)-1;//mmap(NULL, MapSize=size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+            if(p == (void*)-1)
+            {
+                /* Revert to new+pread when mmap fails */
+                MapSize=0;
+                Buffer = new unsigned char[size];
+                int res = pread(fd, Buffer, size, 0);
+                if(res != size)
+                {
+                    fprintf(stderr, "pread error: expected %d, got %d\n", (int)size, res);
+                }
+            }
+            else Buffer = (unsigned char*)p;
+        }
+        void AssignFrom(const std::vector<unsigned char>& vec, uint_fast32_t size)
+        {
+            Dispose();
+            Buffer = new unsigned char[size];
+            std::memcpy(Buffer, &vec[0], vec.size());
+        }
+        void Dispose()
+        {
+            if(Buffer)
+            {
+#if DEBUG_APPEND
+                fprintf(stderr, "Disposing of %p\n", Buffer);
+#endif
+                if(MapSize) { munmap(Buffer, MapSize); MapSize=0; }
+                else delete[] Buffer;
+                Buffer=0;
+            }
+        }
+        
+        unsigned char* GetBufferPointer() const { return Buffer; }
+        const std::vector<unsigned char> GetAsVector() const
+        {
+            return std::vector<unsigned char> (Buffer, Buffer+AppendedSize);
+        }
+#if DEBUG_APPEND
+        bool IsMapped() const { return MapSize != 0; }
+        unsigned GetMapSize() const { return MapSize; }
+#endif
+    private:
+        void operator=(const AppendInfo&);
+        AppendInfo(const AppendInfo&);
+    };
+    
+    void LoadRawAndAppend(AppendInfo& append, const std::vector<unsigned char>& data)
+    {
+        append.AppendBaseOffset = 0;
+        append.AppendedSize     = 0;
+        append.OldSize          = 0;
+        
+        off_t rawsize;
+        
+        if(is_compressed)
+        {
+            std::vector<unsigned char> rawdata = get_raw();
+            rawsize = rawdata.size();
+            
+            uint_fast32_t prepare_size = rawsize + data.size();
+            append.AssignFrom(rawdata, prepare_size);
+        }
+        else
+        {
+            int fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
+            if(fd < 0)
+            {
+                return;
+            }
+            rawsize = filesize;
 
+            uint_fast32_t prepare_size = rawsize + data.size();
+            
+            /* mmap() can not map pages that don't exist in the file,
+             * so enlarge the file if necessary
+             */
+            if(prepare_size > filesize) ftruncate(fd, prepare_size);
+
+            append.MapFrom(fd, prepare_size);
+            
+            close(fd);
+        }
+        
+        append.OldSize          = rawsize;
+        append.AppendedSize     = rawsize;
+        
+#if DEBUG_APPEND
+        fprintf(stderr, "Appension (%s), rawsize=%u, datasize=%u, ptr=%p, mapped=%s\n",
+            is_compressed ? "compressed" : "raw",
+            rawsize, data.size(),
+            append.GetBufferPointer(),
+            append.IsMapped() ? "yes":"no");
+#endif
+        if(!data.empty())
+        {
+            unsigned char* ptr = append.GetBufferPointer();
+            unsigned char* endptr = ptr + rawsize;
+            
+            uint_fast32_t result = rawsize; /* By default, insert at end. */
+            
+            for(unsigned a=0; ; ++a)
+            {
+                const unsigned char* refptr = std::find(ptr+a, endptr, data[0]);
+                if(refptr >= endptr) break;
+                a = refptr - ptr;
+                unsigned compare_size = std::min((long)data.size(), (long)(rawsize - a));
+                
+                /* compare 1 byte less because find() already confirmed the first byte */
+                if(std::memcmp(refptr+1, &data[1], compare_size-1) == 0)
+                {
+#if DEBUG_OVERLAP
+                    printf("\nOVERLAP: ORIG=%u, NEW=%u, POS=%u, COMPARED %u\n",
+                        (unsigned)rawsize, (unsigned)data.size(),
+                        a, compare_size);
+                    for(unsigned b=0; b<4+compare_size; ++b)
+                        printf("%02X ", ptr[rawsize-compare_size+b-4]);
+                    printf("\n");
+                    for(unsigned b=0; b<4; ++b) printf("   ");
+                    for(unsigned b=0; b<4+compare_size; ++b)
+                        printf("%02X ", data[b]);
+                    printf("\n");
+#endif
+                    result = a; /* Put it here. */
+                    break;
+                }
+            }
+
+            append.AppendBaseOffset = result;
+
+            /* Put all the remaining data to the end. */
+            unsigned common_context_length = std::min((long)data.size(), (long)(rawsize-result));
+            unsigned remainder = data.size() - common_context_length;
+            if(remainder > 0)
+            {
+                std::memcpy(ptr+rawsize, &data[common_context_length], remainder);
+                append.AppendedSize += remainder;
+            }
+        }
+#if DEBUG_APPEND
+        fprintf(stderr, "- appended to %u, capacity=%u\n", append.AppendedSize,
+          append.GetMapSize());
+#endif
+    }
+
+    void put_appended_raw(const AppendInfo& append)
+    {
+      #if 0
+        put_raw(append.GetAsVector());
+      #else
+        is_compressed = false;
+        
+        /* not truncating */
+        int fd = open(getfn().c_str(), O_WRONLY | O_CREAT | O_LARGEFILE, 0644);
+        if(fd < 0) { std::perror(getfn().c_str()); return; }
+        
+#if DEBUG_APPEND
+        fprintf(stderr, "Writing %u from %p\n", append.AppendedSize, append.GetBufferPointer());
+#endif
+        const uint_fast32_t low_pos = std::min(append.OldSize, append.AppendBaseOffset);
+        
+        int res = pwrite(fd, append.GetBufferPointer() + low_pos,
+                             append.AppendedSize - low_pos,
+                             low_pos);
+        
+        bool write_ok = res == (int)(append.AppendedSize - low_pos);
+        
+        if(!write_ok)
+        {
+            fprintf(stderr, "pwrite: res=%d, should be %u (%u-%u)\n",
+                res, append.AppendedSize-low_pos,
+                append.AppendedSize, low_pos);
+        }
+        
+        if(write_ok)
+        {
+            if(filesize > append.AppendedSize) ftruncate(fd, append.AppendedSize);
+            filesize = append.AppendedSize;
+        }
+        
+#if DEBUG_APPEND
+        fprintf(stderr, "- File now %u bytes\n", filesize);
+#endif
+        close(fd);
+        
+        if(!write_ok)
+        {
+            // Possibly, out of disk space? Try to save compressed instead.
+            put_compressed(LZMACompress(append.GetAsVector()));
+        }
+      #endif
+    }
+    
 private:
     void get(std::vector<unsigned char>* raw,
              std::vector<unsigned char>* compressed) const
@@ -203,13 +439,9 @@ private:
             return;
         }
         
-        std::fseek(fp, 0, SEEK_END);
+        std::vector<unsigned char> result( filesize );
         
-        std::vector<unsigned char> result( std::ftell(fp) );
-        
-        std::fseek(fp, 0, SEEK_SET);
-        
-        std::fread(&result[0], 1, result.size(), fp);
+        std::fread(&result[0], 1, filesize, fp);
         std::fclose(fp);
         
         if(is_compressed)
@@ -222,6 +454,20 @@ private:
             if(compressed) *compressed = LZMACompress(result);
             if(raw)        *raw = result;
         }
+    }
+};
+
+#define NO_BLOCK ((cromfs_blocknum_t)~0ULL)
+struct mkcromfs_block : public cromfs_block_storage
+{
+    cromfs_blocknum_t blocknum;
+    
+    mkcromfs_block() : blocknum(NO_BLOCK) { }
+    
+    void inherit(const cromfs_block_storage& b, cromfs_blocknum_t blockno)
+    {
+        cromfs_block_storage::operator=(b);
+        blocknum = blockno;
     }
 };
 
@@ -242,10 +488,8 @@ const std::string ReportSize(uint_fast64_t size)
 class cromfs
 {
 public:
-    cromfs(unsigned fsize, unsigned bsize)
+    cromfs()
     {
-        FSIZE = fsize;
-        BSIZE = bsize;
         bytes_of_files = 0;
     }
     ~cromfs()
@@ -269,7 +513,7 @@ public:
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
         fprintf(stderr, "Compressing %u block records (%u bytes each)...",
-            blocks.size(), sizeof(blocks[0])); fflush(stderr);
+            (unsigned)blocks.size(), (unsigned)sizeof(blocks[0])); fflush(stderr);
         std::vector<unsigned char> raw_blktab
             ((unsigned char*)&*blocks.begin(),
              (unsigned char*)&*blocks.end() /* Not really standard here */
@@ -314,14 +558,20 @@ public:
             std::vector<unsigned char> fblock, fblock_raw;
             fblocks[a].get(fblock_raw, fblock);
             
-            fprintf(stderr, " %u bytes       ", fblock.size());
+            fprintf(stderr, " %u bytes       ", (unsigned)fblock.size());
             
             W64(Buf, fblock.size());
             write(fd, Buf, 4);
             write(fd, &fblock[0], fblock.size());
             
-            compressed_total   += FSIZE;
+            compressed_total   += fblock.size();
             uncompressed_total += fblock_raw.size();
+            
+            /* Because this function can't be called twice (encode_inode does
+             * changes to data that can't be repeated), might as well delete
+             * temporary files while at it.
+             */
+            fblocks[a].Delete();
         }
         fprintf(stderr,
             "\n%u fblocks were written: %s = %.2f %% of %s\n",
@@ -478,8 +728,10 @@ private:
         
         closedir(dir);
         
+        std::fflush(stdout);
         EnsureAllAreCompressed();
         
+        std::fflush(stdout);
         return dirinfo;
     }
 
@@ -616,35 +868,47 @@ private:
         // not possible, find out which fblock to append to, or whether
         // to create a new fblock.
         
-        /* Use MD5 to find the identical block.
+        /* Use CRC32 to find the identical block.
          * An option would be to use exhaustive search, to decompress each
          * and every fblock and see if they contain this data or at least
          * a part of it.
          */
         
-        MD5c md5((const char*)&data[0], data.size());
-        std::multimap<MD5c, cromfs_blocknum_t>::const_iterator i = block_index.find(md5);
+        const crc32_t crc = crc32_calc(&data[0], data.size());
+        std::multimap<crc32_t, mkcromfs_block>::iterator i = block_index.find(crc);
         if(i != block_index.end())
         {
             for(;;)
             {
-                cromfs_blocknum_t blocknum = i->second;
-                const cromfs_block_storage& block = blocks[blocknum];
+                cromfs_blocknum_t& blocknum = i->second.blocknum;
+                const cromfs_block_storage& block = i->second;
                 
-                if(block_is(block, data))
+                if(!block_is(block, data))
+                {
+                    ++i;
+                    if(i == block_index.end() || i->first != crc) break;
+                    continue;
+                }
+                
+                if(blocknum != NO_BLOCK)
                 {
                     printf(" reused block %u\n", (unsigned)blocknum);
                     return blocknum;
                 }
-                ++i;
-                if(i == block_index.end()
-                || i->first != md5) break;
+                
+                blocknum = blocks.size();
+                blocks.push_back(block);
+
+                printf(" reused material, became block %u\n", (unsigned)blocknum);
+                return blocknum;
             }
         }
         
         cromfs_block_storage block = create_new_block(data);
         cromfs_blocknum_t blockno = blocks.size();
-        block_index.insert(std::make_pair(md5, blockno));
+        mkcromfs_block b;
+        b.inherit(block, blockno);
+        block_index.insert(std::make_pair(crc, b));
         blocks.push_back(block);
         return blockno;
     }
@@ -657,126 +921,30 @@ private:
     
     const cromfs_block_storage create_new_block(const std::vector<unsigned char>& data)
     {
-        const std::vector<unsigned char> compressed_data = LZMACompress(data);
+        CompressOneRandomly();
         
-        /* Guess how many bytes of room this block needs in a fblock */
-        uint_fast32_t guess_compressed_size = compressed_data.size();
-        
-        fblock_index_type::iterator i = fblock_index.lower_bound(guess_compressed_size);
+        fblock_index_type::iterator i = fblock_index.lower_bound(data.size());
         while(i != fblock_index.end())
         {
-            const uint_fast32_t      old_room = i->first;
-            const uint_fast32_t      old_compressed_size_guess = (FSIZE-4) - old_room;
-            
-            const cromfs_fblocknum_t fblocknum = i->second;
-            mkcromfs_fblock& fblock = fblocks[fblocknum];
-            
-            std::vector<unsigned char> fblock_data_raw = fblock.get_raw();
-            uint_fast32_t new_data_offset = AppendOrOverlapBlock(fblock_data_raw, data);
-
-            /*
-                TODO: If the appended result could not possibly become
-                      too big, guess what the compressed size would
-                      be (be very pessimistic!) and store it uncompressed.
-            */
-
-            const uint_fast32_t new_block_size_guess
-                = old_compressed_size_guess + guess_compressed_size;
-            
-            uint_fast32_t new_block_size = new_block_size_guess;
-            int_fast32_t new_remaining_room;
-            new_remaining_room = (FSIZE-4) - new_block_size;
-            
-            if(new_remaining_room > (int_fast32_t)BSIZE
-            || new_remaining_room > (int_fast32_t)data.size()*4)
+            try
             {
-                /* Store uncompressed, use the estimated compressed size */
-                fblock.put_raw(fblock_data_raw);
-
-                printf(" in(%u), out(%u: ?->%u became %u->%u (GUESS), remain %u)\n",
-                    guess_compressed_size,
-                    (unsigned)fblocknum,
-                    old_compressed_size_guess,
-                    fblock_data_raw.size(), new_block_size,
-                    new_remaining_room);
+                return AppendToFBlock(i, i->second, data, true);
             }
-            else
+            catch(bool)
             {
-                std::vector<unsigned char> fblock_new_compressed = LZMACompress(fblock_data_raw);
-                new_block_size = fblock_new_compressed.size();
-
-                new_remaining_room = (FSIZE-4) - new_block_size;
-                
-                printf(" in(%u), out(%u: ?->%u became %u->%u, remain %u)\n",
-                    guess_compressed_size,
-                    (unsigned)fblocknum,
-                    old_compressed_size_guess,
-                    fblock_data_raw.size(), new_block_size,
-                    new_remaining_room);
-                    
-                if(new_remaining_room < 0)
-                {
-                    /* The fblock becomes too big, this is not acceptable */
-                    /* Try to find a fblock that has more room */
-                    ++i;
-                    continue;
-                }
-                
-                /* Accept this block */
-                fblock.put(fblock_data_raw, fblock_new_compressed);
-            }
-            
-            cromfs_block_storage result;
-            result.fblocknum = fblocknum;
-            result.startoffs = new_data_offset;
-            fblock_index.erase(i);
-            
-            /* Minimum free space in the block */
-            if((TryHardToReachFSIZE
-               && (uint_fast32_t)new_remaining_room >= MinimumFreeSpace)
-            || fblock.is_uncompressed())
-            {
-                i = fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
-            }
-            CompressOneRandomly();
-            
-            return result;
+                /* Try to find a fblock that has more room */
+                ++i;
+                continue;
+             }
         }
         
         /* Create a new fblock */
-        const std::vector<unsigned char>& fblock_new_compressed = compressed_data;
-        int_fast32_t new_remaining_room = (FSIZE-4) - fblock_new_compressed.size();
-        
-        cromfs_block_storage result;
-        result.fblocknum = fblocks.size();
-        result.startoffs = 0;
-        
+        cromfs_fblocknum_t fblocknum = fblocks.size();
         mkcromfs_fblock new_fblock;
-        
-        if(new_remaining_room >= (int_fast32_t)MinimumFreeSpace)
-        {
-            new_fblock.put(data, fblock_new_compressed);
-
-            fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
-        }
-        else
-        {
-            /* Ensure it is compressed, because without an iterator,
-             * the EnsureCompressed engine won't find it.
-             */
-            new_fblock.put_compressed(fblock_new_compressed);
-        }
-        
-        printf(" in(%u), out(%u: new, remain %u)\n",
-            fblock_new_compressed.size(),
-            result.fblocknum,
-            new_remaining_room);
-        
         fblocks.push_back(new_fblock);
-
-        CompressOneRandomly();
         
-        return result;
+        /* Note: The "false" in this parameter list tells not to throw exceptions. */
+        return AppendToFBlock(fblock_index.end(), fblocknum, data, false);
     }
 
     uint_fast32_t AppendOrOverlapBlock(std::vector<unsigned char>& target,
@@ -812,11 +980,10 @@ private:
     }
     
 private:
-    unsigned FSIZE, BSIZE;
     std::vector<cromfs_block_storage> blocks;
-    std::multimap<MD5c, cromfs_blocknum_t> block_index;
+    std::multimap<crc32_t, mkcromfs_block> block_index;
     
-    typedef std::multimap<uint_fast32_t, cromfs_fblocknum_t> fblock_index_type;
+    typedef std::multimap<int_fast32_t, cromfs_fblocknum_t> fblock_index_type;
     std::vector<mkcromfs_fblock> fblocks;
     fblock_index_type fblock_index;
 
@@ -829,53 +996,27 @@ private:
 private:
     void EnsureAllAreCompressed()
     {
-    redo:
         for(fblock_index_type::iterator
             i = fblock_index.begin(); i != fblock_index.end(); ++i)
         {
-            bool HadToCompress = EnsureCompressed(i);
-            if(HadToCompress) goto redo;
+            EnsureCompressed(i);
         }
     }
 
-    bool EnsureCompressed(fblock_index_type::iterator i)
+    void EnsureCompressed(fblock_index_type::iterator i)
     {
         cromfs_fblocknum_t fblocknum = i->second;
-
-        /*
-        fprintf(stderr, "Trying fblocknum %u / %u\n",
-            fblocknum, fblocks.size());
-        */
-        
         mkcromfs_fblock& fblock = fblocks[fblocknum];
         if(fblock.is_uncompressed())
         {
-            const std::vector<unsigned char> compressed = fblock.get_compressed();
-            
-            int_fast32_t new_remaining_room = (FSIZE - 4) - compressed.size();
-            if(new_remaining_room < 0)
-            {
-                fprintf(stderr, "Integrity failure %d\n", new_remaining_room);
-            }
-            
-            enum { keep,remove,reinsert} decision=keep;
-            
-            if((uint_fast32_t)new_remaining_room != i->first) decision=reinsert;
-            if(new_remaining_room < (int_fast32_t)MinimumFreeSpace) decision=remove;
-            
-            if(decision >= remove)
-                fblock_index.erase(i);
-            if(decision >= reinsert)
-                i = fblock_index.insert(std::make_pair(new_remaining_room, fblocknum));
-            
-            fblock.put_compressed(compressed);
-            return true;
+            fblock.put_compressed(LZMACompress(fblock.get_raw()));
         }
-        return false;
     }
 
     void CompressOneRandomly()
     {
+        return;
+        
         static unsigned counter = 0;
         if(!counter) counter = RandomCompressPeriod; else { --counter; return; }
     
@@ -888,7 +1029,153 @@ private:
         
         if(j != fblock_index.end()) EnsureCompressed(j);
     }
+    
+    static const int CalcAutoIndexCount(int_fast32_t raw_size)
+    {
+        int_fast32_t a = (raw_size - BSIZE + AutoIndexPeriod);
+        return a / (int_fast32_t)AutoIndexPeriod;
+    }
 
+    const cromfs_block_storage AppendToFBlock
+        (fblock_index_type::iterator index_iterator,
+         const cromfs_fblocknum_t fblocknum,
+         const std::vector<unsigned char>& data,
+         bool prevent_overuse)
+    {
+        mkcromfs_fblock& fblock = fblocks[fblocknum];
+        
+        mkcromfs_fblock::AppendInfo appended;
+        fblock.LoadRawAndAppend(appended, data);
+        
+        const uint_fast32_t new_data_offset = appended.AppendBaseOffset;
+        const uint_fast32_t new_raw_size = appended.AppendedSize;
+        const uint_fast32_t old_raw_size = appended.OldSize;
+
+        const int_fast32_t new_remaining_room = FSIZE - new_raw_size;
+        
+        if(new_remaining_room < 0)
+        {
+            /* The fblock becomes too big, this is not acceptable */
+            if(prevent_overuse)
+            {
+                throw false;
+            }
+            printf(" (OVERUSE) ");
+        }
+        
+        printf("block %u => [%u] remain %d",
+            blocks.size(), (unsigned)fblocknum, (int)new_remaining_room);
+        
+        if(new_data_offset < old_raw_size)
+        {
+            if(new_data_offset + data.size() < old_raw_size)
+                printf(" (overlap fully");
+            else
+                printf(" (overlap %d)", old_raw_size - new_data_offset);
+        }
+        
+        /* Index all new checksum data */
+        const int OldAutoIndexCount = std::max(CalcAutoIndexCount(old_raw_size),0);
+        const int NewAutoIndexCount = std::max(CalcAutoIndexCount(new_raw_size),0);
+        if(NewAutoIndexCount > OldAutoIndexCount && NewAutoIndexCount > 0)
+        {
+            for(int count=OldAutoIndexCount+1; count<=NewAutoIndexCount; ++count)
+            {
+                uint_fast32_t startoffs = AutoIndexPeriod * (count-1);
+                if(startoffs + BSIZE > new_raw_size) throw "error";
+                /*
+                printf("\nBlock reached 0x%X->0x%X bytes in size, (%d..%d), adding checksum for 0x%X; ",
+                    old_raw_size, new_raw_size,
+                    OldAutoMD5Count, NewAutoMD5Count,
+                    startoffs);
+                */
+                const unsigned char* ptr = appended.GetBufferPointer() + startoffs;
+                const crc32_t crc = crc32_calc(ptr, BSIZE);
+                
+                /* Check if this checksum has already been indexed */
+                std::multimap<crc32_t, mkcromfs_block>::iterator i = block_index.find(crc);
+                if(i != block_index.end())
+                {
+                    /* Check if one of them matches this data, so that we don't
+                     * add the same checksum data twice
+                     */
+                    std::vector<unsigned char> tmpdata(ptr, ptr+BSIZE);
+                    for(;;)
+                    {
+                        if(block_is(i->second, tmpdata)) goto dont_add_crc;
+                        ++i;
+                        if(i == block_index.end() || i->first != crc) break;
+                    }
+                }
+                
+                { mkcromfs_block b;
+                  b.fblocknum = fblocknum;
+                  b.startoffs = startoffs;
+                  block_index.insert(std::make_pair(crc, b));
+                }
+              dont_add_crc: ;
+            }
+        }
+        
+        if(new_raw_size > AssumedFastCompressionThreshold
+        || fblock.is_uncompressed())
+        {
+            //printf("putting raw\n");
+        
+            /* Store uncompressed, use the estimated compressed size */
+            fblock.put_appended_raw(appended);
+
+            appended.Dispose();
+            
+            //printf(" (uncompressed)");
+        }
+        else
+        {
+            //printf("putting compressde\n");
+        
+            /* Compress, and check if there's room to store it */
+            const std::vector<unsigned char> new_raw_data = appended.GetAsVector();
+            const std::vector<unsigned char> new_packed_data = LZMACompress(new_raw_data);
+
+            appended.Dispose();
+
+            const uint_fast32_t new_packed_size = new_packed_data.size();
+            const uint_fast32_t old_packed_size = fblock.get_compressed().size();
+            
+            printf(" (packed=%d (diff %+d))",
+                new_packed_size,
+                (int)(new_packed_size - old_packed_size)
+                  );
+            
+            /* Accept this block */
+            fblock.put(new_raw_data, new_packed_data);
+        }
+        
+        //printf("#done\n");
+        
+        printf("\n");
+        
+        cromfs_block_storage result;
+        result.fblocknum = fblocknum;
+        result.startoffs = new_data_offset;
+        
+        if(index_iterator != fblock_index.end()) fblock_index.erase(index_iterator);
+        
+        /* If the block is uncompressed, preserve it fblock_index
+         * so that CompressOneRandomly() may pick it some day.
+         *
+         * Otherwise, store it in the index only if it is still a candidate
+         * for crunching more bytes into it.
+         */
+        
+        if(new_remaining_room >= MinimumFreeSpace)
+        {
+            index_iterator =
+                fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
+        }
+        return result;
+    }
+    
 private:
     cromfs(cromfs&);
     void operator=(const cromfs&);
@@ -918,9 +1205,8 @@ int main(int argc, char** argv)
     std::string path  = ".";
     std::string outfn = "cromfs.bin";
     
-    long FSIZE = DEFAULT_FSIZE;
-    long BSIZE = DEFAULT_BSIZE;
-
+    unsigned AutoIndexRatio = 16;
+    
     for(;;)
     {
         int option_index = 0;
@@ -936,10 +1222,11 @@ int main(int argc, char** argv)
                             1, 0,'r'},
             {"minfreespace",
                             1, 0,'s'},
-            {"tryhard",     0, 0,'H'},
+            {"autoindexratio",
+                            1, 0,'a'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:er:s:H", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:a:", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -973,19 +1260,23 @@ int main(int argc, char** argv)
                     "     files are together.\n"
                     " --randomcompressperiod, -r <value>\n"
                     "     Interval for randomly picking one fblock to compress. Default: 20\n"
-                    "     The value has neglible effect on the compression ratio of the\n"
-                    "     filesystem, but smaller values mean slower filesystem creation\n"
-                    "     and bigger values mean more diskspace used by temporary files.\n"
+                    "     The value has no effect on the compression ratio of the filesystem,\n"
+                    "     but smaller values mean slower filesystem creation and bigger values\n"
+                    "     mean more diskspace used by temporary files.\n"
                     " --minfreespace, -s <value>\n"
                     "     Minimum free space in a fblock to consider it a candidate. Default: 31\n"
                     "     Bigger values speed up the compression, but will cause some space\n"
                     "     being wasted that could have been used.\n"
-                    " --tryhard, -H\n"
-                    "     Try hard to reach full blocks of fsize bytes.\n"
-                    "     Without this option, chances are that most of the fblocks will\n"
-                    "     end up being about (fsize-bsize) in size. Which is usually not\n"
-                    "     a problem if you increase fsize by the amount of bsize to\n"
-                    "     compensate. :)\n"
+                    " --autoindexratio, -a <value>\n"
+                    "     Defines the ratio of indexes to blocks which to use when creating\n"
+                    "     the filesystem. Default value: 16\n"
+                    "     For example, if your bsize is 10000 and autoindexratio is 10,\n"
+                    "     it means that for each 10000-byte block, 10 index entries will\n"
+                    "     be created. Larger values help compression, but will use more RAM.\n"
+                    "     The RAM required is approximately:\n"
+                    "         (total_filesize * autoindexratio * N / bsize) bytes\n"
+                    "     where N is around 16 on 32-bit systems, around 28 on 64-bit\n"
+                    "     systems, plus memory allocation overhead.\n"
                     "\n");
                 return 0;
             }
@@ -1035,6 +1326,18 @@ int main(int argc, char** argv)
                 RandomCompressPeriod = val;
                 break;
             }
+            case 'a':
+            {
+                char* arg = optarg;
+                long val = strtol(arg, &arg, 10);
+                if(val < 1)
+                {
+                    fprintf(stderr, "mkcromfs: The minimum allowed autoindexratio is 1. You gave %ld%s.\n", val, arg);
+                    return -1;
+                }
+                AutoIndexRatio = val;
+                break;
+            }
             case 's':
             {
                 char* arg = optarg;
@@ -1045,11 +1348,6 @@ int main(int argc, char** argv)
                     return -1;
                 }
                 MinimumFreeSpace = val;
-                break;
-            }
-            case 'H':
-            {
-                TryHardToReachFSIZE = true;
                 break;
             }
         }
@@ -1063,9 +1361,8 @@ int main(int argc, char** argv)
     if(FSIZE < BSIZE)
     {
         fprintf(stderr,
-            "mkcromfs: Warning: Your fsize %ld is smaller than your bsize %ld.\n"
-            "  This is a bad idea, and causes problems especially\n"
-            "  if your files aren't easy to compress.\n",
+            "mkcromfs: Error: Your fsize %ld is smaller than your bsize %ld.\n"
+            "  Cannot comply.\n",
             (long)FSIZE, (long)BSIZE);
     }
     if((long)MinimumFreeSpace >= BSIZE)
@@ -1079,8 +1376,29 @@ int main(int argc, char** argv)
     {
         fprintf(stderr,
             "mkcromfs: Error: Your minfreespace %ld is larger than your fsize %ld.\n"
-            "  It is not possible to create a cromfs volume under those constraints.\n",
+            "  Cannot comply.\n",
             (long)MinimumFreeSpace, (long)FSIZE);
+    }
+    
+    AutoIndexPeriod = std::max((long)AutoIndexRatio, (long)(BSIZE / AutoIndexRatio));
+    
+    if(AutoIndexPeriod < 1)
+    {
+        fprintf(stderr,
+            "mkcromfs: Error: Your autoindexratio %ld is larger than your bsize %ld.\n"
+            "  Cannot comply.\n", (long)AutoIndexRatio, BSIZE);
+    }
+    if(AutoIndexPeriod <= 2)
+    {
+        char Buf[256];
+        if(AutoIndexPeriod == 1) std::sprintf(Buf, "for every possible byte");
+        else std::sprintf(Buf, "every %u bytes", (unsigned)AutoIndexPeriod);
+        
+        fprintf(stderr,
+            "mkcromfs: The autoindexratio you gave, %ld, means that a _severe_ amount\n"
+            "  of memory will be used by mkcromfs. An index will be added %s.\n"
+            "  Just thought I should warn you.\n",
+            (long)AutoIndexRatio, Buf);
     }
     
     path  = argv[optind+0];
@@ -1093,7 +1411,7 @@ int main(int argc, char** argv)
         return errno;
     }
 
-    cromfs fs(FSIZE, BSIZE);
+    cromfs fs;
     fs.WalkRootDir(path.c_str());
     fprintf(stderr, "Writing %s...\n", outfn.c_str());
     
