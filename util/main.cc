@@ -26,7 +26,7 @@
 static bool DecompressWhenLookup = false;
 static unsigned RandomCompressPeriod = 20;
 static uint_fast32_t MinimumFreeSpace = 200;
-static uint_fast32_t AssumedFastCompressionThreshold = 30000;
+static uint_fast32_t AssumedFastCompressionThreshold = 0;//30000;
 static uint_fast32_t AutoIndexPeriod = 256;
 
 static long FSIZE = 1048576*2;
@@ -78,19 +78,19 @@ public:
     }
     
     void get(std::vector<unsigned char>& raw,
-             std::vector<unsigned char>& compressed) const
+             std::vector<unsigned char>& compressed)
     {
         get(&raw, &compressed);
     }
 
-    const std::vector<unsigned char> get_raw() const
+    const std::vector<unsigned char> get_raw()
     {
         std::vector<unsigned char> raw;
         get(&raw, NULL);
         return raw;
     }
 
-    const std::vector<unsigned char> get_compressed() const
+    const std::vector<unsigned char> get_compressed()
     {
         std::vector<unsigned char> compressed;
         get(NULL, &compressed);
@@ -428,7 +428,7 @@ public:
     
 private:
     void get(std::vector<unsigned char>* raw,
-             std::vector<unsigned char>* compressed) const
+             std::vector<unsigned char>* compressed)
     {
         FILE* fp = std::fopen(getfn().c_str(), "rb");
         if(!fp)
@@ -451,7 +451,11 @@ private:
         }
         else
         {
-            if(compressed) *compressed = LZMACompress(result);
+            if(compressed)
+            {
+                *compressed = LZMACompress(result);
+                put_compressed(*compressed);
+            }
             if(raw)        *raw = result;
         }
     }
@@ -504,12 +508,15 @@ public:
     {
         std::vector<unsigned char> raw_root_inode   = encode_inode(rootdir);
         cromfs_inode_internal inotab_inode;
+
+        printf("Blockifying the inode table...\n");
         { datasource_vector inotab_source(inotab);
           inotab_inode.mode = 0x12345678;
           inotab_inode.time = time(NULL);
           inotab_inode.links = 1;
           inotab_inode.bytesize = inotab.size();
           inotab_inode.blocklist = Blockify(inotab_source); }
+
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
         printf("Compressing %u block records (%u bytes each)...",
@@ -600,6 +607,8 @@ public:
         std::vector<unsigned char> Buf = encode_directory(dirinfo);
         datasource_vector f(Buf);
         
+        printf("Blockifying the root dir...\n");
+        
         inode.mode     = S_IFDIR | 0777;
         inode.time     = time(NULL);
         inode.links    = dirinfo.size();
@@ -670,6 +679,9 @@ private:
                     cromfs_dirinfo dirinfo = WalkDir(pathname);
                     std::vector<unsigned char> Buf = encode_directory(dirinfo);
                     datasource_vector f(Buf);
+
+                    printf("Blockifying %s ...\n", pathname.c_str());
+
                     inode.links     = dirinfo.size();
                     inode.bytesize  = f.size();
                     inode.blocklist = Blockify(f);
@@ -1017,8 +1029,6 @@ private:
 
     void CompressOneRandomly()
     {
-        return;
-        
         static unsigned counter = 0;
         if(!counter) counter = RandomCompressPeriod; else { --counter; return; }
     
@@ -1119,43 +1129,11 @@ private:
             }
         }
         
-        if(new_raw_size > AssumedFastCompressionThreshold
-        || fblock.is_uncompressed())
-        {
-            //printf("putting raw\n");
-        
-            /* Store uncompressed, use the estimated compressed size */
-            fblock.put_appended_raw(appended);
+        fblock.put_appended_raw(appended);
 
-            appended.Dispose();
-            
-            //printf(" (uncompressed)");
-        }
-        else
-        {
-            //printf("putting compressde\n");
+        appended.Dispose();
         
-            /* Compress, and check if there's room to store it */
-            const std::vector<unsigned char> new_raw_data = appended.GetAsVector();
-            const std::vector<unsigned char> new_packed_data = LZMACompress(new_raw_data);
-
-            appended.Dispose();
-
-            const uint_fast32_t new_packed_size = new_packed_data.size();
-            const uint_fast32_t old_packed_size = fblock.get_compressed().size();
-            
-            printf(" (packed=%d (diff %+d))",
-                new_packed_size,
-                (int)(new_packed_size - old_packed_size)
-                  );
-            
-            /* Accept this block */
-            fblock.put(new_raw_data, new_packed_data);
-        }
-        
-        //printf("#done\n");
-        
-        printf("\n");
+        printf(" (uncompressed)\n");
         
         cromfs_block_storage result;
         result.fblocknum = fblocknum;

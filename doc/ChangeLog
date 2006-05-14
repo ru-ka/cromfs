@@ -4,6 +4,11 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.0.2	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
+- Workaround for some noticed data integrity problem
+  (some compressed blocks were assumed as uncompressed,
+   and compressed over again)
+
 1.1.0.1	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
 - A compilation fix (thanks to Cu Van Chuoi)
 

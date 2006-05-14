@@ -15,8 +15,6 @@ OBJS += lzma/C/Common/CRC.o
 
 OBJS += lzma.o main.o crc32.o
 
-LDLIBS += -lssl
-	
 all: mkcromfs
 
 mkcromfs: $(OBJS)

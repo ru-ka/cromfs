@@ -40,7 +40,7 @@ the fuse_reply_err() function.
     }/*catch(char){}*/
 
 
-#define READDIR_DEBUG   1
+#define READDIR_DEBUG   0
 
 static const double TIMEOUT_CONSTANT = 0x7FFFFFFF;
 

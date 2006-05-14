@@ -135,6 +135,9 @@ void cromfs::reread_superblock()
     if(fblktab.empty()) throw EINVAL;
     
     #if DEBUG_INOTAB
+    fprintf(stderr, "rootdir inode: %s\n", DumpInode(rootdir).c_str());
+    fprintf(stderr, "intab inode: %s\n", DumpInode(inotab).c_str());
+    
     cromfs_inodenum_t maxinode = 2+inotab.bytesize/4;
     for(cromfs_inodenum_t a=2; a<maxinode; )
     {
