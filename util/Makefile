@@ -2,7 +2,7 @@ VERSION=1.1.0
 
 include Makefile.sets
 
-#CXXFLAGS += -O3 -fno-inline -g
+#CXXFLAGS += -O1 -fno-inline -g
 CXXFLAGS += -O3
 
 OBJS += lzma/C/7zip/Compress/LZMA/LZMAEncoder.o

@@ -4,6 +4,10 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.1	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
+- Data integrity problem hopefully fixed now.
+- Improved the usefulness of the caching in read_dir.
+
 1.1.0.2	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
 - Workaround for some noticed data integrity problem
   (some compressed blocks were assumed as uncompressed,

@@ -1,4 +1,4 @@
-VERSION=1.1.0.2
+VERSION=1.1.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -70,8 +70,13 @@ ARCHFILES=\
 
 include Makefile.sets
 
+#CXXFLAGS += -O1 -fno-inline -g
+CXXFLAGS += -O3
+
 CPPFLAGS += `pkg-config --cflags fuse`
+
 OBJS=cromfs.o cromfs-ops.o main.o
+
 LDLIBS += -lfuse
 
 all: cromfs-driver util/mkcromfs

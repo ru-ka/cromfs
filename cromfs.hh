@@ -15,7 +15,8 @@ public:
 
     int_fast64_t read_file_data(const cromfs_inode_internal& inode,
                                 uint_fast64_t offset,
-                                unsigned char* target, uint_fast64_t size);
+                                unsigned char* target, uint_fast64_t size,
+                                const char* purpose);
 
     const cromfs_inode_internal read_inode(cromfs_inodenum_t inonum);
     

@@ -18,7 +18,6 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 
 #define CROMFS_SIGNATURE   0x313053464d4f5243ULL
-#define CROMFS_MAX_CACHE_BLOCKS 10
 
 typedef uint_least64_t cromfs_inodenum_t;
 typedef uint_least32_t cromfs_blocknum_t;

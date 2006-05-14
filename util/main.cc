@@ -26,7 +26,6 @@
 static bool DecompressWhenLookup = false;
 static unsigned RandomCompressPeriod = 20;
 static uint_fast32_t MinimumFreeSpace = 200;
-static uint_fast32_t AssumedFastCompressionThreshold = 0;//30000;
 static uint_fast32_t AutoIndexPeriod = 256;
 
 static long FSIZE = 1048576*2;
@@ -56,8 +55,7 @@ public:
         static int disk_id = 0;
         fblock_disk_id = disk_id++;
         filesize = 0;
-        
-        is_compressed = true;
+        is_compressed = false;
     }
     
     bool is_uncompressed() const { return !is_compressed; }
@@ -184,6 +182,7 @@ public:
     
     void put_compressed(const std::vector<unsigned char>& compressed)
     {
+        fprintf(stderr, "[1;mstoring compressed[m\n");
         is_compressed = true;
         FILE* fp = std::fopen(getfn().c_str(), "wb");
         std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
@@ -301,20 +300,25 @@ public:
             int fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
             if(fd < 0)
             {
-                return;
+                /* File not found. Prevent null pointer, load a dummy buffer. */
+                std::vector<unsigned char> dummy;
+                append.AssignFrom(dummy, data.size());
+                rawsize = 0;
             }
-            rawsize = filesize;
+            else
+            {
+                rawsize = filesize;
+                const uint_fast32_t prepare_size = rawsize + data.size();
+                
+                /* mmap() can not map pages that don't exist in the file,
+                 * so enlarge the file if necessary
+                 */
+                if(prepare_size > filesize) ftruncate(fd, prepare_size);
 
-            uint_fast32_t prepare_size = rawsize + data.size();
-            
-            /* mmap() can not map pages that don't exist in the file,
-             * so enlarge the file if necessary
-             */
-            if(prepare_size > filesize) ftruncate(fd, prepare_size);
-
-            append.MapFrom(fd, prepare_size);
-            
-            close(fd);
+                append.MapFrom(fd, prepare_size);
+                
+                close(fd);
+            }
         }
         
         append.OldSize          = rawsize;
@@ -373,8 +377,9 @@ public:
             }
         }
 #if DEBUG_APPEND
-        fprintf(stderr, "- appended to %u, capacity=%u\n", append.AppendedSize,
-          append.GetMapSize());
+        fprintf(stderr, "- appended to %u, results %u/%u (0 if mmapped)\n",
+          append.AppendBaseOffset,
+          append.AppendedSize, append.GetMapSize());
 #endif
     }
 
@@ -383,6 +388,7 @@ public:
       #if 0
         put_raw(append.GetAsVector());
       #else
+        const bool was_compressed = is_compressed;
         is_compressed = false;
         
         /* not truncating */
@@ -390,9 +396,12 @@ public:
         if(fd < 0) { std::perror(getfn().c_str()); return; }
         
 #if DEBUG_APPEND
-        fprintf(stderr, "Writing %u from %p\n", append.AppendedSize, append.GetBufferPointer());
+        fprintf(stderr, "Writing %u from %p\n",
+            (unsigned)append.AppendedSize, append.GetBufferPointer());
+        if(append.GetBufferPointer() == NULL) throw "qegqpk";
 #endif
-        const uint_fast32_t low_pos = std::min(append.OldSize, append.AppendBaseOffset);
+        const uint_fast32_t low_pos =
+            was_compressed ? 0 : std::min(append.OldSize, append.AppendBaseOffset);
         
         int res = pwrite(fd, append.GetBufferPointer() + low_pos,
                              append.AppendedSize - low_pos,
@@ -1019,6 +1028,8 @@ private:
 
     void EnsureCompressed(fblock_index_type::iterator i)
     {
+        return;
+        
         cromfs_fblocknum_t fblocknum = i->second;
         mkcromfs_fblock& fblock = fblocks[fblocknum];
         if(fblock.is_uncompressed())
@@ -1075,8 +1086,12 @@ private:
             printf(" (OVERUSE) ");
         }
         
-        printf("block %u => [%u] remain %d",
-            blocks.size(), (unsigned)fblocknum, (int)new_remaining_room);
+        printf("block %u => [%u @ %u] size now %u, remain %d",
+            blocks.size(),
+            (unsigned)fblocknum,
+            (unsigned)new_data_offset,
+            (unsigned)new_raw_size,
+            (int)new_remaining_room);
         
         if(new_data_offset < old_raw_size)
         {
@@ -1133,7 +1148,7 @@ private:
 
         appended.Dispose();
         
-        printf(" (uncompressed)\n");
+        printf("\n");
         
         cromfs_block_storage result;
         result.fblocknum = fblocknum;
@@ -1322,9 +1337,9 @@ int main(int argc, char** argv)
             {
                 char* arg = optarg;
                 long val = strtol(arg, &arg, 10);
-                if(val < 4)
+                if(val < 1)
                 {
-                    fprintf(stderr, "mkcromfs: The minimum allowed minfreespace is 4. You gave %ld%s.\n", val, arg);
+                    fprintf(stderr, "mkcromfs: The minimum allowed minfreespace is 1. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 MinimumFreeSpace = val;

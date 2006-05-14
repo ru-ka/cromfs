@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.0.2.
+  This is the documentation of cromfs-1.1.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -87,6 +87,9 @@ See <a href="http://bisqwit.iki.fi/src/cromfs-format.txt"
    suitable for very size-constrained systems.</li>
  <li>Ownerships are not saved.</li>
  <li>Maximum filename length: 4095 bytes</li>
+ <li>Being an user-space filesystem it might not be suitable for
+   root filesystems of rescue, tiny-Linux and installation disks.
+   (Facts needed.)</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -210,11 +213,15 @@ To improve the compression, try these tips:
 <ul>
  <li>Adjust the block size (--bsize) in mkcromfs. If your files
      have a lot identical content, aligned at a certain boundary,
-     use that boundary as the block size value.<br />
+     use that boundary as the block size value. If you are uncertain,
+     use a small value (200-5000) rather than a bigger value (20000-400000).
+     Too small values will however make inodes large, so keep it sane.
+    <br />
      Note: The value does not need to be a power of two.
   </li>
  <li>Adjust the fblock size (--fsize) in mkcromfs. Larger values
-     cause almost always better compression.</li>
+     cause almost always better compression.
+  </li>
  <li>Adjust the --autoindexratio option (-a). A bigger value will
      increase the chances of mkcromfs finding an identical block
      from something it already processed (if your data has that
@@ -243,6 +250,9 @@ To control the memory usage, use these tips:
      control the memory usage of mkcromfs. If you have lots of RAM, you
      should use bigger --autoindexratio (because it will improve the chances
      of getting better compression results), and use smaller if you have less RAM.</li>
+ <li>Find the CACHE_MAX_SIZE settings in cromfs.cc and edit them. This will
+     require recompiling the source. (In future, this should be made a command
+     line option for cromfs-driver.)</li>
 </ul>
 To control the filesystem speed, use these tips:
 <ul>
@@ -251,6 +261,8 @@ To control the filesystem speed, use these tips:
    cromfs-driver caches the decompressed fblocks, but opening a non-cached
    fblock requires decompressing it entirely, which will block the user
    process for that period of time.</li>
+ <li>The smaller your blocks (--bsize), the bigger the latencies are, because
+   there will be more steps to process for handling the same amount of data.</li>
  <li>Use the most powerful compiler and compiler settings available
    for building cromfs-driver.</li>
 </ul>
@@ -265,8 +277,8 @@ and is distributed under the terms of the
 The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
-by e-mail at:<span id=eml36><b id=eml22 class=nonmail>a7v</b><span id=eml23 class=ismail>Joel</span><span id=eml24 class=nonmail><b>Tvf@1T</b></span><span id=eml25 class=ismail> Yli</span><b id=eml26 class=nonmail>pdr0rlo</b><span id=eml27 class=ismail>luom</span><span id=eml28 class=nonmail><b>avtev</b></span><span id=eml29 class=ismail>a &lt;bi</span><b id=eml30 class=nonmail>e5@xuheV/j</b><span id=eml31 class=ismail>sqwi</span><span id=eml32 class=nonmail><b>oT81</b></span><span id=eml33 class=ismail>t@ik</span><b id=eml34 class=nonmail>Htg1lt</b><span id=eml35 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=22;i<36;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml43><b id=eml29 class=nonmail>Bgreg</b><span id=eml30 class=ismail>Joel</span><span id=eml31 class=nonmail><b>ye5@oaoxs</b></span><span id=eml32 class=ismail> Yli</span><b id=eml33 class=nonmail>exe@.n1@@</b><span id=eml34 class=ismail>luom</span><span id=eml35 class=nonmail><b>rve</b></span><span id=eml36 class=ismail>a &lt;bi</span><b id=eml37 class=nonmail>Cabf</b><span id=eml38 class=ismail>sqwi</span><span id=eml39 class=nonmail><b>xb8Ah2.</b></span><span id=eml40 class=ismail>t@ik</span><b id=eml41 class=nonmail>@a9aeE</b><span id=eml42 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=29;i<43;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
 
 </div><H2 id="requ" class="level2"><a name="requ"></a>9. Requirements</H2><div class="level2" id="divrequ">
@@ -285,9 +297,9 @@ s='';for(i=22;i<36;){document.getElementById('eml'+i++).innerHTML='';s+=document
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Sun, 14 May 2006 05:51:48 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Mon, 15 May 2006 00:58:36 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Sun, 14 May 2006 18:54:12 +0300</small>
+  at Mon, 15 May 2006 00:58:43 +0300</small>
  </p>
 </body>
 </html>

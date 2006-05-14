@@ -133,7 +133,7 @@ extern "C" {
         
         cromfs_inode_internal ino = fs.read_inode(j->second);
         
-        fprintf(stderr, "lookup: using inode: %s\n", DumpInode(ino).c_str());
+        if(trace_ops) fprintf(stderr, "lookup: using inode: %s\n", DumpInode(ino).c_str());
         
         stat_inode(pa.attr, j->second, ino);
         
@@ -174,7 +174,7 @@ extern "C" {
 
         const cromfs_inode_internal i = fs.read_inode_and_blocks(ino);
         char Buf[65536];
-        int nread = fs.read_file_data(i, 0, (unsigned char*)Buf, sizeof(Buf)-1);
+        int nread = fs.read_file_data(i, 0, (unsigned char*)Buf, sizeof(Buf)-1, "readlink");
         if(nread < 0)
         {
             REPLY_ERR(nread);
@@ -214,7 +214,7 @@ extern "C" {
         const cromfs_inode_internal i = fs.read_inode_and_blocks(ino);
 
         unsigned char* Buf = new unsigned char[size];
-        int_fast64_t result = fs.read_file_data(i, off, Buf, size);
+        int_fast64_t result = fs.read_file_data(i, off, Buf, size, "fileread");
         fuse_reply_buf(req, (const char*)Buf, result);
         delete[] Buf;
         
@@ -262,6 +262,10 @@ extern "C" {
         while(size > 0)
         {
             unsigned dir_count = (size + size_per_elem - 1) / size_per_elem;
+            
+#if READDIR_DEBUG
+            fprintf(stderr, "querying read_dir(%d,%u,%u)\n", (int)ino,off,dir_count);
+#endif
             cromfs_dirinfo dirinfo = fs.read_dir(ino, off, dir_count);
             for(cromfs_dirinfo::const_iterator
                 i = dirinfo.begin();

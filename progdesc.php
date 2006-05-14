@@ -75,6 +75,9 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
    suitable for very size-constrained systems.</li>
  <li>Ownerships are not saved.</li>
  <li>Maximum filename length: 4095 bytes</li>
+ <li>Being an user-space filesystem it might not be suitable for
+   root filesystems of rescue, tiny-Linux and installation disks.
+   (Facts needed.)</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -198,11 +201,15 @@ To improve the compression, try these tips:
 <ul>
  <li>Adjust the block size (--bsize) in mkcromfs. If your files
      have a lot identical content, aligned at a certain boundary,
-     use that boundary as the block size value.<br />
+     use that boundary as the block size value. If you are uncertain,
+     use a small value (200-5000) rather than a bigger value (20000-400000).
+     Too small values will however make inodes large, so keep it sane.
+    <br />
      Note: The value does not need to be a power of two.
   </li>
  <li>Adjust the fblock size (--fsize) in mkcromfs. Larger values
-     cause almost always better compression.</li>
+     cause almost always better compression.
+  </li>
  <li>Adjust the --autoindexratio option (-a). A bigger value will
      increase the chances of mkcromfs finding an identical block
      from something it already processed (if your data has that
@@ -231,6 +238,9 @@ To control the memory usage, use these tips:
      control the memory usage of mkcromfs. If you have lots of RAM, you
      should use bigger --autoindexratio (because it will improve the chances
      of getting better compression results), and use smaller if you have less RAM.</li>
+ <li>Find the CACHE_MAX_SIZE settings in cromfs.cc and edit them. This will
+     require recompiling the source. (In future, this should be made a command
+     line option for cromfs-driver.)</li>
 </ul>
 To control the filesystem speed, use these tips:
 <ul>
@@ -239,6 +249,8 @@ To control the filesystem speed, use these tips:
    cromfs-driver caches the decompressed fblocks, but opening a non-cached
    fblock requires decompressing it entirely, which will block the user
    process for that period of time.</li>
+ <li>The smaller your blocks (--bsize), the bigger the latencies are, because
+   there will be more steps to process for handling the same amount of data.</li>
  <li>Use the most powerful compiler and compiler settings available
    for building cromfs-driver.</li>
 </ul>
