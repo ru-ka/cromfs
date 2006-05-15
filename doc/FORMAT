@@ -85,3 +85,5 @@ FILE CONTENT WHEN: SYMLINK
 
 FILE CONTENT WHEN: REGULAR FILES
 	0000	content	file content
+
+For other types of files, file has no content (size=0, blocktab=empty)

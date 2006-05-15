@@ -276,7 +276,7 @@ To control the filesystem speed, use these tips:
  <li>The smaller your blocks (--bsize), the bigger the latencies are, because
    there will be more steps to process for handling the same amount of data.</li>
  <li>Use the most powerful compiler and compiler settings available
-   for building cromfs-driver.</li>
+   for building cromfs-driver. This helps the decompression and cache lookups.</li>
  <li>Use fast hardware&hellip;</li>
 </ul>
 

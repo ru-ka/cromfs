@@ -44,6 +44,7 @@ static const std::string tmpdir = GetTempDir();
 
 #define DEBUG_APPEND  0
 #define DEBUG_OVERLAP 0
+#define DEBUG_FBLOCKINDEX 0
 
 class mkcromfs_fblock
 {
@@ -176,7 +177,7 @@ public:
         std::fclose(fp);
         if(res != raw.size())
         {
-            fprintf(stderr, "fwrite: res=%d, should be %d\n", (int)res, (int)raw.size());
+            std::fprintf(stderr, "fwrite: res=%d, should be %d\n", (int)res, (int)raw.size());
             // Possibly, out of disk space? Try to save compressed instead.
             put_compressed(LZMACompress(raw));
         }
@@ -253,7 +254,7 @@ public:
                 int res = pread(fd, Buffer, size, 0);
                 if(res != (int)size)
                 {
-                    fprintf(stderr, "pread error: expected %d, got %d\n", (int)size, res);
+                    std::fprintf(stderr, "pread error: expected %d, got %d\n", (int)size, res);
                 }
             }
             else Buffer = (unsigned char*)p;
@@ -269,7 +270,7 @@ public:
             if(Buffer)
             {
 #if DEBUG_APPEND
-                fprintf(stderr, "Disposing of %p\n", Buffer);
+                std::fprintf(stderr, "Disposing of %p\n", Buffer);
 #endif
                 if(MapSize) { munmap(Buffer, MapSize); MapSize=0; }
                 else delete[] Buffer;
@@ -330,7 +331,7 @@ public:
         if(fd < 0) { std::perror(getfn().c_str()); return; }
         
 #if DEBUG_APPEND
-        fprintf(stderr, "Writing %u from %p\n",
+        std::fprintf(stderr, "Writing %u from %p\n",
             (unsigned)append.AppendedSize, append.GetBufferPointer());
         if(append.GetBufferPointer() == NULL) throw "qegqpk";
 #endif
@@ -345,7 +346,7 @@ public:
         
         if(!write_ok)
         {
-            fprintf(stderr, "pwrite: res=%d, should be %u (%u-%u)\n",
+            std::fprintf(stderr, "pwrite: res=%d, should be %u (%u-%u)\n",
                 res, (unsigned)(append.AppendedSize-low_pos),
                 (unsigned)append.AppendedSize, (unsigned)low_pos);
         }
@@ -357,7 +358,7 @@ public:
         }
         
 #if DEBUG_APPEND
-        fprintf(stderr, "- File now %u bytes\n", filesize);
+        std::fprintf(stderr, "- File now %u bytes\n", filesize);
 #endif
         close(fd);
         
@@ -456,7 +457,7 @@ private:
         if(DoDecide)
         {
 #if DEBUG_APPEND
-            fprintf(stderr, "Appension (%s), rawsize=%u, datasize=%u, ptr=%p, mapped=%s\n",
+            std::fprintf(stderr, "Appension (%s), rawsize=%u, datasize=%u, ptr=%p, mapped=%s\n",
                 is_compressed ? "compressed" : "raw",
                 rawsize, data.size(),
                 append.GetBufferPointer(),
@@ -487,16 +488,16 @@ private:
                     if(std::memcmp(refptr+1, &data[1], compare_size-1) == 0)
                     {
 #if DEBUG_OVERLAP
-                        printf("\nOVERLAP: ORIG=%u, NEW=%u, POS=%u, COMPARED %u\n",
+                        std::printf("\nOVERLAP: ORIG=%u, NEW=%u, POS=%u, COMPARED %u\n",
                             (unsigned)cap, (unsigned)data.size(),
                             a, compare_size);
                         for(unsigned b=0; b<4+compare_size; ++b)
-                            printf("%02X ", ptr[cap - compare_size+b-4]);
-                        printf("\n");
-                        for(unsigned b=0; b<4; ++b) printf("   ");
+                            std::printf("%02X ", ptr[cap - compare_size+b-4]);
+                        std::printf("\n");
+                        for(unsigned b=0; b<4; ++b) std::printf("   ");
                         for(unsigned b=0; b<4+compare_size; ++b)
-                            printf("%02X ", data[b]);
-                        printf("\n");
+                            std::printf("%02X ", data[b]);
+                        std::printf("\n");
 #endif
                         result = a; /* Put it here. */
                         break;
@@ -522,7 +523,7 @@ private:
                 }
             }
 #if DEBUG_APPEND
-            fprintf(stderr, "- appended to %u, results %u/%u (0 if mmapped)\n",
+            std::fprintf(stderr, "- appended to %u, results %u/%u (0 if mmapped)\n",
               append.AppendBaseOffset,
               append.AppendedSize, append.GetMapSize());
 #endif
@@ -578,7 +579,7 @@ public:
         std::vector<unsigned char> raw_root_inode   = encode_inode(rootdir);
         cromfs_inode_internal inotab_inode;
 
-        printf("Blockifying the inode table...\n");
+        std::printf("Blockifying the inode table...\n");
         { datasource_vector inotab_source(inotab);
           inotab_inode.mode = 0x12345678;
           inotab_inode.time = time(NULL);
@@ -588,14 +589,14 @@ public:
 
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
-        printf("Compressing %u block records (%u bytes each)...",
+        std::printf("Compressing %u block records (%u bytes each)...",
             (unsigned)blocks.size(), (unsigned)sizeof(blocks[0])); fflush(stdout);
         std::vector<unsigned char> raw_blktab
             ((unsigned char*)&*blocks.begin(),
              (unsigned char*)&*blocks.end() /* Not really standard here */
             );
         raw_blktab = LZMACompress(raw_blktab);
-        printf(" compressed into %s\n", ReportSize(raw_blktab.size()).c_str()); fflush(stdout);
+        std::printf(" compressed into %s\n", ReportSize(raw_blktab.size()).c_str()); fflush(stdout);
         
         unsigned char Superblock[0x38];
         uint_fast64_t root_ino_addr   = sizeof(Superblock);
@@ -676,7 +677,7 @@ public:
         std::vector<unsigned char> Buf = encode_directory(dirinfo);
         datasource_vector f(Buf);
         
-        printf("Blockifying the root dir...\n");
+        std::printf("Blockifying the root dir...\n");
         
         inode.mode     = S_IFDIR | 0777;
         inode.time     = time(NULL);
@@ -724,7 +725,7 @@ private:
             struct stat st;
             const std::string pathname = path + "/" + entname;
             
-            printf("%s ...\n", pathname.c_str());
+            std::printf("%s ...\n", pathname.c_str());
             
             if(lstat(pathname.c_str(), &st) < 0)
             {
@@ -751,7 +752,7 @@ private:
                     std::vector<unsigned char> Buf = encode_directory(dirinfo);
                     datasource_vector f(Buf);
 
-                    printf("Blockifying %s ...\n", pathname.c_str());
+                    std::printf("Blockifying %s ...\n", pathname.c_str());
 
                     inode.links     = dirinfo.size();
                     inode.bytesize  = f.size();
@@ -800,7 +801,7 @@ private:
             {
                 /* A hardlink was found! */
                 
-                printf("- reusing inode %ld (hardlink)\n", (long)inonum);
+                std::printf("- reusing inode %ld (hardlink)\n", (long)inonum);
                 
                 /* Reuse the same inode number. */
                 dirinfo[entname] = inonum;
@@ -965,9 +966,11 @@ private:
         // to create a new fblock.
         
         /* Use CRC32 to find the identical block.
+         *
          * An option would be to use exhaustive search, to decompress each
          * and every fblock and see if they contain this data or at least
-         * a part of it.
+         * a part of it. (Which is what MaxFblockCountForBruteForce now
+         * does, to some extent.)
          */
         
         const crc32_t crc = crc32_calc(&data[0], data.size());
@@ -988,14 +991,14 @@ private:
                 
                 if(blocknum != NO_BLOCK)
                 {
-                    printf(" reused block %u\n", (unsigned)blocknum);
+                    std::printf(" reused block %u\n", (unsigned)blocknum);
                     return blocknum;
                 }
                 
                 blocknum = blocks.size();
                 blocks.push_back(block);
 
-                printf(" reused material, became block %u\n", (unsigned)blocknum);
+                std::printf(" reused material, became block %u\n", (unsigned)blocknum);
                 return blocknum;
             }
         }
@@ -1024,28 +1027,25 @@ private:
             std::vector<cromfs_fblocknum_t> candidates;
             candidates.reserve(fblocks.size());
             
+            unsigned priority_candidates = 0;
+            
             /* First candidate: The fblock that we would get without brute force */
             fblock_index_type::iterator i = fblock_index.lower_bound(data.size());
             if(i != fblock_index.end())
             {
                 candidates.push_back(i->second);
-
-                for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0; )
-                {
-                    if(a != i->second) candidates.push_back(a);
-                }
-                
-                std::random_shuffle(candidates.begin()+1, candidates.end());
+                ++priority_candidates;
             }
-            else
+            
+            for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0; )
             {
-                for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0 ; )
-                {
-                    candidates.push_back(a);
-                }
-                
-                std::random_shuffle(candidates.begin(), candidates.end());
+                /*__label__ skip_candidate; - not worth using gcc extension here */
+                for(unsigned b=0; b<priority_candidates; ++b)
+                    if(a == candidates[b]) goto skip_candidate;
+                candidates.push_back(a);
+              skip_candidate: ;
             }
+            std::random_shuffle(candidates.begin()+priority_candidates, candidates.end());
             
             cromfs_fblocknum_t smallest = 0;
             uint_fast32_t smallest_size = 0;
@@ -1054,7 +1054,9 @@ private:
             
             bool found_candidate = false;
             
-            for(unsigned a=0; a<MaxFblockCountForBruteForce && a<candidates.size(); ++a)
+            for(unsigned a = std::min((unsigned)candidates.size(),
+                                      (unsigned)MaxFblockCountForBruteForce);
+                a-- > 0; )
             {
                 cromfs_fblocknum_t fblocknum = candidates[a];
                 mkcromfs_fblock& fblock = fblocks[fblocknum];
@@ -1085,21 +1087,43 @@ private:
                     if(smallest_size == 0) break; /* couldn't get better */
                 }
             }
-            if(found_candidate)
+            
+            /* Utilize the finding, if it's an overlap,
+             * or it's an appension into a fblock that still has
+             * so much room that it doesn't conflict with MinimumFreeSpace.
+             * */
+            if(found_candidate
+               && (smallest_size < data.size()
+                || ((smallest_pos+data.size()) < (FSIZE-MinimumFreeSpace))
+                  )
+              )
             {
-                cromfs_fblocknum_t fblocknum = smallest;
+                const cromfs_fblocknum_t fblocknum = smallest;
                 mkcromfs_fblock& fblock = fblocks[fblocknum];
                 mkcromfs_fblock::AppendInfo appended;
                 fblock.LoadAndAppendAt(appended, data, smallest_pos);
                 
+                /* Find an iterator from fblock_index, if it exists. */
                 fblock_index_type::iterator i = fblock_index.begin();
-                while(i != fblock_index.end() && i->second != smallest) break;
+                while(i != fblock_index.end() && i->second != fblocknum) ++i;
 
+#if DEBUG_FBLOCKINDEX
+                if(i != fblock_index.end())
+                    std::printf("[passing %d:%u]", (int)i->first, (unsigned)i->second);
+#endif
                 return AppendToFBlock(i, appended, fblocknum, data, false);
             }
         }
         
         fblock_index_type::iterator i = fblock_index.lower_bound(data.size());
+        if(i == fblock_index.end())
+        {
+#if DEBUG_FBLOCKINDEX
+            std::printf("[out of %u blocks in index, lower_bound(%u) gave end]\n",
+                (unsigned)fblock_index.size(),
+                (unsigned)data.size());
+#endif
+        }
         while(i != fblock_index.end())
         {
             try
@@ -1108,11 +1132,18 @@ private:
             }
             catch(bool)
             {
+#if DEBUG_FBLOCKINDEX
+                std::printf("[does not fit in block %u (%u)]\n- ", (unsigned)i->second, (unsigned)i->first);
+#endif
                 /* Try to find a fblock that has more room */
                 ++i;
                 continue;
              }
         }
+        
+#if DEBUG_FBLOCKINDEX
+        std::printf("[new block]");
+#endif
         
         /* Create a new fblock */
         cromfs_fblocknum_t fblocknum = fblocks.size();
@@ -1147,7 +1178,7 @@ private:
         }
     }
 
-    void EnsureCompressed(fblock_index_type::iterator i)
+    void EnsureCompressed(const fblock_index_type::iterator i)
     {
         cromfs_fblocknum_t fblocknum = i->second;
         mkcromfs_fblock& fblock = fblocks[fblocknum];
@@ -1200,10 +1231,10 @@ private:
             {
                 throw false;
             }
-            printf(" (OVERUSE) ");
+            std::printf(" (OVERUSE) ");
         }
         
-        printf("block %u => [%u @ %u] size now %u, remain %d",
+        std::printf("block %u => [%u @ %u] size now %u, remain %d",
             (unsigned)blocks.size(),
             (unsigned)fblocknum,
             (unsigned)new_data_offset,
@@ -1213,9 +1244,9 @@ private:
         if(new_data_offset < old_raw_size)
         {
             if(new_data_offset + data.size() < old_raw_size)
-                printf(" (overlap fully)");
+                std::printf(" (overlap fully)");
             else
-                printf(" (overlap %d)", (int)(old_raw_size - new_data_offset));
+                std::printf(" (overlap %d)", (int)(old_raw_size - new_data_offset));
         }
         
         /* Index all new checksum data */
@@ -1228,7 +1259,7 @@ private:
                 uint_fast32_t startoffs = AutoIndexPeriod * (count-1);
                 if(startoffs + BSIZE > new_raw_size) throw "error";
                 /*
-                printf("\nBlock reached 0x%X->0x%X bytes in size, (%d..%d), adding checksum for 0x%X; ",
+                std::printf("\nBlock reached 0x%X->0x%X bytes in size, (%d..%d), adding checksum for 0x%X; ",
                     old_raw_size, new_raw_size,
                     OldAutoMD5Count, NewAutoMD5Count,
                     startoffs);
@@ -1265,13 +1296,19 @@ private:
 
         appended.Dispose();
         
-        printf("\n");
+        std::printf("\n");
         
         cromfs_block_storage result;
         result.fblocknum = fblocknum;
         result.startoffs = new_data_offset;
         
-        if(index_iterator != fblock_index.end()) fblock_index.erase(index_iterator);
+        if(index_iterator != fblock_index.end())
+        {
+#if DEBUG_FBLOCKINDEX
+            std::printf("[erasing %d:%u]\n", (int)index_iterator->first, (unsigned)index_iterator->second);
+#endif
+            fblock_index.erase(index_iterator);
+        }
         
         /* If the block is uncompressed, preserve it fblock_index
          * so that CompressOneRandomly() may pick it some day.
@@ -1282,8 +1319,17 @@ private:
         
         if(new_remaining_room >= (int)MinimumFreeSpace)
         {
+#if DEBUG_FBLOCKINDEX
+            std::printf("[inserting %d:%u]\n", (int)new_remaining_room, (unsigned)result.fblocknum);
+#endif
             index_iterator =
                 fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
+        }
+        else
+        {
+#if DEBUG_FBLOCKINDEX
+            std::printf("[not inserting %d:%u]\n", (int)new_remaining_room, (unsigned)result.fblocknum);
+#endif
         }
         return result;
     }
@@ -1314,15 +1360,15 @@ static void TestCompression()
     for(unsigned a=0; a<40; ++a)
         buf.push_back("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"[a]);
     buf = LZMACompress(buf);
-    fprintf(stderr, "buf size now = %u\n", buf.size());
-    for(unsigned a=0; a<buf.size(); ++a) fprintf(stderr, " %02X", buf[a]);
-    fprintf(stderr, "\n");
+    std::fprintf(stderr, "buf size now = %u\n", buf.size());
+    for(unsigned a=0; a<buf.size(); ++a) std::fprintf(stderr, " %02X", buf[a]);
+    std::fprintf(stderr, "\n");
 
     buf = LZMADeCompress(buf);
-    fprintf(stderr, "buf size now = %u\n", buf.size());
+    std::fprintf(stderr, "buf size now = %u\n", buf.size());
 
-    for(unsigned a=0; a<buf.size(); ++a) fprintf(stderr, " %02X", buf[a]);
-    fprintf(stderr, "\n");
+    for(unsigned a=0; a<buf.size(); ++a) std::fprintf(stderr, " %02X", buf[a]);
+    std::fprintf(stderr, "\n");
 }
 */
 
@@ -1360,12 +1406,12 @@ int main(int argc, char** argv)
         {
             case 'V':
             {
-                printf("%s\n", VERSION);
+                std::printf("%s\n", VERSION);
                 return 0;
             }
             case 'h':
             {
-                printf(
+                std::printf(
                     "mkcromfs v"VERSION" - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Usage: mkcromfs [<options>] <input_path> <target_image>\n"
@@ -1424,12 +1470,12 @@ int main(int argc, char** argv)
                 FSIZE = size;
                 if(FSIZE < 64)
                 {
-                    fprintf(stderr, "mkcromfs: The minimum allowed fsize is 64. You gave %ld%s.\n", FSIZE, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed fsize is 64. You gave %ld%s.\n", FSIZE, arg);
                     return -1;
                 }
                 if(FSIZE > 0x7FFFFFFF)
                 {
-                    fprintf(stderr, "mkcromfs: The maximum allowed fsize is 0x7FFFFFFF. You gave 0x%lX%s.\n", FSIZE, arg);
+                    std::fprintf(stderr, "mkcromfs: The maximum allowed fsize is 0x7FFFFFFF. You gave 0x%lX%s.\n", FSIZE, arg);
                     return -1;
                 }
                 break;
@@ -1441,7 +1487,7 @@ int main(int argc, char** argv)
                 BSIZE = size;
                 if(BSIZE < 8)
                 {
-                    fprintf(stderr, "mkcromfs: The minimum allowed bsize is 8. You gave %ld%s.\n", BSIZE, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed bsize is 8. You gave %ld%s.\n", BSIZE, arg);
                     return -1;
                 }
                 break;
@@ -1457,7 +1503,7 @@ int main(int argc, char** argv)
                 long val = strtol(arg, &arg, 10);
                 if(val < 1)
                 {
-                    fprintf(stderr, "mkcromfs: The minimum allowed randomcompressperiod is 1. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed randomcompressperiod is 1. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 RandomCompressPeriod = val;
@@ -1469,7 +1515,7 @@ int main(int argc, char** argv)
                 long val = strtol(arg, &arg, 10);
                 if(val < 1)
                 {
-                    fprintf(stderr, "mkcromfs: The minimum allowed autoindexratio is 1. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed autoindexratio is 1. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 AutoIndexRatio = val;
@@ -1481,7 +1527,7 @@ int main(int argc, char** argv)
                 long val = strtol(arg, &arg, 10);
                 if(val < 1)
                 {
-                    fprintf(stderr, "mkcromfs: The minimum allowed minfreespace is 1. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed minfreespace is 1. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 MinimumFreeSpace = val;
@@ -1493,7 +1539,7 @@ int main(int argc, char** argv)
                 long val = strtol(arg, &arg, 10);
                 if(val < 0)
                 {
-                    fprintf(stderr, "mkcromfs: The minimum allowed bruteforcelimit is 0. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed bruteforcelimit is 0. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 MaxFblockCountForBruteForce = val;
@@ -1503,27 +1549,27 @@ int main(int argc, char** argv)
     }
     if(argc != optind+2)
     {
-        fprintf(stderr, "mkcromfs: invalid parameters. See `mkcromfs --help'\n");
+        std::fprintf(stderr, "mkcromfs: invalid parameters. See `mkcromfs --help'\n");
         return 1;
     }
     
     if(FSIZE < BSIZE)
     {
-        fprintf(stderr,
+        std::fprintf(stderr,
             "mkcromfs: Error: Your fsize %ld is smaller than your bsize %ld.\n"
             "  Cannot comply.\n",
             (long)FSIZE, (long)BSIZE);
     }
     if((long)MinimumFreeSpace >= BSIZE)
     {
-        fprintf(stderr,
+        std::fprintf(stderr,
             "mkcromfs: Warning: Your minfreespace %ld is quite high when compared to your\n"
             "  bsize %ld. Unless you reply on bruteforcelimit, it looks like a bad idea.\n",
             (long)MinimumFreeSpace, (long)BSIZE);
     }
     if((long)MinimumFreeSpace >= FSIZE)
     {
-        fprintf(stderr,
+        std::fprintf(stderr,
             "mkcromfs: Error: Your minfreespace %ld is larger than your fsize %ld.\n"
             "  Cannot comply.\n",
             (long)MinimumFreeSpace, (long)FSIZE);
@@ -1533,17 +1579,17 @@ int main(int argc, char** argv)
     
     if(AutoIndexPeriod < 1)
     {
-        fprintf(stderr,
+        std::fprintf(stderr,
             "mkcromfs: Error: Your autoindexratio %ld is larger than your bsize %ld.\n"
             "  Cannot comply.\n", (long)AutoIndexRatio, BSIZE);
     }
-    if(AutoIndexPeriod <= 2)
+    if(AutoIndexPeriod <= 4)
     {
         char Buf[256];
         if(AutoIndexPeriod == 1) std::sprintf(Buf, "for every possible byte");
         else std::sprintf(Buf, "every %u bytes", (unsigned)AutoIndexPeriod);
         
-        fprintf(stderr,
+        std::fprintf(stderr,
             "mkcromfs: The autoindexratio you gave, %ld, means that a _severe_ amount\n"
             "  of memory will be used by mkcromfs. An index will be added %s.\n"
             "  Just thought I should warn you.\n",
@@ -1562,13 +1608,13 @@ int main(int argc, char** argv)
 
     cromfs fs;
     fs.WalkRootDir(path.c_str());
-    fprintf(stderr, "Writing %s...\n", outfn.c_str());
+    std::fprintf(stderr, "Writing %s...\n", outfn.c_str());
     
     ftruncate(fd, 0);
     fs.WriteTo(fd);
     close(fd);
 
-    fprintf(stderr, "End\n");
+    std::fprintf(stderr, "End\n");
     
     return 0;
 }

@@ -23,9 +23,15 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #define CROMFS_SIGNATURE   UINT64_C(0x313053464d4f5243)
 
+/* Use "least" instead of "fast" for these types, because they
+ * are included in structs and vectors that are directly copied
+ * from/to the filesystem image.
+ */
 typedef uint_least64_t cromfs_inodenum_t;
 typedef uint_least32_t cromfs_blocknum_t;
 typedef uint_least32_t cromfs_fblocknum_t;
+
+/* Use "fast" in internal types, "least" in storage types. */
 
 struct cromfs_inode_internal
 {
