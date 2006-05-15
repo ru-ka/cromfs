@@ -77,7 +77,8 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
  <li>Being an user-space filesystem, it might not be suitable for
    root filesystems of rescue, tiny-Linux and installation disks.
    (Facts needed.)</li>
- <li>For devices, hardlink count of 1 is assumed.</li>
+ <li>For device inodes, hardlink count of 1 is assumed.
+   (This has no effect to compression effeciency.)</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -214,13 +215,15 @@ To improve the compression, try these tips:
  <li>Adjust the block size (--bsize) in mkcromfs. If your files
      have a lot identical content, aligned at a certain boundary,
      use that boundary as the block size value. If you are uncertain,
-     use a small value (200-5000) rather than a bigger value (20000-400000).
+     use a small value (500-5000) rather than a bigger value (20000-400000).
      Too small values will however make inodes large, so keep it sane.
     <br />
      Note: The value does not need to be a power of two.
   </li>
  <li>Adjust the fblock size (--fsize) in mkcromfs. Larger values
      cause almost always better compression.
+    <br />
+     Note: The value does not need to be a power of two.
   </li>
  <li>Adjust the --autoindexratio option (-a). A bigger value will
      increase the chances of mkcromfs finding an identical block
@@ -231,14 +234,18 @@ To improve the compression, try these tips:
      identical content should be processed right after one other.</li>
  <li>Adjust the --bruteforcelimit option (-c). Larger values will
      improve compression, but will require mkcromfs to check more
-     fblocks for each block it encodes.</li>
+     fblocks for each block it encodes.
+    <br />
+     Note: If you use --bruteforcelimit, you should also adjust
+     your --minfreespace setting as instructed in <tt>mkcromfs --help</tt>.
+  </li>
 </ul>
 To improve the filesystem generation speed, try these tips:
 <ul>
  <li>Use the --decompresslookups option (-e), if you have the
      diskspace to spare.</li>
  <li>Use the TEMP environment variable to control where the temp
-     files are written. Example: <code>TEMP=~/cromfs-temp ./mkcromfs ...</code></li>
+     files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs ...</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0
@@ -270,6 +277,7 @@ To control the filesystem speed, use these tips:
    there will be more steps to process for handling the same amount of data.</li>
  <li>Use the most powerful compiler and compiler settings available
    for building cromfs-driver.</li>
+ <li>Use fast hardware&hellip;</li>
 </ul>
 
 ", 'copying:1. Copying' => "

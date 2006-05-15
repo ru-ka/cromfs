@@ -4,6 +4,10 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.2.1	2006-05-15 Joel Yliluoma <bisqwit@iki.fi>
+- Fixed --bruteforcelimit. It didn't work in 1.1.2.
+- Documentation updates
+
 1.1.2	2006-05-15 Joel Yliluoma <bisqwit@iki.fi>
 - Ownerships are now saved too (in a mostly backward+forward compatible way).
 - Added new option in mkcromfs, --bruteforcelimit.

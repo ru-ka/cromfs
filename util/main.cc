@@ -30,7 +30,7 @@ static uint_fast32_t MinimumFreeSpace = 16;
 static uint_fast32_t AutoIndexPeriod = 256;
 static uint_fast32_t MaxFblockCountForBruteForce = 0;
 
-static long FSIZE = 1048576*2;
+static long FSIZE = 2097152;
 static long BSIZE = 65536;
 
 static const char* GetTempDir()
@@ -176,7 +176,7 @@ public:
         std::fclose(fp);
         if(res != raw.size())
         {
-            fprintf(stderr, "fwrite: res=%d, should be %d\n", res, raw.size());
+            fprintf(stderr, "fwrite: res=%d, should be %d\n", (int)res, (int)raw.size());
             // Possibly, out of disk space? Try to save compressed instead.
             put_compressed(LZMACompress(raw));
         }
@@ -251,7 +251,7 @@ public:
                 MapSize=0;
                 Buffer = new unsigned char[size];
                 int res = pread(fd, Buffer, size, 0);
-                if(res != size)
+                if(res != (int)size)
                 {
                     fprintf(stderr, "pread error: expected %d, got %d\n", (int)size, res);
                 }
@@ -275,6 +275,11 @@ public:
                 else delete[] Buffer;
                 Buffer=0;
             }
+        }
+        void SetAppendPos(uint_fast32_t offs, uint_fast32_t datasize)
+        {
+            AppendBaseOffset = offs;
+            AppendedSize     = std::max(OldSize, offs + datasize);
         }
         
         unsigned char* GetBufferPointer() const { return Buffer; }
@@ -301,8 +306,9 @@ public:
                          uint_fast32_t offset)
     {
         AppendControl(append, data, true,false,false);
-        append.AppendBaseOffset = offset;
-        append.AppendedSize     = std::max(append.OldSize, append.AppendBaseOffset + data.size());
+        
+        append.SetAppendPos(offset, data.size());
+        
         AppendControl(append, data, false,false,true);
     }
 
@@ -340,8 +346,8 @@ public:
         if(!write_ok)
         {
             fprintf(stderr, "pwrite: res=%d, should be %u (%u-%u)\n",
-                res, append.AppendedSize-low_pos,
-                append.AppendedSize, low_pos);
+                res, (unsigned)(append.AppendedSize-low_pos),
+                (unsigned)append.AppendedSize, (unsigned)low_pos);
         }
         
         if(write_ok)
@@ -404,9 +410,8 @@ private:
     {
         if(DoLoad)
         {
-            append.AppendBaseOffset = 0;
-            append.AppendedSize     = 0;
             append.OldSize          = 0;
+            append.SetAppendPos(0, data.size());
             
             off_t rawsize;
             
@@ -444,8 +449,8 @@ private:
                 }
             }
             
-            append.OldSize          = rawsize;
-            append.AppendedSize     = rawsize;
+            append.OldSize = rawsize;
+            append.SetAppendPos(rawsize, data.size());
         }
         
         if(DoDecide)
@@ -459,17 +464,22 @@ private:
 #endif
             if(!data.empty())
             {
-                uint_fast32_t cap = std::min(append.OldSize, FSIZE - data.size());
+                uint_fast32_t cap = std::min((long)append.OldSize, (long)(FSIZE - data.size()));
 
                 unsigned char* ptr = append.GetBufferPointer();
-                unsigned char* endptr = ptr + cap;
                 
                 uint_fast32_t result = append.OldSize; /* By default, insert at end. */
                 
                 for(unsigned a=0; ; ++a)
                 {
-                    const unsigned char* refptr = std::find(ptr+a, endptr, data[0]);
-                    if(refptr >= endptr) break;
+                    /* We believe std::memchr() might be better optimized
+                     * than std::find(). At least in glibc, memchr() does
+                     * does longword access on aligned addresses, whereas
+                     * find() (from STL) compares byte by byte.
+                     */
+                    const unsigned char* refptr =
+                        (const unsigned char*)std::memchr(ptr+a, data[0], cap-a);
+                    if(!refptr) break;
                     a = refptr - ptr;
                     unsigned compare_size = std::min((long)data.size(), (long)(append.OldSize - a));
                     
@@ -492,9 +502,8 @@ private:
                         break;
                     }
                 }
-
-                append.AppendBaseOffset = result;
-                append.AppendedSize     = std::max(append.OldSize, result + data.size());
+                
+                append.SetAppendPos(result, data.size());
             }
         }
         
@@ -644,7 +653,7 @@ public:
         }
         std::printf(
             "\n%u fblocks were written: %s = %.2f %% of %s\n",
-            fblocks.size(),
+            (unsigned)fblocks.size(),
             ReportSize(compressed_total).c_str(),
             compressed_total * 100.0 / (double)uncompressed_total,
             ReportSize(uncompressed_total).c_str()
@@ -818,9 +827,9 @@ private:
         while(nbytes > 0)
         {
             uint_fast64_t eat = nbytes;
-            if(eat > BSIZE) eat = BSIZE;
+            if(eat > (uint_fast64_t)BSIZE) eat = BSIZE;
             
-            std::printf(" - %llu/%llu... ", eat, nbytes);
+            std::printf(" - %u/%llu... ", (unsigned)eat, nbytes);
             std::fflush(stdout);
             
             std::vector<unsigned char> buf = data.read(eat);
@@ -1041,6 +1050,7 @@ private:
             cromfs_fblocknum_t smallest = 0;
             uint_fast32_t smallest_size = 0;
             uint_fast32_t smallest_pos  = 0;
+            int_fast32_t smallest_hole = 0;
             
             bool found_candidate = false;
             
@@ -1052,13 +1062,27 @@ private:
                 mkcromfs_fblock::AppendInfo appended;
                 fblock.LoadAndAnalyzeAppend(appended, data);
                 
-                if((!found_candidate || appended.AppendedSize < smallest_size)
-                && appended.AppendedSize < FSIZE)
+                uint_fast32_t this_size = appended.AppendedSize - appended.OldSize;
+                int_fast32_t hole_size = FSIZE - appended.AppendedSize;
+
+                //printf("[cand %u:%u]", (unsigned)fblocknum, (unsigned)this_size);
+                
+                /* Don't do the smallest hole test. This would counter
+                 * the purpose of MinimumFreeSpace.
+                 */
+                if(hole_size >= 0
+                && (!found_candidate
+                 || this_size < smallest_size
+               /*  || (this_size == smallest_size && hole_size < smallest_hole) */
+                  ))
                 {
-                    found_candidate    = true;
+                    found_candidate = true;
                     smallest = fblocknum;
                     smallest_pos  = appended.AppendBaseOffset;
-                    smallest_size = appended.AppendedSize;
+                    smallest_size = this_size;
+                    smallest_hole = hole_size;
+                    //printf("[!]");
+                    if(smallest_size == 0) break; /* couldn't get better */
                 }
             }
             if(found_candidate)
@@ -1180,7 +1204,7 @@ private:
         }
         
         printf("block %u => [%u @ %u] size now %u, remain %d",
-            blocks.size(),
+            (unsigned)blocks.size(),
             (unsigned)fblocknum,
             (unsigned)new_data_offset,
             (unsigned)new_raw_size,
@@ -1189,9 +1213,9 @@ private:
         if(new_data_offset < old_raw_size)
         {
             if(new_data_offset + data.size() < old_raw_size)
-                printf(" (overlap fully");
+                printf(" (overlap fully)");
             else
-                printf(" (overlap %d)", old_raw_size - new_data_offset);
+                printf(" (overlap %d)", (int)(old_raw_size - new_data_offset));
         }
         
         /* Index all new checksum data */
@@ -1256,7 +1280,7 @@ private:
          * for crunching more bytes into it.
          */
         
-        if(new_remaining_room >= MinimumFreeSpace)
+        if(new_remaining_room >= (int)MinimumFreeSpace)
         {
             index_iterator =
                 fblock_index.insert(std::make_pair(new_remaining_room, result.fblocknum));
@@ -1348,7 +1372,7 @@ int main(int argc, char** argv)
                     " --help, -h         This help\n"
                     " --version, -V      Displays version information\n"
                     " --fsize, -f <size>\n"
-                    "     Set the size of compressed data clusters. Default: 1048576\n"
+                    "     Set the size of compressed data clusters. Default: 2097152\n"
                     "     Larger cluster size improves compression, but increases the memory\n"
                     "     usage during mount, and makes the filesystem a lot slower to generate.\n"
                     "     Should be set at least twice as large as bsize.\n"
@@ -1369,8 +1393,9 @@ int main(int argc, char** argv)
                     "     mean more diskspace used by temporary files.\n"
                     " --minfreespace, -s <value>\n"
                     "     Minimum free space in a fblock to consider it a candidate. Default: 16\n"
-                    "     Bigger values speed up the compression, but will cause some space\n"
-                    "     being wasted that could have been used.\n"
+                    "     The value should be smaller than bsize, or otherwise it works against\n"
+                    "     the fsize setting by making the fsize impossible to reach.\n"
+                    "     Note: The bruteforcelimit algorithm ignores minfreespace.\n"
                     " --autoindexratio, -a <value>\n"
                     "     Defines the ratio of indexes to blocks which to use when creating\n"
                     "     the filesystem. Default value: 16\n"
@@ -1386,6 +1411,9 @@ int main(int argc, char** argv)
                     "     for overlapping content when deciding which fblock to append to.\n"
                     "     The default value, 0, means to do straight-forward selection\n"
                     "     based on the free space in the fblock.\n"
+                    "     Note: If you use --bruteforcelimit, you should set minfreespace\n"
+                    "     to a value larger than your bsize in order to leave some spare\n"
+                    "     fblocks for the bruteforcing to test.\n"
                     "\n");
                 return 0;
             }
@@ -1489,11 +1517,11 @@ int main(int argc, char** argv)
     if((long)MinimumFreeSpace >= BSIZE)
     {
         fprintf(stderr,
-            "mkcromfs: Warning: Your minfreespace %ld is quite high when compared\n"
-            "  to your bsize %ld. It looks like a bad idea.\n",
+            "mkcromfs: Warning: Your minfreespace %ld is quite high when compared to your\n"
+            "  bsize %ld. Unless you reply on bruteforcelimit, it looks like a bad idea.\n",
             (long)MinimumFreeSpace, (long)BSIZE);
     }
-    if((long)MinimumFreeSpace > FSIZE)
+    if((long)MinimumFreeSpace >= FSIZE)
     {
         fprintf(stderr,
             "mkcromfs: Error: Your minfreespace %ld is larger than your fsize %ld.\n"
