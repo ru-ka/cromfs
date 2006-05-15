@@ -12,6 +12,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #define _XOPEN_SOURCE 500
 #define _LARGEFILE64_SOURCE
+#define __STDC_CONSTANT_MACROS
 
 #include <algorithm>
 #include <cstdlib>
@@ -23,6 +24,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include <sstream>
 
 #include <sys/time.h>
+#include <sys/stat.h>
 
 #include "LzmaDecode.h"
 #include "LzmaDecode.c"
@@ -278,31 +280,44 @@ void cromfs::reread_blktab()
     cromfs_setup_alarm(*this);
 }
 
+static void ExtractInodeHeader(cromfs_inode_internal& inode, const unsigned char* Buf)
+{
+    uint_fast32_t rdev_links;
+    
+    inode.mode    = R32(Buf+0x0000);
+    inode.time    = R32(Buf+0x0004);
+    rdev_links    = R32(Buf+0x0008);
+    inode.uid     = R16(Buf+0x000C);
+    inode.gid     = R16(Buf+0x000E);
+    inode.bytesize= R64(Buf+0x0010);
+    
+    if(S_ISCHR(inode.mode) || S_ISBLK(inode.mode))
+        { inode.links = 1; inode.rdev = rdev_links; }
+    else
+        { inode.links = rdev_links; inode.rdev = 0; }
+}
+
 cromfs_inode_internal cromfs::read_uncompressed_inode(uint_fast64_t offset)
 {
-    char Buf[0x18];
+    unsigned char Buf[0x18];
     
-    cromfs_inode_internal result;
+    cromfs_inode_internal inode;
     
     if(pread64(fd, Buf, 0x18, offset+0) == -1) throw errno;
     
-    result.mode    = R32(Buf+0x0000);
-    result.time    = R32(Buf+0x0004);
-    result.links   = R32(Buf+0x0008);
-    result.rdev    = R32(Buf+0x000C);
-    result.bytesize= R64(Buf+0x0010);
+    ExtractInodeHeader(inode, Buf);
     
     printf("read_uncompressed_inode(%lld): %s\n",
-        offset, DumpInode(result).c_str());
+        offset, DumpInode(inode).c_str());
     
-    uint_fast64_t nblocks = (result.bytesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
+    uint_fast64_t nblocks = (inode.bytesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
     
-    result.blocklist.resize(nblocks);
+    inode.blocklist.resize(nblocks);
     
     /* FIXME: not endianess-safe */
-    if(pread64(fd, &result.blocklist[0], 4 * nblocks, offset+0x18) == -1) throw errno;
+    if(pread64(fd, &inode.blocklist[0], 4 * nblocks, offset+0x18) == -1) throw errno;
     
-    return result;
+    return inode;
 }
 
 const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
@@ -316,17 +331,12 @@ const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
     }
 
     unsigned char Buf[0x18];
-    read_file_data(inotab, (inodenum-2)*4ULL, Buf, 0x18, "inode");
+    read_file_data(inotab, (inodenum-2) * UINT64_C(4), Buf, 0x18, "inode");
     
-    cromfs_inode_internal result;
+    cromfs_inode_internal inode;
+    ExtractInodeHeader(inode, Buf);
     
-    result.mode    = R32(Buf+0x0000);
-    result.time    = R32(Buf+0x0004);
-    result.links   = R32(Buf+0x0008);
-    result.rdev    = R32(Buf+0x000C);
-    result.bytesize= R64(Buf+0x0010);
-    
-    return result;
+    return inode;
 }
 
 const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inodenum)
@@ -346,7 +356,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
     result.blocklist.resize(nblocks);
     
     /* FIXME: not endianess-safe */
-    read_file_data(inotab, (inodenum-2)*4ULL + 0x18,
+    read_file_data(inotab, (inodenum-2) * UINT64_C(4) + 0x18,
                    (unsigned char*)&result.blocklist[0], 4 * nblocks,
                    "inode block table");
     

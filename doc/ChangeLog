@@ -4,6 +4,10 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.2	2006-05-15 Joel Yliluoma <bisqwit@iki.fi>
+- Ownerships are now saved too (in a mostly backward+forward compatible way).
+- Added new option in mkcromfs, --bruteforcelimit.
+
 1.1.1	2006-05-14 Joel Yliluoma <bisqwit@iki.fi>
 - Data integrity problem hopefully fixed now.
 - Improved the usefulness of the caching in read_dir.

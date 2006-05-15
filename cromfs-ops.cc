@@ -104,8 +104,8 @@ extern "C" {
         attr.st_ino     = ino;
         attr.st_mode    = i.mode;
         attr.st_nlink   = i.links;
-        attr.st_uid     = getuid();
-        attr.st_gid     = getgid();
+        attr.st_uid     = i.uid ? i.uid : getuid();
+        attr.st_gid     = i.gid ? i.gid : getgid();
         attr.st_size    = i.bytesize;
         attr.st_blksize = 4096;
         attr.st_blocks  = (i.bytesize + attr.st_blksize - 1) / (attr.st_blksize);

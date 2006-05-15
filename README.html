@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.1.
+  This is the documentation of cromfs-1.1.2.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -85,11 +85,11 @@ See <a href="http://bisqwit.iki.fi/src/cromfs-format.txt"
  <li>mkcromfs is slow. You must be patient.</li>
  <li>The cromfs-driver has a large memory footprint. It is not
    suitable for very size-constrained systems.</li>
- <li>Ownerships are not saved.</li>
  <li>Maximum filename length: 4095 bytes</li>
- <li>Being an user-space filesystem it might not be suitable for
+ <li>Being an user-space filesystem, it might not be suitable for
    root filesystems of rescue, tiny-Linux and installation disks.
    (Facts needed.)</li>
+ <li>For devices, hardlink count of 1 is assumed.</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -110,7 +110,7 @@ a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Compression unit</th>
-   <td>adjustable (1 MB default)</td>
+   <td>adjustable (4 MB default)</td>
    <td>4 kB</td>
    <td>adjustable (64 kB max)</td>
   </tr>
@@ -124,13 +124,19 @@ a scientific study, but here goes:
   <th>Maximum file size</th>
    <td>16 EB (2^44 MB)</td>
    <td>16 MB (2^4 MB)</td>
-   <td>16 EB (2^44 MB)</td>
+   <td>16 EB (2^44 MB)<br /> (4 GB before v3.0)</td>
   </tr>
  <tr align=left>
   <th>Duplicate whole file detection</th>
    <td>Yes</td>
    <td>No (but hardlinks are detected)</td>
    <td>Yes</td>
+  </tr>
+ <tr align=left>
+  <th>Hardlinks detected and saved</th>
+   <td>Yes</td>
+   <td>Unknown</td>
+   <td>Yes, since v3.0</td>
   </tr>
  <tr align=left>
   <th>Near-identical file detection</th>
@@ -146,7 +152,7 @@ a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Ownerships</th>
-   <td>None (uses the mounter's uid and gid)</td>
+   <td>uid,gid (since version 1.1.2)</li>
    <td>uid,gid (but gid truncated to 8 bits)</td>
    <td>uid,gid</td>
  <tr align=left>
@@ -175,6 +181,12 @@ a scientific study, but here goes:
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
 </table>
+
+Note: cromfs now saves the uid and gid in the filesystem. However,
+when the uid is 0 (root), the cromfs-driver returns the uid of the
+user who mounted the filesystem, instead of root. Similarly for gid.
+This is both for backward compatibility and for security.<br />
+If you mount as root, this behavior has no effect.
 
 </div><H2 id="usage" class="level2"><a name="usage"></a>6. Getting started</H2><div class="level2" id="divusage">
 
@@ -229,6 +241,9 @@ To improve the compression, try these tips:
      means better compression.</li>
  <li>Sort your files. Files which have similar or partially
      identical content should be processed right after one other.</li>
+ <li>Adjust the --bruteforcelimit option (-c). Larger values will
+     improve compression, but will require mkcromfs to check more
+     fblocks for each block it encodes.</li>
 </ul>
 To improve the filesystem generation speed, try these tips:
 <ul>
@@ -238,6 +253,8 @@ To improve the filesystem generation speed, try these tips:
      files are written. Example: <code>TEMP=~/cromfs-temp ./mkcromfs ...</code></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
+ <li>Do not use the --bruteforcelimit option (-c). The default value 0
+     means that only one fblock will be assumed as a candidate.</li>
 </ul>
 To control the memory usage, use these tips:
 <ul>
@@ -277,8 +294,8 @@ and is distributed under the terms of the
 The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
-by e-mail at:<span id=eml43><b id=eml29 class=nonmail>Bgreg</b><span id=eml30 class=ismail>Joel</span><span id=eml31 class=nonmail><b>ye5@oaoxs</b></span><span id=eml32 class=ismail> Yli</span><b id=eml33 class=nonmail>exe@.n1@@</b><span id=eml34 class=ismail>luom</span><span id=eml35 class=nonmail><b>rve</b></span><span id=eml36 class=ismail>a &lt;bi</span><b id=eml37 class=nonmail>Cabf</b><span id=eml38 class=ismail>sqwi</span><span id=eml39 class=nonmail><b>xb8Ah2.</b></span><span id=eml40 class=ismail>t@ik</span><b id=eml41 class=nonmail>@a9aeE</b><span id=eml42 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=29;i<43;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml20><b id=eml6 class=nonmail>3</b><span id=eml7 class=ismail>Joel</span><span id=eml8 class=nonmail><b>/j@@</b></span><span id=eml9 class=ismail> Yli</span><b id=eml10 class=nonmail>F</b><span id=eml11 class=ismail>luom</span><span id=eml12 class=nonmail><b>zet.7sb@sa</b></span><span id=eml13 class=ismail>a &lt;bi</span><b id=eml14 class=nonmail>lh</b><span id=eml15 class=ismail>sqwi</span><span id=eml16 class=nonmail><b>e1km5</b></span><span id=eml17 class=ismail>t@ik</span><b id=eml18 class=nonmail>lN.0doelj</b><span id=eml19 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=6;i<20;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
 
 </div><H2 id="requ" class="level2"><a name="requ"></a>9. Requirements</H2><div class="level2" id="divrequ">
@@ -297,9 +314,9 @@ s='';for(i=29;i<43;){document.getElementById('eml'+i++).innerHTML='';s+=document
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Mon, 15 May 2006 00:58:36 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Mon, 15 May 2006 02:42:02 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Mon, 15 May 2006 00:58:43 +0300</small>
+  at Mon, 15 May 2006 03:54:53 +0300</small>
  </p>
 </body>
 </html>

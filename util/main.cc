@@ -1,4 +1,7 @@
 #define _LARGEFILE64_SOURCE
+#define __STDC_CONSTANT_MACROS
+
+#include "../cromfs-defs.hh"
 
 #include <vector>
 #include <cstdio>
@@ -17,16 +20,15 @@
 
 #include "lzma.hh"
 
-#include "../cromfs-defs.hh"
-
 #include "datasource.hh"
 
 #include "crc32.h"
 
 static bool DecompressWhenLookup = false;
 static unsigned RandomCompressPeriod = 20;
-static uint_fast32_t MinimumFreeSpace = 200;
+static uint_fast32_t MinimumFreeSpace = 16;
 static uint_fast32_t AutoIndexPeriod = 256;
+static uint_fast32_t MaxFblockCountForBruteForce = 0;
 
 static long FSIZE = 1048576*2;
 static long BSIZE = 65536;
@@ -182,7 +184,7 @@ public:
     
     void put_compressed(const std::vector<unsigned char>& compressed)
     {
-        fprintf(stderr, "[1;mstoring compressed[m\n");
+        //fprintf(stderr, "[1;mstoring compressed[m\n");
         is_compressed = true;
         FILE* fp = std::fopen(getfn().c_str(), "wb");
         std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
@@ -207,6 +209,11 @@ public:
         */
     }
     
+    /* AppendInfo is a structure that holds both the input and output
+     * handled by LoadRawAndAppend(). It was created to avoid having
+     * to copy and resize std::vectors everywhere. It was supposed to
+     * use mmap() to minimize the file access.
+     */
     struct AppendInfo
     {
         uint_fast32_t AppendBaseOffset;
@@ -231,6 +238,11 @@ public:
              * by gdb or valgrind. --Bisqwit
              * Ps: In both cases, the underlying filesystem was Reiser4.
              * The crashing problem did not seem to occur with Ext2fs.
+             *
+             * However, because LoadRawAndAppend() will use find() to search
+             * the entire block (and it will most often actually have to do
+             * indeed search the entire block), it's not a significant
+             * performance loss even if we can't use mmap here.
              */
             void*p = (void*)-1;//mmap(NULL, MapSize=size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
             if(p == (void*)-1)
@@ -279,108 +291,24 @@ public:
         AppendInfo(const AppendInfo&);
     };
     
-    void LoadRawAndAppend(AppendInfo& append, const std::vector<unsigned char>& data)
+
+    void LoadAndAppend(AppendInfo& append, const std::vector<unsigned char>& data)
     {
-        append.AppendBaseOffset = 0;
-        append.AppendedSize     = 0;
-        append.OldSize          = 0;
-        
-        off_t rawsize;
-        
-        if(is_compressed)
-        {
-            std::vector<unsigned char> rawdata = get_raw();
-            rawsize = rawdata.size();
-            
-            uint_fast32_t prepare_size = rawsize + data.size();
-            append.AssignFrom(rawdata, prepare_size);
-        }
-        else
-        {
-            int fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
-            if(fd < 0)
-            {
-                /* File not found. Prevent null pointer, load a dummy buffer. */
-                std::vector<unsigned char> dummy;
-                append.AssignFrom(dummy, data.size());
-                rawsize = 0;
-            }
-            else
-            {
-                rawsize = filesize;
-                const uint_fast32_t prepare_size = rawsize + data.size();
-                
-                /* mmap() can not map pages that don't exist in the file,
-                 * so enlarge the file if necessary
-                 */
-                if(prepare_size > filesize) ftruncate(fd, prepare_size);
+        AppendControl(append, data, true,true,true);
+    }
 
-                append.MapFrom(fd, prepare_size);
-                
-                close(fd);
-            }
-        }
-        
-        append.OldSize          = rawsize;
-        append.AppendedSize     = rawsize;
-        
-#if DEBUG_APPEND
-        fprintf(stderr, "Appension (%s), rawsize=%u, datasize=%u, ptr=%p, mapped=%s\n",
-            is_compressed ? "compressed" : "raw",
-            rawsize, data.size(),
-            append.GetBufferPointer(),
-            append.IsMapped() ? "yes":"no");
-#endif
-        if(!data.empty())
-        {
-            unsigned char* ptr = append.GetBufferPointer();
-            unsigned char* endptr = ptr + rawsize;
-            
-            uint_fast32_t result = rawsize; /* By default, insert at end. */
-            
-            for(unsigned a=0; ; ++a)
-            {
-                const unsigned char* refptr = std::find(ptr+a, endptr, data[0]);
-                if(refptr >= endptr) break;
-                a = refptr - ptr;
-                unsigned compare_size = std::min((long)data.size(), (long)(rawsize - a));
-                
-                /* compare 1 byte less because find() already confirmed the first byte */
-                if(std::memcmp(refptr+1, &data[1], compare_size-1) == 0)
-                {
-#if DEBUG_OVERLAP
-                    printf("\nOVERLAP: ORIG=%u, NEW=%u, POS=%u, COMPARED %u\n",
-                        (unsigned)rawsize, (unsigned)data.size(),
-                        a, compare_size);
-                    for(unsigned b=0; b<4+compare_size; ++b)
-                        printf("%02X ", ptr[rawsize-compare_size+b-4]);
-                    printf("\n");
-                    for(unsigned b=0; b<4; ++b) printf("   ");
-                    for(unsigned b=0; b<4+compare_size; ++b)
-                        printf("%02X ", data[b]);
-                    printf("\n");
-#endif
-                    result = a; /* Put it here. */
-                    break;
-                }
-            }
+    void LoadAndAppendAt(AppendInfo& append, const std::vector<unsigned char>& data,
+                         uint_fast32_t offset)
+    {
+        AppendControl(append, data, true,false,false);
+        append.AppendBaseOffset = offset;
+        append.AppendedSize     = std::max(append.OldSize, append.AppendBaseOffset + data.size());
+        AppendControl(append, data, false,false,true);
+    }
 
-            append.AppendBaseOffset = result;
-
-            /* Put all the remaining data to the end. */
-            unsigned common_context_length = std::min((long)data.size(), (long)(rawsize-result));
-            unsigned remainder = data.size() - common_context_length;
-            if(remainder > 0)
-            {
-                std::memcpy(ptr+rawsize, &data[common_context_length], remainder);
-                append.AppendedSize += remainder;
-            }
-        }
-#if DEBUG_APPEND
-        fprintf(stderr, "- appended to %u, results %u/%u (0 if mmapped)\n",
-          append.AppendBaseOffset,
-          append.AppendedSize, append.GetMapSize());
-#endif
+    void LoadAndAnalyzeAppend(AppendInfo& append, const std::vector<unsigned char>& data)
+    {
+        AppendControl(append, data, true,true,false);
     }
 
     void put_appended_raw(const AppendInfo& append)
@@ -466,6 +394,129 @@ private:
                 put_compressed(*compressed);
             }
             if(raw)        *raw = result;
+        }
+    }
+
+    void AppendControl(AppendInfo& append, const std::vector<unsigned char>& data,
+                       bool DoLoad,
+                       bool DoDecide,
+                       bool DoPerform)
+    {
+        if(DoLoad)
+        {
+            append.AppendBaseOffset = 0;
+            append.AppendedSize     = 0;
+            append.OldSize          = 0;
+            
+            off_t rawsize;
+            
+            if(is_compressed)
+            {
+                std::vector<unsigned char> rawdata = get_raw();
+                rawsize = rawdata.size();
+                
+                uint_fast32_t prepare_size = rawsize + data.size();
+                append.AssignFrom(rawdata, prepare_size);
+            }
+            else
+            {
+                int fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
+                if(fd < 0)
+                {
+                    /* File not found. Prevent null pointer, load a dummy buffer. */
+                    std::vector<unsigned char> dummy;
+                    append.AssignFrom(dummy, data.size());
+                    rawsize = 0;
+                }
+                else
+                {
+                    rawsize = filesize;
+                    const uint_fast32_t prepare_size = rawsize + data.size();
+                    
+                    /* mmap() can not map pages that don't exist in the file,
+                     * so enlarge the file if necessary
+                     */
+                    if(prepare_size > filesize) ftruncate(fd, prepare_size);
+
+                    append.MapFrom(fd, prepare_size);
+                    
+                    close(fd);
+                }
+            }
+            
+            append.OldSize          = rawsize;
+            append.AppendedSize     = rawsize;
+        }
+        
+        if(DoDecide)
+        {
+#if DEBUG_APPEND
+            fprintf(stderr, "Appension (%s), rawsize=%u, datasize=%u, ptr=%p, mapped=%s\n",
+                is_compressed ? "compressed" : "raw",
+                rawsize, data.size(),
+                append.GetBufferPointer(),
+                append.IsMapped() ? "yes":"no");
+#endif
+            if(!data.empty())
+            {
+                uint_fast32_t cap = std::min(append.OldSize, FSIZE - data.size());
+
+                unsigned char* ptr = append.GetBufferPointer();
+                unsigned char* endptr = ptr + cap;
+                
+                uint_fast32_t result = append.OldSize; /* By default, insert at end. */
+                
+                for(unsigned a=0; ; ++a)
+                {
+                    const unsigned char* refptr = std::find(ptr+a, endptr, data[0]);
+                    if(refptr >= endptr) break;
+                    a = refptr - ptr;
+                    unsigned compare_size = std::min((long)data.size(), (long)(append.OldSize - a));
+                    
+                    /* compare 1 byte less because find() already confirmed the first byte */
+                    if(std::memcmp(refptr+1, &data[1], compare_size-1) == 0)
+                    {
+#if DEBUG_OVERLAP
+                        printf("\nOVERLAP: ORIG=%u, NEW=%u, POS=%u, COMPARED %u\n",
+                            (unsigned)cap, (unsigned)data.size(),
+                            a, compare_size);
+                        for(unsigned b=0; b<4+compare_size; ++b)
+                            printf("%02X ", ptr[cap - compare_size+b-4]);
+                        printf("\n");
+                        for(unsigned b=0; b<4; ++b) printf("   ");
+                        for(unsigned b=0; b<4+compare_size; ++b)
+                            printf("%02X ", data[b]);
+                        printf("\n");
+#endif
+                        result = a; /* Put it here. */
+                        break;
+                    }
+                }
+
+                append.AppendBaseOffset = result;
+                append.AppendedSize     = std::max(append.OldSize, result + data.size());
+            }
+        }
+        
+        if(DoPerform)
+        {
+            if(append.AppendedSize > append.OldSize)
+            {
+                /* Put all the remaining data to the end. */
+                unsigned char* ptr = append.GetBufferPointer();
+                unsigned remainder = append.AppendedSize - append.OldSize;
+                if(remainder > 0)
+                {
+                    std::memcpy(ptr + append.OldSize,
+                                &data[data.size() - remainder],
+                                remainder);
+                }
+            }
+#if DEBUG_APPEND
+            fprintf(stderr, "- appended to %u, results %u/%u (0 if mmapped)\n",
+              append.AppendBaseOffset,
+              append.AppendedSize, append.GetMapSize());
+#endif
         }
     }
 };
@@ -682,6 +733,8 @@ private:
                 inode.links    = 1; //st.st_nlink;
                 inode.bytesize = 0;
                 inode.rdev     = 0;
+                inode.uid      = st.st_uid;
+                inode.gid      = st.st_gid;
                 
                 if(S_ISDIR(st.st_mode))
                 {
@@ -789,10 +842,14 @@ private:
     void put_inode(unsigned char* inodata, const cromfs_inode_internal& inode,
                    bool ignore_blocks = false)
     {
+        uint_fast32_t rdev_links = inode.links;
+        if(S_ISCHR(inode.mode) || S_ISBLK(inode.mode)) rdev_links = inode.rdev;
+    
         W32(&inodata[0x00], inode.mode);
         W32(&inodata[0x04], inode.time);
-        W32(&inodata[0x08], inode.links);
-        W32(&inodata[0x0C], inode.rdev);
+        W32(&inodata[0x08], rdev_links);
+        W16(&inodata[0x0C], inode.uid);
+        W16(&inodata[0x0E], inode.gid);
         W64(&inodata[0x10], inode.bytesize);
         
         if(ignore_blocks) return;
@@ -819,12 +876,19 @@ private:
         
         cromfs_inode_internal inode;
         
+        uint_fast32_t rdev_links;
         inode.mode     = R32(&inodata[0x00]);
         inode.time     = R32(&inodata[0x04]);
-        inode.links    = R32(&inodata[0x08]);
-        inode.rdev     = R32(&inodata[0x0C]);
+        rdev_links     = R32(&inodata[0x08]);
+        inode.uid      = R16(&inodata[0x0C]);
+        inode.gid      = R16(&inodata[0x0E]);
         inode.bytesize = R64(&inodata[0x10]);
         
+        if(S_ISCHR(inode.mode) || S_ISBLK(inode.mode))
+            { inode.links = 1; inode.rdev = rdev_links; }
+        else
+            { inode.links = rdev_links; inode.rdev = 0; }
+
         return inode;
     }
     
@@ -937,7 +1001,7 @@ private:
     }
     
     bool block_is(const cromfs_block_storage& block,
-                  const std::vector<unsigned char>& data)
+                  const std::vector<unsigned char>& data) /* is_same_block */
     {
         return fblocks[block.fblocknum].compare_raw_portion(data, block.startoffs) == 0;
     }
@@ -945,6 +1009,71 @@ private:
     const cromfs_block_storage create_new_block(const std::vector<unsigned char>& data)
     {
         CompressOneRandomly();
+        
+        if(MaxFblockCountForBruteForce > 0 && fblocks.size() > 1)
+        {
+            std::vector<cromfs_fblocknum_t> candidates;
+            candidates.reserve(fblocks.size());
+            
+            /* First candidate: The fblock that we would get without brute force */
+            fblock_index_type::iterator i = fblock_index.lower_bound(data.size());
+            if(i != fblock_index.end())
+            {
+                candidates.push_back(i->second);
+
+                for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0; )
+                {
+                    if(a != i->second) candidates.push_back(a);
+                }
+                
+                std::random_shuffle(candidates.begin()+1, candidates.end());
+            }
+            else
+            {
+                for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0 ; )
+                {
+                    candidates.push_back(a);
+                }
+                
+                std::random_shuffle(candidates.begin(), candidates.end());
+            }
+            
+            cromfs_fblocknum_t smallest = 0;
+            uint_fast32_t smallest_size = 0;
+            uint_fast32_t smallest_pos  = 0;
+            
+            bool found_candidate = false;
+            
+            for(unsigned a=0; a<MaxFblockCountForBruteForce && a<candidates.size(); ++a)
+            {
+                cromfs_fblocknum_t fblocknum = candidates[a];
+                mkcromfs_fblock& fblock = fblocks[fblocknum];
+                
+                mkcromfs_fblock::AppendInfo appended;
+                fblock.LoadAndAnalyzeAppend(appended, data);
+                
+                if((!found_candidate || appended.AppendedSize < smallest_size)
+                && appended.AppendedSize < FSIZE)
+                {
+                    found_candidate    = true;
+                    smallest = fblocknum;
+                    smallest_pos  = appended.AppendBaseOffset;
+                    smallest_size = appended.AppendedSize;
+                }
+            }
+            if(found_candidate)
+            {
+                cromfs_fblocknum_t fblocknum = smallest;
+                mkcromfs_fblock& fblock = fblocks[fblocknum];
+                mkcromfs_fblock::AppendInfo appended;
+                fblock.LoadAndAppendAt(appended, data, smallest_pos);
+                
+                fblock_index_type::iterator i = fblock_index.begin();
+                while(i != fblock_index.end() && i->second != smallest) break;
+
+                return AppendToFBlock(i, appended, fblocknum, data, false);
+            }
+        }
         
         fblock_index_type::iterator i = fblock_index.lower_bound(data.size());
         while(i != fblock_index.end())
@@ -970,38 +1099,6 @@ private:
         return AppendToFBlock(fblock_index.end(), fblocknum, data, false);
     }
 
-    uint_fast32_t AppendOrOverlapBlock(std::vector<unsigned char>& target,
-                                       const std::vector<unsigned char>& data) const
-    {
-        if(data.empty()) return 0; /* A zerobyte block can be found anywhere. */
-        
-        uint_fast32_t result = target.size(); /* By default, insert at end. */
-        for(unsigned a=0; ; ++a)
-        {
-            std::vector<unsigned char>::const_iterator
-                apos = std::find(target.begin()+a, target.end(), data[0]);
-            if(apos == target.end()) break;
-            
-            a = apos - target.begin();
-            
-            unsigned compare_size = std::min(data.size(), target.size() - a);
-            
-            /* compare 1 byte less because find() already confirmed the first byte */
-            if(std::memcmp(&target[a+1], &data[1], compare_size-1) == 0)
-            {
-                result = a; /* Put it here. */
-                break;
-            }
-        }
-    
-        /* Append all the remaining data to the end */
-        unsigned common_context_length = std::min(data.size(), target.size() - result);
-       // fprintf(stderr, "target=%u data=%u result=%u length=%u\n",
-       //     target.size(), data.size(), result, common_context_length);
-        target.insert(target.end(), data.begin()+common_context_length, data.end());
-        return result;
-    }
-    
 private:
     std::vector<cromfs_block_storage> blocks;
     std::multimap<crc32_t, mkcromfs_block> block_index;
@@ -1028,8 +1125,6 @@ private:
 
     void EnsureCompressed(fblock_index_type::iterator i)
     {
-        return;
-        
         cromfs_fblocknum_t fblocknum = i->second;
         mkcromfs_fblock& fblock = fblocks[fblocknum];
         if(fblock.is_uncompressed())
@@ -1061,14 +1156,12 @@ private:
 
     const cromfs_block_storage AppendToFBlock
         (fblock_index_type::iterator index_iterator,
+         mkcromfs_fblock::AppendInfo& appended,
          const cromfs_fblocknum_t fblocknum,
          const std::vector<unsigned char>& data,
          bool prevent_overuse)
     {
         mkcromfs_fblock& fblock = fblocks[fblocknum];
-        
-        mkcromfs_fblock::AppendInfo appended;
-        fblock.LoadRawAndAppend(appended, data);
         
         const uint_fast32_t new_data_offset = appended.AppendBaseOffset;
         const uint_fast32_t new_raw_size = appended.AppendedSize;
@@ -1170,6 +1263,20 @@ private:
         }
         return result;
     }
+
+    const cromfs_block_storage AppendToFBlock
+        (fblock_index_type::iterator index_iterator,
+         const cromfs_fblocknum_t fblocknum,
+         const std::vector<unsigned char>& data,
+         bool prevent_overuse)
+    {
+        mkcromfs_fblock& fblock = fblocks[fblocknum];
+
+        mkcromfs_fblock::AppendInfo appended;
+        fblock.LoadAndAppend(appended, data);
+        
+        return AppendToFBlock(index_iterator, appended, fblocknum, data, prevent_overuse);
+    }
     
 private:
     cromfs(cromfs&);
@@ -1219,9 +1326,11 @@ int main(int argc, char** argv)
                             1, 0,'s'},
             {"autoindexratio",
                             1, 0,'a'},
+            {"bruteforcelimit",
+                            1, 0,'c'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:er:s:a:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -1259,7 +1368,7 @@ int main(int argc, char** argv)
                     "     but smaller values mean slower filesystem creation and bigger values\n"
                     "     mean more diskspace used by temporary files.\n"
                     " --minfreespace, -s <value>\n"
-                    "     Minimum free space in a fblock to consider it a candidate. Default: 31\n"
+                    "     Minimum free space in a fblock to consider it a candidate. Default: 16\n"
                     "     Bigger values speed up the compression, but will cause some space\n"
                     "     being wasted that could have been used.\n"
                     " --autoindexratio, -a <value>\n"
@@ -1272,6 +1381,11 @@ int main(int argc, char** argv)
                     "         (total_filesize * autoindexratio * N / bsize) bytes\n"
                     "     where N is around 16 on 32-bit systems, around 28 on 64-bit\n"
                     "     systems, plus memory allocation overhead.\n"
+                    " --bruteforcelimit, -c <value>\n"
+                    "     Set the maximum number of randomly selected fblocks to search\n"
+                    "     for overlapping content when deciding which fblock to append to.\n"
+                    "     The default value, 0, means to do straight-forward selection\n"
+                    "     based on the free space in the fblock.\n"
                     "\n");
                 return 0;
             }
@@ -1343,6 +1457,18 @@ int main(int argc, char** argv)
                     return -1;
                 }
                 MinimumFreeSpace = val;
+                break;
+            }
+            case 'c':
+            {
+                char* arg = optarg;
+                long val = strtol(arg, &arg, 10);
+                if(val < 0)
+                {
+                    fprintf(stderr, "mkcromfs: The minimum allowed bruteforcelimit is 0. You gave %ld%s.\n", val, arg);
+                    return -1;
+                }
+                MaxFblockCountForBruteForce = val;
                 break;
             }
         }

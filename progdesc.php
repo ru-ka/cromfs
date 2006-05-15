@@ -73,11 +73,11 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
  <li>mkcromfs is slow. You must be patient.</li>
  <li>The cromfs-driver has a large memory footprint. It is not
    suitable for very size-constrained systems.</li>
- <li>Ownerships are not saved.</li>
  <li>Maximum filename length: 4095 bytes</li>
- <li>Being an user-space filesystem it might not be suitable for
+ <li>Being an user-space filesystem, it might not be suitable for
    root filesystems of rescue, tiny-Linux and installation disks.
    (Facts needed.)</li>
+ <li>For devices, hardlink count of 1 is assumed.</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -98,7 +98,7 @@ a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Compression unit</th>
-   <td>adjustable (1 MB default)</td>
+   <td>adjustable (4 MB default)</td>
    <td>4 kB</td>
    <td>adjustable (64 kB max)</td>
   </tr>
@@ -112,13 +112,19 @@ a scientific study, but here goes:
   <th>Maximum file size</th>
    <td>16 EB (2^44 MB)</td>
    <td>16 MB (2^4 MB)</td>
-   <td>16 EB (2^44 MB)</td>
+   <td>16 EB (2^44 MB)<br /> (4 GB before v3.0)</td>
   </tr>
  <tr align=left>
   <th>Duplicate whole file detection</th>
    <td>Yes</td>
    <td>No (but hardlinks are detected)</td>
    <td>Yes</td>
+  </tr>
+ <tr align=left>
+  <th>Hardlinks detected and saved</th>
+   <td>Yes</td>
+   <td>Unknown</td>
+   <td>Yes, since v3.0</td>
   </tr>
  <tr align=left>
   <th>Near-identical file detection</th>
@@ -134,7 +140,7 @@ a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Ownerships</th>
-   <td>None (uses the mounter's uid and gid)</td>
+   <td>uid,gid (since version 1.1.2)</li>
    <td>uid,gid (but gid truncated to 8 bits)</td>
    <td>uid,gid</td>
  <tr align=left>
@@ -163,6 +169,12 @@ a scientific study, but here goes:
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
 </table>
+
+Note: cromfs now saves the uid and gid in the filesystem. However,
+when the uid is 0 (root), the cromfs-driver returns the uid of the
+user who mounted the filesystem, instead of root. Similarly for gid.
+This is both for backward compatibility and for security.<br />
+If you mount as root, this behavior has no effect.
 
 ", 'usage:1. Getting started' => "
 
@@ -217,6 +229,9 @@ To improve the compression, try these tips:
      means better compression.</li>
  <li>Sort your files. Files which have similar or partially
      identical content should be processed right after one other.</li>
+ <li>Adjust the --bruteforcelimit option (-c). Larger values will
+     improve compression, but will require mkcromfs to check more
+     fblocks for each block it encodes.</li>
 </ul>
 To improve the filesystem generation speed, try these tips:
 <ul>
@@ -226,6 +241,8 @@ To improve the filesystem generation speed, try these tips:
      files are written. Example: <code>TEMP=~/cromfs-temp ./mkcromfs ...</code></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
+ <li>Do not use the --bruteforcelimit option (-c). The default value 0
+     means that only one fblock will be assumed as a candidate.</li>
 </ul>
 To control the memory usage, use these tips:
 <ul>

@@ -56,10 +56,12 @@ STRUCT: BLOCK
 STRUCT: INODE
 	0000	u32	mode
 	0004	u32	mtime
-	0008	u32	links (hardlink count)
-	000C	u32	rdev, if a device
+	0008	u32	rdev, if a device, hardlink count otherwise
+	000C	u16	uid
+	000E	u16	gid
 	0010	u64	size in bytes
 	0018	u32[]	(data locators;indexes to BLKTAB, 0=first BLOCK,1=second BLOCK,...)
+	(Note: Location of uid&gid and rdev have been changed in version 1.1.2)
 
 STRUCT: ENTRY
 	0000	u64	inode number

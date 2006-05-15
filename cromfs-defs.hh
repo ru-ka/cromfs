@@ -9,6 +9,10 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 */
 
+#ifndef __STDC_CONSTANT_MACROS
+#define __STDC_CONSTANT_MACROS
+#endif
+
 #include <stdint.h>
 
 #include <vector>
@@ -17,7 +21,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 
 
-#define CROMFS_SIGNATURE   0x313053464d4f5243ULL
+#define CROMFS_SIGNATURE   UINT64_C(0x313053464d4f5243)
 
 typedef uint_least64_t cromfs_inodenum_t;
 typedef uint_least32_t cromfs_blocknum_t;
@@ -29,6 +33,8 @@ struct cromfs_inode_internal
     uint_fast32_t time;
     uint_fast32_t links;
     uint_fast32_t rdev;
+    uint_fast16_t uid;
+    uint_fast16_t gid;
     uint_fast64_t bytesize;
     std::vector<cromfs_blocknum_t> blocklist;
 };
@@ -61,30 +67,42 @@ typedef std::vector<unsigned char> cromfs_cached_fblock;
 typedef std::map<std::string, cromfs_inodenum_t> cromfs_dirinfo;
 
 
-#define L (uint_fast64_t)
-static inline uint_fast64_t R64(const void* p)
+static inline uint_fast16_t R16(const void* p)
 {
     const unsigned char* data = (const unsigned char*)p;
-    return (L data[0] << 0)  | (L data[1] << 8) | (L data[2] << 16) | (L data[3] << 24)
-         | (L data[4] << 32) | (L data[5] <<40) | (L data[6] << 48) | (L data[7] << 56);
+    return (data[0] << 0)  | (data[1] << UINT16_C(8));
 }
 static inline uint_fast32_t R32(const void* p)
 {
     const unsigned char* data = (const unsigned char*)p;
-    return (L data[0] << 0)  | (L data[1] << 8) | (L data[2] << 16) | (L data[3] << 24);
+    return R16(data) | (R16(data+2) << UINT32_C(16));
 }
-static void W32(void* p, uint_fast32_t value)
+
+#define L (uint_fast64_t)
+
+static inline uint_fast64_t R64(const void* p)
+{
+    const unsigned char* data = (const unsigned char*)p;
+    return (L R32(data)) | ((L R32(data+4)) << UINT64_C(32));
+}
+
+#undef L
+
+static void W16(void* p, uint_fast16_t value)
 {
     unsigned char* data = (unsigned char*)p;
     data[0] = (value>>0) & 0xFF;
     data[1] = (value>>8) & 0xFF;
-    data[2] = (value>>16) & 0xFF;
-    data[3] = (value>>24) & 0xFF;
+}
+static void W32(void* p, uint_fast32_t value)
+{
+    unsigned char* data = (unsigned char*)p;
+    W16(data+0, value);
+    W16(data+2, value >> UINT32_C(16));
 }
 static void W64(void* p, uint_fast64_t value)
 {
     unsigned char* data = (unsigned char*)p;
     W32(data+0, (value));
-    W32(data+4, (value >> 32ULL));
+    W32(data+4, (value >> UINT64_C(32)));
 }
-#undef L
