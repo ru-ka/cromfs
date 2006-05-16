@@ -38,6 +38,8 @@ private:
     cromfs_inode_internal read_uncompressed_inode(uint_fast64_t offset);
     
     cromfs_cached_fblock& read_fblock(cromfs_fblocknum_t ind);
+    
+    uint_fast64_t CalcSizeInBlocks(uint_fast64_t filesize) const;
 
 private:
     int fd; // file handle
@@ -49,7 +51,7 @@ private:
     
     std::vector<cromfs_fblock_internal> fblktab;
     std::vector<cromfs_block_storage> blktab;
-
+    
 private:
     cromfs(cromfs&);
     void operator=(const cromfs&);

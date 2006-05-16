@@ -23,21 +23,25 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.2.2.
+  This is the documentation of cromfs-1.1.2.3.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br></td>
-<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
+<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
 
 Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
 for permanently archiving gigabytes of big files that have lots of redundancy.
  <p/>
 In terms of compression it is much similar to
-<a href="http://www.7-zip.com/">7-zip</a> files, except that practical
-realtime access (albeit much slower than on most other filesystems) can be
-provided for the whole archive contents; the user does not need to launch
-a program to decompress a single file, nor does he need to wait while the
-system decompresses 500 files from a 1000-file archive to get him the 1 file
-he wanted to open.
+<a href="http://www.7-zip.com/">7-zip</a> files, except that fast random
+access is provided  for the whole archive contents; the user does not need
+to launch a program to decompress a single file, nor does he need to wait
+while the system decompresses 500 files from a 1000-file archive to get
+him the 1 file he wanted to open.
+ <p/>
+Note: The primary design goal of cromfs is compression power.
+It is much slower than its peers, and uses more RAM.
+If all you care about is "powerful compression" and "normal
+(random) read-only file access", then you will be happy with cromfs.
  <p/>
 The creation of cromfs was inspired
 from <a href="http://squashfs.sourceforge.net/">Squashfs</a>
@@ -90,7 +94,7 @@ See <a href="http://bisqwit.iki.fi/src/cromfs-format.txt"
    root filesystems of rescue, tiny-Linux and installation disks.
    (Facts needed.)</li>
  <li>For device inodes, hardlink count of 1 is assumed.
-   (This has no effect to compression effeciency.)</li>
+   (This has no effect to compression efficiency.)</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -189,6 +193,76 @@ user who mounted the filesystem, instead of root. Similarly for gid.
 This is both for backward compatibility and for security.<br />
 If you mount as root, this behavior has no effect.
 
+</div><H3 id="compression" class="level3"><a name="compression"></a>5.1. Compression tests</H3><div class="level3" id="divcompression">
+
+Note: I use the -e and -r options in all of these mkcromfs tests
+to avoid unnecessary decompression+recompression steps, in order
+to speed up the filesystem generation. This has no effect in
+compression ratio.
+
+<style type="text/css"><!--
+.comcom b  { color:#007 }
+.comcom tt { display:block; width:100%; color:#050; background:#EEE }
+--></style>
+<table border="1" style="font-size:12px" class="comcom">
+ <tr>
+  <th>Item</th>
+  <th align="left">10783 NES ROMs (2523 MB)</th>
+  <th align="left">Mozilla source code from CVS (279 MB)</th>
+  <th align="left">Damn small Linux liveCD (113 MB)<br />
+   (size taken from "du -c" output in the uncompressed filesystem)</th>
+ </tr>
+ <tr align="right"3 valign="top">
+  <th>cromfs</th>
+  <td><tt>mkcromfs -s16384 -a16 -f16777216</tt>
+   <br />With 2k blocks (-b2048), <b>202,811,971</b> bytes</td>
+  <td><tt>mkcromfs -b65536 -f2097152</tt>
+   <br /><b>29,525,376</b> bytes</td>
+  <td><tt>mkcromfs -f1048576</tt>
+   <br />With 64k blocks (-b65536), <b>39,778,030</b> bytes
+   <br />With 16k blocks (-b16384), <b>39,718,882</b> bytes
+   <br />With 1k blocks (-b1024), <b>40,141,729</b> bytes
+   </td>
+ </tr>
+ <tr align="right" valign="top">
+  <th>cramfs</th>
+  <td><tt>mkcramfs -b65536</tt>
+   <br />dies prematurely, "filesystem too big"</td>
+  <td><tt>mkcramfs</tt>
+   <br />with 2M blocks (-b2097152), <b>58,720,256</b> bytes
+   <br />with 64k blocks (-b65536), <b>57,344,000</b> bytes
+   <br />with 4k blocks (-b4096), <b>68,435,968</b> bytes
+   </td>
+  <td><tt>mkcramfs -b65536</tt>
+   <br /><b>51,445,760</b> bytes
+   </td>
+ </tr>
+ <tr align="right" valign="top">
+  <th>squashfs</th>
+  <td><tt>mksquashfs -b65536</tt>
+   <br />(using an optimized sort file) <b>1,185,546,240</b> bytes</td>
+  <td><tt>mksquashfs -b65536</tt>
+   <br /><b>43,335,680</b> bytes</td>
+  <td><tt>mksquashfs -b65536</tt>
+   <br /><b>50,028,544</b> bytes
+    </td>
+ </tr>
+ <tr align="right" valign="top">
+  <th>cloop</th>
+  <td>untested</td>
+  <td><tt>create_compressed_fs image.iso</tt>
+   <br />(using an iso9660 image created with mkisofs -RJ)
+   <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>41,201,014</b> bytes
+    <br />(1 MB is maximum block size in cloop)
+   </td>
+  <td><tt>create_compressed_fs image.iso</tt>
+   <br />(using an iso9660 image)
+   <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>48,328,580</b> bytes
+   <br />using zlib, 64k blocks (-B65536 -L9): <b>50,641,093</b> bytes
+   </td>
+ </tr>
+</table>
+
 </div><H2 id="usage" class="level2"><a name="usage"></a>6. Getting started</H2><div class="level2" id="divusage">
 
 <ol>
@@ -244,9 +318,11 @@ To improve the compression, try these tips:
      means better compression.</li>
  <li>Sort your files. Files which have similar or partially
      identical content should be processed right after one other.</li>
- <li>Adjust the --bruteforcelimit option (-c). Larger values will
-     improve compression, but will require mkcromfs to check more
-     fblocks for each block it encodes.
+ <li>Adjust the --bruteforcelimit option (-c). Larger values will require
+     mkcromfs to check more fblocks for each block it encodes (making the
+     encoding much slower), in the hope it improves compression.
+     The fewer your fblocks are in number (larger in size),
+     the better the chances it does good.
     <br />
      Note: If you use --bruteforcelimit, you should also adjust
      your --minfreespace setting as instructed in <tt>mkcromfs --help</tt>.
@@ -302,8 +378,8 @@ and is distributed under the terms of the
 The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
-by e-mail at:<span id=eml19><b id=eml5 class=nonmail>bep.r@@</b><span id=eml6 class=ismail>Joel</span><span id=eml7 class=nonmail><b>m5e</b></span><span id=eml8 class=ismail> Yli</span><b id=eml9 class=nonmail>1Ye0</b><span id=eml10 class=ismail>luom</span><span id=eml11 class=nonmail><b>@1se@exk4@</b></span><span id=eml12 class=ismail>a &lt;bi</span><b id=eml13 class=nonmail>dr@02</b><span id=eml14 class=ismail>sqwi</span><span id=eml15 class=nonmail><b>foeW21</b></span><span id=eml16 class=ismail>t@ik</span><b id=eml17 class=nonmail>ea</b><span id=eml18 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=5;i<19;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml34><b id=eml20 class=nonmail>5</b><span id=eml21 class=ismail>Joel</span><span id=eml22 class=nonmail><b>eFfcSdw</b></span><span id=eml23 class=ismail> Yli</span><b id=eml24 class=nonmail>xisabwr</b><span id=eml25 class=ismail>luom</span><span id=eml26 class=nonmail><b>ee</b></span><span id=eml27 class=ismail>a &lt;bi</span><b id=eml28 class=nonmail>@@B@1j</b><span id=eml29 class=ismail>sqwi</span><span id=eml30 class=nonmail><b>lt</b></span><span id=eml31 class=ismail>t@ik</span><b id=eml32 class=nonmail>g@.iju1t</b><span id=eml33 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=20;i<34;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
 
 </div><H2 id="requ" class="level2"><a name="requ"></a>9. Requirements</H2><div class="level2" id="divrequ">
@@ -322,9 +398,9 @@ s='';for(i=5;i<19;){document.getElementById('eml'+i++).innerHTML='';s+=document.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Mon, 15 May 2006 13:43:00 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Tue, 16 May 2006 23:58:08 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Mon, 15 May 2006 16:26:28 +0300</small>
+  at Wed, 17 May 2006 00:25:30 +0300</small>
  </p>
 </body>
 </html>

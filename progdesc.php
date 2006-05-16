@@ -20,12 +20,16 @@ Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
 for permanently archiving gigabytes of big files that have lots of redundancy.
  <p/>
 In terms of compression it is much similar to
-<a href=\"http://www.7-zip.com/\">7-zip</a> files, except that practical
-realtime access (albeit much slower than on most other filesystems) can be
-provided for the whole archive contents; the user does not need to launch
-a program to decompress a single file, nor does he need to wait while the
-system decompresses 500 files from a 1000-file archive to get him the 1 file
-he wanted to open.
+<a href=\"http://www.7-zip.com/\">7-zip</a> files, except that fast random
+access is provided  for the whole archive contents; the user does not need
+to launch a program to decompress a single file, nor does he need to wait
+while the system decompresses 500 files from a 1000-file archive to get
+him the 1 file he wanted to open.
+ <p/>
+Note: The primary design goal of cromfs is compression power.
+It is much slower than its peers, and uses more RAM.
+If all you care about is \"powerful compression\" and \"normal
+(random) read-only file access\", then you will be happy with cromfs.
  <p/>
 The creation of cromfs was inspired
 from <a href=\"http://squashfs.sourceforge.net/\">Squashfs</a>
@@ -78,7 +82,7 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
    root filesystems of rescue, tiny-Linux and installation disks.
    (Facts needed.)</li>
  <li>For device inodes, hardlink count of 1 is assumed.
-   (This has no effect to compression effeciency.)</li>
+   (This has no effect to compression efficiency.)</li>
 </ul>
 
 Development status: Pre-beta. The Cromfs project has been created
@@ -177,6 +181,76 @@ user who mounted the filesystem, instead of root. Similarly for gid.
 This is both for backward compatibility and for security.<br />
 If you mount as root, this behavior has no effect.
 
+", 'compression:1.1. Compression tests' =>"
+
+Note: I use the -e and -r options in all of these mkcromfs tests
+to avoid unnecessary decompression+recompression steps, in order
+to speed up the filesystem generation. This has no effect in
+compression ratio.
+
+<style type=\"text/css\"><!--
+.comcom b  { color:#007 }
+.comcom tt { display:block; width:100%; color:#050; background:#EEE }
+--></style>
+<table border=\"1\" style=\"font-size:12px\" class=\"comcom\">
+ <tr>
+  <th>Item</th>
+  <th align=\"left\">10783 NES ROMs (2523 MB)</th>
+  <th align=\"left\">Mozilla source code from CVS (279 MB)</th>
+  <th align=\"left\">Damn small Linux liveCD (113 MB)<br />
+   (size taken from \"du -c\" output in the uncompressed filesystem)</th>
+ </tr>
+ <tr align=\"right\"3 valign=\"top\">
+  <th>cromfs</th>
+  <td><tt>mkcromfs -s16384 -a16 -f16777216</tt>
+   <br />With 2k blocks (-b2048), <b>202,811,971</b> bytes</td>
+  <td><tt>mkcromfs -b65536 -f2097152</tt>
+   <br /><b>29,525,376</b> bytes</td>
+  <td><tt>mkcromfs -f1048576</tt>
+   <br />With 64k blocks (-b65536), <b>39,778,030</b> bytes
+   <br />With 16k blocks (-b16384), <b>39,718,882</b> bytes
+   <br />With 1k blocks (-b1024), <b>40,141,729</b> bytes
+   </td>
+ </tr>
+ <tr align=\"right\" valign=\"top\">
+  <th>cramfs</th>
+  <td><tt>mkcramfs -b65536</tt>
+   <br />dies prematurely, \"filesystem too big\"</td>
+  <td><tt>mkcramfs</tt>
+   <br />with 2M blocks (-b2097152), <b>58,720,256</b> bytes
+   <br />with 64k blocks (-b65536), <b>57,344,000</b> bytes
+   <br />with 4k blocks (-b4096), <b>68,435,968</b> bytes
+   </td>
+  <td><tt>mkcramfs -b65536</tt>
+   <br /><b>51,445,760</b> bytes
+   </td>
+ </tr>
+ <tr align=\"right\" valign=\"top\">
+  <th>squashfs</th>
+  <td><tt>mksquashfs -b65536</tt>
+   <br />(using an optimized sort file) <b>1,185,546,240</b> bytes</td>
+  <td><tt>mksquashfs -b65536</tt>
+   <br /><b>43,335,680</b> bytes</td>
+  <td><tt>mksquashfs -b65536</tt>
+   <br /><b>50,028,544</b> bytes
+    </td>
+ </tr>
+ <tr align=\"right\" valign=\"top\">
+  <th>cloop</th>
+  <td>untested</td>
+  <td><tt>create_compressed_fs image.iso</tt>
+   <br />(using an iso9660 image created with mkisofs -RJ)
+   <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>41,201,014</b> bytes
+    <br />(1 MB is maximum block size in cloop)
+   </td>
+  <td><tt>create_compressed_fs image.iso</tt>
+   <br />(using an iso9660 image)
+   <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>48,328,580</b> bytes
+   <br />using zlib, 64k blocks (-B65536 -L9): <b>50,641,093</b> bytes
+   </td>
+ </tr>
+</table>
+
 ", 'usage:1. Getting started' => "
 
 <ol>
@@ -232,9 +306,11 @@ To improve the compression, try these tips:
      means better compression.</li>
  <li>Sort your files. Files which have similar or partially
      identical content should be processed right after one other.</li>
- <li>Adjust the --bruteforcelimit option (-c). Larger values will
-     improve compression, but will require mkcromfs to check more
-     fblocks for each block it encodes.
+ <li>Adjust the --bruteforcelimit option (-c). Larger values will require
+     mkcromfs to check more fblocks for each block it encodes (making the
+     encoding much slower), in the hope it improves compression.
+     The fewer your fblocks are in number (larger in size),
+     the better the chances it does good.
     <br />
      Note: If you use --bruteforcelimit, you should also adjust
      your --minfreespace setting as instructed in <tt>mkcromfs --help</tt>.

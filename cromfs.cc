@@ -122,6 +122,11 @@ static const std::vector<unsigned char> LZMADeCompress
     return result;
 }
 
+uint_fast64_t cromfs::CalcSizeInBlocks(uint_fast64_t filesize) const
+{
+    return (filesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
+}
+
 void cromfs::reread_superblock()
 {
     char Buf[64];
@@ -174,7 +179,7 @@ void cromfs::reread_superblock()
     {
         cromfs_inode_internal result = read_inode_and_blocks(a);
         fprintf(stderr, "INODE %u: %s\n", (unsigned)a, DumpInode(result).c_str());
-        uint_fast64_t nblocks = (result.bytesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
+        uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize);
         a+=(0x18 + 4*nblocks) / 4;
     }
     #endif
@@ -310,7 +315,7 @@ cromfs_inode_internal cromfs::read_uncompressed_inode(uint_fast64_t offset)
     printf("read_uncompressed_inode(%lld): %s\n",
         offset, DumpInode(inode).c_str());
     
-    uint_fast64_t nblocks = (inode.bytesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
+    uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
     
     inode.blocklist.resize(nblocks);
     
@@ -351,7 +356,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
 
     cromfs_inode_internal result = read_inode(inodenum);
     
-    uint_fast64_t nblocks = (result.bytesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
+    uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize);
     
     result.blocklist.resize(nblocks);
     

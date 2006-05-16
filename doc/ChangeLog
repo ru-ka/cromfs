@@ -4,6 +4,20 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.2.3 2006-05-16 Joel Yliluoma <bisqwit@iki.fi>
+- Upgraded LZMA SDK to version 4.42.
+  (Ps: Someone _really_ should rewrite the LZMA compressor
+  using _SANE_ C++. The official version is just horrible.
+  It goes to very extremes to hack&introduce concepts which are foreign
+  to C++, such as GUID, variants and C# style interfaces, and it reinvents
+  many standard concepts such as integer types, smart pointers and streams,
+  and as such, the code is very unmaintainable and likely suboptimal too.
+  On the other hand, the C# version seems quite tidy...
+  I wonder if it's the authoritative implementation? (hint: port it)
+  I can only have nightmares trying to get into the mindscape
+  of the programmer who wrote that horrible C++ code version.)
+- Documentation updates
+
 1.1.2.2	2006-05-15 Joel Yliluoma <bisqwit@iki.fi>
 - Tuned the --bruteforcelimit function
 - Documentation updates

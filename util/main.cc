@@ -586,6 +586,7 @@ public:
           inotab_inode.links = 1;
           inotab_inode.bytesize = inotab.size();
           inotab_inode.blocklist = Blockify(inotab_source); }
+        std::printf("Inode table is %lu bytes\n", inotab_inode.bytesize);
 
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
@@ -815,7 +816,7 @@ private:
         closedir(dir);
         
         std::fflush(stdout);
-        EnsureAllAreCompressed();
+        //EnsureAllAreCompressed();
         
         std::fflush(stdout);
         return dirinfo;
@@ -991,14 +992,20 @@ private:
                 
                 if(blocknum != NO_BLOCK)
                 {
-                    std::printf(" reused block %u\n", (unsigned)blocknum);
+                    std::printf(" reused block %u [%u @ %u]\n",
+                        (unsigned)blocknum,
+                        (unsigned)block.fblocknum,
+                        (unsigned)block.startoffs);
                     return blocknum;
                 }
                 
                 blocknum = blocks.size();
                 blocks.push_back(block);
 
-                std::printf(" reused material, became block %u\n", (unsigned)blocknum);
+                std::printf(" reused indexed material [%u @ %u], became block %u\n",
+                    (unsigned)block.fblocknum,
+                    (unsigned)block.startoffs,
+                    (unsigned)blocknum);
                 return blocknum;
             }
         }
