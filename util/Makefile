@@ -1,4 +1,4 @@
-VERSION=1.1.2.3
+VERSION=1.1.3
 
 include Makefile.sets
 
@@ -13,13 +13,15 @@ OBJS += lzma/C/7zip/Common/OutBuffer.o
 OBJS += lzma/C/Common/Alloc.o
 OBJS += lzma/C/Common/CRC.o
 
-OBJS += lzma.o main.o crc32.o
+OBJS += lzma.o main.o crc32.o fblock.o
 
 all: mkcromfs
 
 mkcromfs: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
+main.o: fblock.hh
+fblock.o: fblock.hh
 
 include depfun.mak
 

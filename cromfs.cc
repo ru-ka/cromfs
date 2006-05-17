@@ -53,12 +53,19 @@ static void EraseRandomlyOne(T& container)
 {
     if(container.empty()) return;
     
+#ifdef USE_HASHMAP
+    unsigned pos = std::rand() % container.size();
+    typename T::iterator i = container.begin();
+    std::advance(i, pos);
+    container.erase(i);
+#else
     typename T::key_type
         smallest = container.begin()->first,
         biggest  = container.rbegin()->first,
         random   = smallest + std::rand() % (biggest-smallest);
 
     container.erase(container.lower_bound(random));
+#endif
 }
 
 const std::string DumpInode(const cromfs_inode_internal& inode)
@@ -411,8 +418,7 @@ void cromfs::read_block(cromfs_blocknum_t ind, unsigned offset,
 
 cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
 {
-    std::map<cromfs_fblocknum_t, cromfs_cached_fblock>::iterator
-    i = cache_fblocks.find(ind);
+    fblock_cache_type::iterator i = cache_fblocks.find(ind);
 
     if(i != cache_fblocks.end())
     {

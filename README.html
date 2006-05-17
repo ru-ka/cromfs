@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.2.3.
+  This is the documentation of cromfs-1.1.3.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -40,8 +40,8 @@ him the 1 file he wanted to open.
  <p/>
 Note: The primary design goal of cromfs is compression power.
 It is much slower than its peers, and uses more RAM.
-If all you care about is "powerful compression" and "normal
-(random) read-only file access", then you will be happy with cromfs.
+If all you care about is "powerful compression"
+and "random file access", then you will be happy with cromfs.
  <p/>
 The creation of cromfs was inspired
 from <a href="http://squashfs.sourceforge.net/">Squashfs</a>
@@ -185,6 +185,11 @@ a scientific study, but here goes:
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
+ <tr align=left>
+  <th>Fragmentation</th>
+   <td>commonplace</th>
+   <td>none</td>
+   <td>file tails only</td>
 </table>
 
 Note: cromfs now saves the uid and gid in the filesystem. However,
@@ -214,8 +219,11 @@ compression ratio.
  </tr>
  <tr align="right"3 valign="top">
   <th>cromfs</th>
-  <td><tt>mkcromfs -s16384 -a16 -f16777216</tt>
-   <br />With 2k blocks (-b2048), <b>202,811,971</b> bytes</td>
+  <td><tt>mkcromfs -s16384 -f16777216</tt>
+   <br />With 2k blocks (-b2048 -a16), <b>202,811,971</b> bytes
+   <br />With 1k blocks (-b1024 -a32), <b>198,410,407</b> bytes
+   <br />With 512B blocks (-b512 -a2), <b>194,795,834</b> bytes
+   </td>
   <td><tt>mkcromfs -b65536 -f2097152</tt>
    <br /><b>29,525,376</b> bytes</td>
   <td><tt>mkcromfs -f1048576</tt>
@@ -275,6 +283,9 @@ compression ratio.
   </ul></li>
  <li>Build "cromfs-driver" and "util/mkcromfs", i.e. command "make":
   <pre>$ make</pre>
+  
+  If you get compilation problems related to <tt>hash_map</tt> or <tt>hash</tt>, 
+  edit cromfs-defs.hh and remove the line that says <tt>#define USE_HASHMAP</tt>.
    </li>
  <li>Create a sample filesystem:
   <pre>$ util/mkcromfs . sample.cromfs</pre>
@@ -378,8 +389,8 @@ and is distributed under the terms of the
 The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted
-by e-mail at:<span id=eml34><b id=eml20 class=nonmail>5</b><span id=eml21 class=ismail>Joel</span><span id=eml22 class=nonmail><b>eFfcSdw</b></span><span id=eml23 class=ismail> Yli</span><b id=eml24 class=nonmail>xisabwr</b><span id=eml25 class=ismail>luom</span><span id=eml26 class=nonmail><b>ee</b></span><span id=eml27 class=ismail>a &lt;bi</span><b id=eml28 class=nonmail>@@B@1j</b><span id=eml29 class=ismail>sqwi</span><span id=eml30 class=nonmail><b>lt</b></span><span id=eml31 class=ismail>t@ik</span><b id=eml32 class=nonmail>g@.iju1t</b><span id=eml33 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=20;i<34;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml15><b id=eml1 class=nonmail>e@xefhmi</b><span id=eml2 class=ismail>Joel</span><span id=eml3 class=nonmail><b>0cl</b></span><span id=eml4 class=ismail> Yli</span><b id=eml5 class=nonmail>@ie</b><span id=eml6 class=ismail>luom</span><span id=eml7 class=nonmail><b>48Nift</b></span><span id=eml8 class=ismail>a &lt;bi</span><b id=eml9 class=nonmail>z@</b><span id=eml10 class=ismail>sqwi</span><span id=eml11 class=nonmail><b>xc3fi</b></span><span id=eml12 class=ismail>t@ik</span><b id=eml13 class=nonmail>@fh</b><span id=eml14 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=1;i<15;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
 
 </div><H2 id="requ" class="level2"><a name="requ"></a>9. Requirements</H2><div class="level2" id="divrequ">
@@ -398,9 +409,9 @@ s='';for(i=20;i<34;){document.getElementById('eml'+i++).innerHTML='';s+=document
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Tue, 16 May 2006 23:58:08 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Wed, 17 May 2006 17:24:19 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Wed, 17 May 2006 00:25:30 +0300</small>
+  at Wed, 17 May 2006 17:24:23 +0300</small>
  </p>
 </body>
 </html>

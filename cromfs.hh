@@ -47,7 +47,14 @@ private:
     cromfs_inode_internal rootdir, inotab;
     cromfs_superblock_internal sblock;
     
-    std::map<cromfs_fblocknum_t, cromfs_cached_fblock> cache_fblocks;
+#if defined(USE_HASHMAP) && 0
+    /* Probably not good to use with small map sizes */
+    typedef __gnu_cxx::hash_map<cromfs_fblocknum_t, cromfs_cached_fblock> fblock_cache_type;
+#else
+    typedef std::map<cromfs_fblocknum_t, cromfs_cached_fblock> fblock_cache_type;
+#endif
+
+    fblock_cache_type cache_fblocks;
     
     std::vector<cromfs_fblock_internal> fblktab;
     std::vector<cromfs_block_storage> blktab;

@@ -1,4 +1,4 @@
-VERSION=1.1.2.3
+VERSION=1.1.3
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -19,6 +19,7 @@ ARCHFILES=\
 	\
 	util/datasource.hh \
 	util/lzma.cc util/lzma.hh \
+	util/fblock.cc util/fblock.hh \
 	util/crc32.h util/crc32.cc \
 	util/main.cc \
 	\

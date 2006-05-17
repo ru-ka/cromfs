@@ -9,6 +9,11 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 */
 
+/* Disable this if you have hash-related compilation problems. */
+#define USE_HASHMAP
+
+
+
 #ifndef __STDC_CONSTANT_MACROS
 #define __STDC_CONSTANT_MACROS
 #endif
@@ -18,6 +23,10 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include <vector>
 #include <string>
 #include <map>
+
+#ifdef USE_HASHMAP
+# include <ext/hash_map>
+#endif
 
 
 

@@ -28,8 +28,8 @@ him the 1 file he wanted to open.
  <p/>
 Note: The primary design goal of cromfs is compression power.
 It is much slower than its peers, and uses more RAM.
-If all you care about is \"powerful compression\" and \"normal
-(random) read-only file access\", then you will be happy with cromfs.
+If all you care about is \"powerful compression\"
+and \"random file access\", then you will be happy with cromfs.
  <p/>
 The creation of cromfs was inspired
 from <a href=\"http://squashfs.sourceforge.net/\">Squashfs</a>
@@ -173,6 +173,11 @@ a scientific study, but here goes:
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
    <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
+ <tr align=left>
+  <th>Fragmentation</th>
+   <td>commonplace</th>
+   <td>none</td>
+   <td>file tails only</td>
 </table>
 
 Note: cromfs now saves the uid and gid in the filesystem. However,
@@ -202,8 +207,11 @@ compression ratio.
  </tr>
  <tr align=\"right\"3 valign=\"top\">
   <th>cromfs</th>
-  <td><tt>mkcromfs -s16384 -a16 -f16777216</tt>
-   <br />With 2k blocks (-b2048), <b>202,811,971</b> bytes</td>
+  <td><tt>mkcromfs -s16384 -f16777216</tt>
+   <br />With 2k blocks (-b2048 -a16), <b>202,811,971</b> bytes
+   <br />With 1k blocks (-b1024 -a32), <b>198,410,407</b> bytes
+   <br />With 512B blocks (-b512 -a2), <b>194,795,834</b> bytes
+   </td>
   <td><tt>mkcromfs -b65536 -f2097152</tt>
    <br /><b>29,525,376</b> bytes</td>
   <td><tt>mkcromfs -f1048576</tt>
@@ -263,6 +271,9 @@ compression ratio.
   </ul></li>
  <li>Build \"cromfs-driver\" and \"util/mkcromfs\", i.e. command \"make\":
   <pre>\$ make</pre>
+  
+  If you get compilation problems related to <tt>hash_map</tt> or <tt>hash</tt>, 
+  edit cromfs-defs.hh and remove the line that says <tt>#define USE_HASHMAP</tt>.
    </li>
  <li>Create a sample filesystem:
   <pre>\$ util/mkcromfs . sample.cromfs</pre>

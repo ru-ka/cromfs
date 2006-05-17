@@ -16,13 +16,6 @@
 #include <getopt.h>
 #include <errno.h>
 #include <sys/time.h>
-#include <sys/mman.h>
-
-#include "lzma.hh"
-
-#include "datasource.hh"
-
-#include "crc32.h"
 
 static bool DecompressWhenLookup = false;
 static unsigned RandomCompressPeriod = 20;
@@ -33,503 +26,10 @@ static uint_fast32_t MaxFblockCountForBruteForce = 0;
 static long FSIZE = 2097152;
 static long BSIZE = 65536;
 
-static const char* GetTempDir()
-{
-    const char* t;
-    t = std::getenv("TEMP"); if(t) return t;
-    t = std::getenv("TMP"); if(t) return t;
-    return "/tmp";
-}
-static const std::string tmpdir = GetTempDir();
-
-#define DEBUG_APPEND  0
-#define DEBUG_OVERLAP 0
-#define DEBUG_FBLOCKINDEX 0
-
-class mkcromfs_fblock
-{
-private:
-    int fblock_disk_id;
-    bool is_compressed;
-    uint_fast64_t filesize;
-public:
-    mkcromfs_fblock()
-    {
-        static int disk_id = 0;
-        fblock_disk_id = disk_id++;
-        filesize = 0;
-        is_compressed = false;
-    }
-    
-    bool is_uncompressed() const { return !is_compressed; }
-    
-    const std::string getfn() const
-    {
-        static const int pid = getpid();
-        char Buf[4096];
-        std::sprintf(Buf, "/fblock_%d-%d", pid, fblock_disk_id);
-        //fprintf(stderr, "Buf='%s' tmpdir='%s'\n", Buf, tmpdir.c_str());
-        return tmpdir + Buf;
-    }
-    
-    void Delete()
-    {
-        ::unlink(getfn().c_str());
-        filesize = 0;
-    }
-    
-    void get(std::vector<unsigned char>& raw,
-             std::vector<unsigned char>& compressed)
-    {
-        get(&raw, &compressed);
-    }
-
-    const std::vector<unsigned char> get_raw()
-    {
-        std::vector<unsigned char> raw;
-        get(&raw, NULL);
-        return raw;
-    }
-
-    const std::vector<unsigned char> get_compressed()
-    {
-        std::vector<unsigned char> compressed;
-        get(NULL, &compressed);
-        return compressed;
-    }
-    
-    int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs)
-    {
-        /* Notice: offs + data.size() may be larger than the fblock size.
-         * This can happen if there is a collision in the checksum index. A smaller
-         * block might have been indexed, and it matches to a larger request.
-         * We must check for that case, and reject if it is so.
-         */
-    
-        if(is_compressed)
-        {
-            /* If the file is compressed, we must decompress it
-             * to the RAM before it can be compared at all.
-             * We now decompress it in its whole entirety.
-             */
-            std::vector<unsigned char> raw;
-            get(&raw, NULL);
-            if(DecompressWhenLookup) put_raw(raw);
-
-            ssize_t size      = data.size();
-            ssize_t remaining = raw.size() - offs;
-            if(remaining < size) return -1;
-            return std::memcmp(&raw[offs], &data[0], size);
-        }
-        
-        if(offs + data.size() > filesize) return -1;
-        
-        /* mmap only works when the starting offset is aligned
-         * on a page boundary. Therefore, we force it to align.
-         */
-        uint_fast32_t prev_offs = offs & ~4095; /* 4095 is assumed to be page size-1 */
-        /* Because of aligning, calculate the amount of bytes
-         * that were mmapped but are not part of the comparison.
-         */
-        uint_fast32_t ignore = offs - prev_offs;
-        
-        int result = -1;
-        int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
-        if(fd >= 0)
-        {
-            /* Try to use mmap. This way, only the portion of file
-             * that actually needs to be compared, will be accessed.
-             * If we are comparing an 1M block and memcmp detects a
-             * difference within the first 3 bytes, only about 4 kB
-             * of the file will be read. This is really fast.
-             */
-            void* p = mmap(NULL, ignore+data.size(), PROT_READ, MAP_SHARED, fd, prev_offs);
-            if(p != (void*)-1)
-            {
-                close(fd);
-                const char* pp = (const char*)p;
-                result = std::memcmp(&data[0], pp + ignore, data.size());
-                munmap(p, ignore+data.size());
-            }
-            else
-            {
-                /* If mmap didn't like our idea, try to use pread
-                 * instead. pread is llseek+read combined. This should
-                 * work if anything is going to work at all.
-                 */
-                std::vector<unsigned char> tmpbuf(data.size());
-                ssize_t r = pread(fd, &tmpbuf[0], data.size(), offs);
-                close(fd);
-                if(r != (ssize_t)data.size())
-                    result = -1;
-                else
-                    result = std::memcmp(&data[0], &tmpbuf[0], data.size());
-            }
-        }
-        return result;
-    }
-    
-    void put_raw(const std::vector<unsigned char>& raw)
-    {
-        is_compressed = false;
-        FILE* fp = std::fopen(getfn().c_str(), "wb");
-        size_t res = std::fwrite(&raw[0], 1, filesize=raw.size(), fp);
-        std::fclose(fp);
-        if(res != raw.size())
-        {
-            std::fprintf(stderr, "fwrite: res=%d, should be %d\n", (int)res, (int)raw.size());
-            // Possibly, out of disk space? Try to save compressed instead.
-            put_compressed(LZMACompress(raw));
-        }
-    }
-    
-    void put_compressed(const std::vector<unsigned char>& compressed)
-    {
-        //fprintf(stderr, "[1;mstoring compressed[m\n");
-        is_compressed = true;
-        FILE* fp = std::fopen(getfn().c_str(), "wb");
-        std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
-        std::fclose(fp);
-    }
-
-    void put(const std::vector<unsigned char>& raw,
-             const std::vector<unsigned char>& compressed)
-    {
-        /* This method can choose freely whether to store
-         * in compressed or uncompressed format. We choose
-         * compressed, because recompression would take a
-         * lot of time, but decompression is fast.
-         */
-        
-        put_compressed(compressed);
-        /*
-        if(is_compressed)
-            put_compressed(compressed);
-        else
-            put_raw(raw);
-        */
-    }
-    
-    /* AppendInfo is a structure that holds both the input and output
-     * handled by LoadRawAndAppend(). It was created to avoid having
-     * to copy and resize std::vectors everywhere. It was supposed to
-     * use mmap() to minimize the file access.
-     */
-    struct AppendInfo
-    {
-        uint_fast32_t AppendBaseOffset;
-        uint_fast32_t AppendedSize;
-        uint_fast32_t OldSize;
-    private:
-        unsigned char* Buffer;
-        uint_fast32_t MapSize;
-    public:
-        AppendInfo() : Buffer(0), MapSize(0) { }
-        ~AppendInfo() { Dispose(); }
-        void MapFrom(int fd,uint_fast32_t size)
-        {
-            Dispose();
-            
-            /* This mmap seems to cause various system instability. */
-            /* The idea here is to provide a RAM copy of the file - larger
-             * than the actual file, with copy-on-write mapping so that
-             * the actual file is not affected. But it seems like it doesn't
-             * always work nicely. It once crashed my server, and in another
-             * session, it caused a segmentation fault that could not be traced
-             * by gdb or valgrind. --Bisqwit
-             * Ps: In both cases, the underlying filesystem was Reiser4.
-             * The crashing problem did not seem to occur with Ext2fs.
-             *
-             * However, because LoadRawAndAppend() will use find() to search
-             * the entire block (and it will most often actually have to do
-             * indeed search the entire block), it's not a significant
-             * performance loss even if we can't use mmap here.
-             */
-            void*p = (void*)-1;//mmap(NULL, MapSize=size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-            if(p == (void*)-1)
-            {
-                /* Revert to new+pread when mmap fails */
-                MapSize=0;
-                Buffer = new unsigned char[size];
-                int res = pread(fd, Buffer, size, 0);
-                if(res != (int)size)
-                {
-                    std::fprintf(stderr, "pread error: expected %d, got %d\n", (int)size, res);
-                }
-            }
-            else Buffer = (unsigned char*)p;
-        }
-        void AssignFrom(const std::vector<unsigned char>& vec, uint_fast32_t size)
-        {
-            Dispose();
-            Buffer = new unsigned char[size];
-            std::memcpy(Buffer, &vec[0], vec.size());
-        }
-        void Dispose()
-        {
-            if(Buffer)
-            {
-#if DEBUG_APPEND
-                std::fprintf(stderr, "Disposing of %p\n", Buffer);
-#endif
-                if(MapSize) { munmap(Buffer, MapSize); MapSize=0; }
-                else delete[] Buffer;
-                Buffer=0;
-            }
-        }
-        void SetAppendPos(uint_fast32_t offs, uint_fast32_t datasize)
-        {
-            AppendBaseOffset = offs;
-            AppendedSize     = std::max(OldSize, offs + datasize);
-        }
-        
-        unsigned char* GetBufferPointer() const { return Buffer; }
-        const std::vector<unsigned char> GetAsVector() const
-        {
-            return std::vector<unsigned char> (Buffer, Buffer+AppendedSize);
-        }
-#if DEBUG_APPEND
-        bool IsMapped() const { return MapSize != 0; }
-        unsigned GetMapSize() const { return MapSize; }
-#endif
-    private:
-        void operator=(const AppendInfo&);
-        AppendInfo(const AppendInfo&);
-    };
-    
-
-    void LoadAndAppend(AppendInfo& append, const std::vector<unsigned char>& data)
-    {
-        AppendControl(append, data, true,true,true);
-    }
-
-    void LoadAndAppendAt(AppendInfo& append, const std::vector<unsigned char>& data,
-                         uint_fast32_t offset)
-    {
-        AppendControl(append, data, true,false,false);
-        
-        append.SetAppendPos(offset, data.size());
-        
-        AppendControl(append, data, false,false,true);
-    }
-
-    void LoadAndAnalyzeAppend(AppendInfo& append, const std::vector<unsigned char>& data)
-    {
-        AppendControl(append, data, true,true,false);
-    }
-
-    void put_appended_raw(const AppendInfo& append)
-    {
-      #if 0
-        put_raw(append.GetAsVector());
-      #else
-        const bool was_compressed = is_compressed;
-        is_compressed = false;
-        
-        /* not truncating */
-        int fd = open(getfn().c_str(), O_WRONLY | O_CREAT | O_LARGEFILE, 0644);
-        if(fd < 0) { std::perror(getfn().c_str()); return; }
-        
-#if DEBUG_APPEND
-        std::fprintf(stderr, "Writing %u from %p\n",
-            (unsigned)append.AppendedSize, append.GetBufferPointer());
-        if(append.GetBufferPointer() == NULL) throw "qegqpk";
-#endif
-        const uint_fast32_t low_pos =
-            was_compressed ? 0 : std::min(append.OldSize, append.AppendBaseOffset);
-        
-        int res = pwrite(fd, append.GetBufferPointer() + low_pos,
-                             append.AppendedSize - low_pos,
-                             low_pos);
-        
-        bool write_ok = res == (int)(append.AppendedSize - low_pos);
-        
-        if(!write_ok)
-        {
-            std::fprintf(stderr, "pwrite: res=%d, should be %u (%u-%u)\n",
-                res, (unsigned)(append.AppendedSize-low_pos),
-                (unsigned)append.AppendedSize, (unsigned)low_pos);
-        }
-        
-        if(write_ok)
-        {
-            if(filesize > append.AppendedSize) ftruncate(fd, append.AppendedSize);
-            filesize = append.AppendedSize;
-        }
-        
-#if DEBUG_APPEND
-        std::fprintf(stderr, "- File now %u bytes\n", filesize);
-#endif
-        close(fd);
-        
-        if(!write_ok)
-        {
-            // Possibly, out of disk space? Try to save compressed instead.
-            put_compressed(LZMACompress(append.GetAsVector()));
-        }
-      #endif
-    }
-    
-private:
-    void get(std::vector<unsigned char>* raw,
-             std::vector<unsigned char>* compressed)
-    {
-        FILE* fp = std::fopen(getfn().c_str(), "rb");
-        if(!fp)
-        {
-            static const std::vector<unsigned char> dummy;
-            if(raw)        *raw = dummy;
-            if(compressed) *compressed = dummy;
-            return;
-        }
-        
-        std::vector<unsigned char> result( filesize );
-        
-        std::fread(&result[0], 1, filesize, fp);
-        std::fclose(fp);
-        
-        if(is_compressed)
-        {
-            if(compressed) *compressed = result;
-            if(raw)        *raw = LZMADeCompress(result);
-        }
-        else
-        {
-            if(compressed)
-            {
-                *compressed = LZMACompress(result);
-                put_compressed(*compressed);
-            }
-            if(raw)        *raw = result;
-        }
-    }
-
-    void AppendControl(AppendInfo& append, const std::vector<unsigned char>& data,
-                       bool DoLoad,
-                       bool DoDecide,
-                       bool DoPerform)
-    {
-        if(DoLoad)
-        {
-            append.OldSize          = 0;
-            append.SetAppendPos(0, data.size());
-            
-            off_t rawsize;
-            
-            if(is_compressed)
-            {
-                std::vector<unsigned char> rawdata = get_raw();
-                rawsize = rawdata.size();
-                
-                uint_fast32_t prepare_size = rawsize + data.size();
-                append.AssignFrom(rawdata, prepare_size);
-            }
-            else
-            {
-                int fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
-                if(fd < 0)
-                {
-                    /* File not found. Prevent null pointer, load a dummy buffer. */
-                    std::vector<unsigned char> dummy;
-                    append.AssignFrom(dummy, data.size());
-                    rawsize = 0;
-                }
-                else
-                {
-                    rawsize = filesize;
-                    const uint_fast32_t prepare_size = rawsize + data.size();
-                    
-                    /* mmap() can not map pages that don't exist in the file,
-                     * so enlarge the file if necessary
-                     */
-                    if(prepare_size > filesize) ftruncate(fd, prepare_size);
-
-                    append.MapFrom(fd, prepare_size);
-                    
-                    close(fd);
-                }
-            }
-            
-            append.OldSize = rawsize;
-            append.SetAppendPos(rawsize, data.size());
-        }
-        
-        if(DoDecide)
-        {
-#if DEBUG_APPEND
-            std::fprintf(stderr, "Appension (%s), rawsize=%u, datasize=%u, ptr=%p, mapped=%s\n",
-                is_compressed ? "compressed" : "raw",
-                rawsize, data.size(),
-                append.GetBufferPointer(),
-                append.IsMapped() ? "yes":"no");
-#endif
-            if(!data.empty())
-            {
-                uint_fast32_t cap = std::min((long)append.OldSize, (long)(FSIZE - data.size()));
-
-                unsigned char* ptr = append.GetBufferPointer();
-                
-                uint_fast32_t result = append.OldSize; /* By default, insert at end. */
-                
-                for(unsigned a=0; ; ++a)
-                {
-                    /* We believe std::memchr() might be better optimized
-                     * than std::find(). At least in glibc, memchr() does
-                     * does longword access on aligned addresses, whereas
-                     * find() (from STL) compares byte by byte.
-                     */
-                    const unsigned char* refptr =
-                        (const unsigned char*)std::memchr(ptr+a, data[0], cap-a);
-                    if(!refptr) break;
-                    a = refptr - ptr;
-                    unsigned compare_size = std::min((long)data.size(), (long)(append.OldSize - a));
-                    
-                    /* compare 1 byte less because find() already confirmed the first byte */
-                    if(std::memcmp(refptr+1, &data[1], compare_size-1) == 0)
-                    {
-#if DEBUG_OVERLAP
-                        std::printf("\nOVERLAP: ORIG=%u, NEW=%u, POS=%u, COMPARED %u\n",
-                            (unsigned)cap, (unsigned)data.size(),
-                            a, compare_size);
-                        for(unsigned b=0; b<4+compare_size; ++b)
-                            std::printf("%02X ", ptr[cap - compare_size+b-4]);
-                        std::printf("\n");
-                        for(unsigned b=0; b<4; ++b) std::printf("   ");
-                        for(unsigned b=0; b<4+compare_size; ++b)
-                            std::printf("%02X ", data[b]);
-                        std::printf("\n");
-#endif
-                        result = a; /* Put it here. */
-                        break;
-                    }
-                }
-                
-                append.SetAppendPos(result, data.size());
-            }
-        }
-        
-        if(DoPerform)
-        {
-            if(append.AppendedSize > append.OldSize)
-            {
-                /* Put all the remaining data to the end. */
-                unsigned char* ptr = append.GetBufferPointer();
-                unsigned remainder = append.AppendedSize - append.OldSize;
-                if(remainder > 0)
-                {
-                    std::memcpy(ptr + append.OldSize,
-                                &data[data.size() - remainder],
-                                remainder);
-                }
-            }
-#if DEBUG_APPEND
-            std::fprintf(stderr, "- appended to %u, results %u/%u (0 if mmapped)\n",
-              append.AppendBaseOffset,
-              append.AppendedSize, append.GetMapSize());
-#endif
-        }
-    }
-};
+#include "lzma.hh"
+#include "datasource.hh"
+#include "fblock.hh"
+#include "crc32.h"
 
 #define NO_BLOCK ((cromfs_blocknum_t)~0ULL)
 struct mkcromfs_block : public cromfs_block_storage
@@ -586,8 +86,9 @@ public:
           inotab_inode.links = 1;
           inotab_inode.bytesize = inotab.size();
           inotab_inode.blocklist = Blockify(inotab_source); }
-        std::printf("Inode table is %lu bytes\n", inotab_inode.bytesize);
-
+        std::printf("Uncompressed inode table is %s (stored in fblocks, compressed).\n",
+            ReportSize(inotab_inode.bytesize).c_str());
+        
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
         std::printf("Compressing %u block records (%u bytes each)...",
@@ -690,6 +191,7 @@ public:
     }
 private:
     typedef std::pair<dev_t,ino_t> hardlinkdata;
+
     typedef std::map<hardlinkdata, cromfs_inodenum_t> hardlinkmap_t;
     hardlinkmap_t hardlink_map;
     
@@ -736,8 +238,9 @@ private:
             
             try
             {
-                try_find_hardlink_file(st.st_dev, st.st_ino);
-
+                try_find_hardlink_file(st.st_dev, st.st_ino); /* throws if found */
+                
+                /* Not found, create new inode */
                 cromfs_inode_internal inode;
                 inode.mode     = st.st_mode;
                 inode.time     = st.st_mtime;
@@ -816,7 +319,6 @@ private:
         closedir(dir);
         
         std::fflush(stdout);
-        //EnsureAllAreCompressed();
         
         std::fflush(stdout);
         return dirinfo;
@@ -975,7 +477,7 @@ private:
          */
         
         const crc32_t crc = crc32_calc(&data[0], data.size());
-        std::multimap<crc32_t, mkcromfs_block>::iterator i = block_index.find(crc);
+        block_index_t::iterator i = block_index.find(crc);
         if(i != block_index.end())
         {
             for(;;)
@@ -1027,8 +529,6 @@ private:
     
     const cromfs_block_storage create_new_block(const std::vector<unsigned char>& data)
     {
-        CompressOneRandomly();
-        
         if(MaxFblockCountForBruteForce > 0 && fblocks.size() > 1)
         {
             std::vector<cromfs_fblocknum_t> candidates;
@@ -1068,8 +568,7 @@ private:
                 cromfs_fblocknum_t fblocknum = candidates[a];
                 mkcromfs_fblock& fblock = fblocks[fblocknum];
                 
-                mkcromfs_fblock::AppendInfo appended;
-                fblock.LoadAndAnalyzeAppend(appended, data);
+                mkcromfs_fblock::AppendInfo appended = fblock.AnalyzeAppend(data);
                 
                 uint_fast32_t this_size = appended.AppendedSize - appended.OldSize;
                 int_fast32_t hole_size = FSIZE - appended.AppendedSize;
@@ -1106,9 +605,10 @@ private:
               )
             {
                 const cromfs_fblocknum_t fblocknum = smallest;
-                mkcromfs_fblock& fblock = fblocks[fblocknum];
+                //mkcromfs_fblock& fblock = fblocks[fblocknum];
                 mkcromfs_fblock::AppendInfo appended;
-                fblock.LoadAndAppendAt(appended, data, smallest_pos);
+                
+                appended.SetAppendPos(smallest_pos, data.size());
                 
                 /* Find an iterator from fblock_index, if it exists. */
                 fblock_index_type::iterator i = fblock_index.begin();
@@ -1163,7 +663,13 @@ private:
 
 private:
     std::vector<cromfs_block_storage> blocks;
-    std::multimap<crc32_t, mkcromfs_block> block_index;
+
+#ifdef USE_HASHMAP
+    typedef __gnu_cxx::hash_multimap<crc32_t, mkcromfs_block> block_index_t;
+#else
+    typedef std::multimap<crc32_t, mkcromfs_block> block_index_t;
+#endif
+    block_index_t block_index;
     
     typedef std::multimap<int_fast32_t, cromfs_fblocknum_t> fblock_index_type;
     std::vector<mkcromfs_fblock> fblocks;
@@ -1176,38 +682,41 @@ private:
     uint_least64_t bytes_of_files;
 
 private:
-    void EnsureAllAreCompressed()
+    void EnsureCompressed(cromfs_fblocknum_t fblocknum)
     {
-        for(fblock_index_type::iterator
-            i = fblock_index.begin(); i != fblock_index.end(); ++i)
-        {
-            EnsureCompressed(i);
-        }
-    }
-
-    void EnsureCompressed(const fblock_index_type::iterator i)
-    {
-        cromfs_fblocknum_t fblocknum = i->second;
         mkcromfs_fblock& fblock = fblocks[fblocknum];
         if(fblock.is_uncompressed())
         {
             fblock.put_compressed(LZMACompress(fblock.get_raw()));
         }
     }
+    
+    void UnmapOneRandomlyButNot(cromfs_fblocknum_t forbid)
+    {
+        static cromfs_fblocknum_t counter = 0;
+        if(counter < fblocks.size() && counter != forbid)
+            fblocks[counter].Unmap();
+        if(!fblocks.empty())
+            counter = (counter+1) % fblocks.size();
+    }
 
-    void CompressOneRandomly()
+    void CompressOneRandomlyButNot(cromfs_fblocknum_t forbid)
     {
         static unsigned counter = 0;
         if(!counter) counter = RandomCompressPeriod; else { --counter; return; }
-    
-        if(fblock_index.empty()) return;
         
-        size_t count = std::rand() % fblock_index.size();
+        /* postpone it if there are no fblocks */
+        if(fblocks.empty()) { counter=0; return; }
         
-        fblock_index_type::iterator j = fblock_index.begin();
-        std::advance(j, count);
+        const cromfs_fblocknum_t c = std::rand() % fblocks.size();
         
-        if(j != fblock_index.end()) EnsureCompressed(j);
+        /* postpone it if we hit the landmine */
+        if(c == forbid) { counter=0; return; }
+        
+        /* postpone it if this fblock doesn't need compressing */
+        if(!fblocks[c].is_uncompressed()) { counter=0; return; }
+        
+        EnsureCompressed(c);
     }
     
     static const int CalcAutoIndexCount(int_fast32_t raw_size)
@@ -1224,6 +733,9 @@ private:
          bool prevent_overuse)
     {
         mkcromfs_fblock& fblock = fblocks[fblocknum];
+        
+        UnmapOneRandomlyButNot(fblocknum);
+        CompressOneRandomlyButNot(fblocknum);
         
         const uint_fast32_t new_data_offset = appended.AppendBaseOffset;
         const uint_fast32_t new_raw_size = appended.AppendedSize;
@@ -1255,12 +767,16 @@ private:
             else
                 std::printf(" (overlap %d)", (int)(old_raw_size - new_data_offset));
         }
+
+        fblock.put_appended_raw(appended, data);
         
         /* Index all new checksum data */
         const int OldAutoIndexCount = std::max(CalcAutoIndexCount(old_raw_size),0);
         const int NewAutoIndexCount = std::max(CalcAutoIndexCount(new_raw_size),0);
         if(NewAutoIndexCount > OldAutoIndexCount && NewAutoIndexCount > 0)
         {
+            std::vector<unsigned char> new_raw_data = fblock.get_raw();
+            
             for(int count=OldAutoIndexCount+1; count<=NewAutoIndexCount; ++count)
             {
                 uint_fast32_t startoffs = AutoIndexPeriod * (count-1);
@@ -1271,11 +787,11 @@ private:
                     OldAutoMD5Count, NewAutoMD5Count,
                     startoffs);
                 */
-                const unsigned char* ptr = appended.GetBufferPointer() + startoffs;
+                const unsigned char* ptr = &new_raw_data[startoffs];
                 const crc32_t crc = crc32_calc(ptr, BSIZE);
                 
                 /* Check if this checksum has already been indexed */
-                std::multimap<crc32_t, mkcromfs_block>::iterator i = block_index.find(crc);
+                block_index_t::iterator i = block_index.find(crc);
                 if(i != block_index.end())
                 {
                     /* Check if one of them matches this data, so that we don't
@@ -1298,10 +814,6 @@ private:
               dont_add_crc: ;
             }
         }
-        
-        fblock.put_appended_raw(appended);
-
-        appended.Dispose();
         
         std::printf("\n");
         
@@ -1349,9 +861,7 @@ private:
     {
         mkcromfs_fblock& fblock = fblocks[fblocknum];
 
-        mkcromfs_fblock::AppendInfo appended;
-        fblock.LoadAndAppend(appended, data);
-        
+        mkcromfs_fblock::AppendInfo appended = fblock.AnalyzeAppend(data);
         return AppendToFBlock(index_iterator, appended, fblocknum, data, prevent_overuse);
     }
     
@@ -1571,7 +1081,7 @@ int main(int argc, char** argv)
     {
         std::fprintf(stderr,
             "mkcromfs: Warning: Your minfreespace %ld is quite high when compared to your\n"
-            "  bsize %ld. Unless you reply on bruteforcelimit, it looks like a bad idea.\n",
+            "  bsize %ld. Unless you rely on bruteforcelimit, it looks like a bad idea.\n",
             (long)MinimumFreeSpace, (long)BSIZE);
     }
     if((long)MinimumFreeSpace >= FSIZE)
