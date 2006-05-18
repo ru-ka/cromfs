@@ -32,8 +32,8 @@ private:
     void reread_blktab();
     void reread_fblktab();
     
-    void read_block(cromfs_blocknum_t ind, unsigned offset,
-                    unsigned char* target, unsigned size);
+    void read_block(cromfs_blocknum_t ind, uint_fast32_t offset,
+                    unsigned char* target, uint_fast32_t size);
     
     cromfs_inode_internal read_uncompressed_inode(uint_fast64_t offset);
     

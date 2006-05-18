@@ -1,0 +1,38 @@
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+cromfs implementation help. If you want to implement
+a kernel-level cromfs driver.
+--------------------------------
+Use doc/FORMAT as reference.
+--------------------------------
+
+PROCEDURE To READ THE CONTENTS OF A FILE denoted by inode number N, do:
+	Load the inode to get access to its list of blocks:
+		If N = 0, use the INOTAB inode. (It is stored
+		          in the filesystem uncompressed, raw.
+		          You can find it by following the address
+		          saved in the superblock.)
+		If N = 1, use the rootdir inode. (Similarly.)
+		If N > 1, first load the contents of INOTAB by calling
+		          this function recursively with inode number 0.
+		          Then load the inode from the INOTAB. (Of course,
+		          you only need to read the portion of INOTAB that
+		          contains this particular inode.)
+	In the inode, for each block index [that needs to be processed in
+	order to access this particular portion of the file], load that
+	particular BLOCK from the decompressed BLKDATA, and then load
+	the FBLOCK indicated by that BLOCK, decompress it, and copy
+	the necessary number of bytes from that decompressed data,
+	starting from the offset indicated in the BLOCK.
+	(Of course, you do not need to decompress the same FBLOCK over
+	and over again, but you can cache them. Caching is applicable
+	to many of the steps in this task, but a cache needs RAM.)
+
+PROCEDURE To LIST THE CONTENTS OF A DIRECTORY denoted by inode number N, do:
+	Load the contents of the file denoted by inode number N, using the
+	procedure described above.
+	Then decode the content of the directory data using the format
+	described above ("FILE CONTENT WHEN: DIRECTORY").
+--------------------------------

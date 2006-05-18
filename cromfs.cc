@@ -25,6 +25,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 
 #include "LzmaDecode.h"
 #include "LzmaDecode.c"
@@ -105,9 +106,9 @@ const std::string DumpBlock(const cromfs_block_storage& block)
 }
 
 static const std::vector<unsigned char> LZMADeCompress
-    (const std::vector<unsigned char>& buf)
+    (const unsigned char* buf, size_t BufSize)
 {
-    if(buf.size() <= 5+8) return std::vector<unsigned char> ();
+    if(BufSize <= 5+8) return std::vector<unsigned char> ();
     
     /* FIXME: not endianess-safe */
     uint_least64_t out_sizemax = *(const uint_least64_t*)&buf[5];
@@ -120,13 +121,19 @@ static const std::vector<unsigned char> LZMADeCompress
     
     SizeT in_done;
     SizeT out_done;
-    LzmaDecode(&state, &buf[13], buf.size()-13, &in_done,
+    LzmaDecode(&state, &buf[13], BufSize-13, &in_done,
                &result[0], result.size(), &out_done);
     
     delete[] state.Probs;
     
     result.resize(out_done);
     return result;
+}
+
+static const std::vector<unsigned char> LZMADeCompress
+    (const std::vector<unsigned char>& buf)
+{
+    return LZMADeCompress(&buf[0], buf.size());
 }
 
 uint_fast64_t cromfs::CalcSizeInBlocks(uint_fast64_t filesize) const
@@ -375,15 +382,16 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
     return result;
 }
 
-void cromfs::read_block(cromfs_blocknum_t ind, unsigned offset,
-                        unsigned char* target, unsigned size)
+void cromfs::read_block(cromfs_blocknum_t ind, uint_fast32_t offset,
+                        unsigned char* target, uint_fast32_t size)
 {
     if(blktab.empty())
     {
         reread_blktab();
     }
-    cromfs_block_storage& block = blktab[ind];
     cromfs_setup_alarm(*this);
+
+    cromfs_block_storage& block = blktab[ind];
 
 #if READBLOCK_DEBUG
     fprintf(stderr, "- - read_block(%u,%u,%p,%u): block=%s\n",
@@ -392,28 +400,17 @@ void cromfs::read_block(cromfs_blocknum_t ind, unsigned offset,
 #endif
 
     cromfs_cached_fblock& fblock = read_fblock(block.fblocknum);
+    uint_fast32_t begin = block.startoffs + offset;
     
-    int_fast64_t begin = block.startoffs + offset;
+    if(begin > fblock.size()) return;
     
 #if READBLOCK_DEBUG
-    fprintf(stderr, "- - - got %u bytes, reading from %lld\n", fblock.size(), begin);
+    fprintf(stderr, "- - - got %u bytes, reading from %u\n", fblock.size(), (unsigned)begin);
 #endif
     
-    uint_fast64_t bytes =
-        std::min((int_fast64_t)size, (int_fast64_t)(fblock.size()) - begin);
-    
-    /*
-    fprintf(stderr, "-");
-    for(unsigned a = 0; a < fblock.size()-block.startoffs; ++a)
-    {
-        fprintf(stderr, "%c", fblock[begin+a]);
-        if(a == 64) break;
-    }
-    fprintf(stderr, "\n");
-    */
-    
+    uint_fast32_t bytes = fblock.size() - begin;
+    if(bytes > size) bytes = size;
     std::memcpy(target, &fblock[begin], bytes);
-                
 }
 
 cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
@@ -436,9 +433,35 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
     
     if(fblktab.empty()) reread_fblktab();
     
-    uint_fast32_t comp_size = fblktab[ind].length; SizeT comp_got;
+    uint_fast32_t comp_size = fblktab[ind].length;
     
+    uint_fast64_t filepos_aligned_down = fblktab[ind].filepos & ~4095;
+    uint_fast64_t filepos_ignore = fblktab[ind].filepos - filepos_aligned_down;
+    size_t map_size = comp_size + filepos_ignore;
+    
+    void* map_buf = mmap64(NULL, map_size, PROT_READ, MAP_SHARED, fd, filepos_aligned_down);
+    if(map_buf != (void*)-1)
+    {
+        const unsigned char* Buf = filepos_ignore + (unsigned char*)map_buf;
+#if FBLOCK_DEBUG
+        fprintf(stderr, "- - - - reading fblock %u (%u bytes) from %llu: mmap @ %p\n",
+            (unsigned)ind, (unsigned)comp_size, fblktab[ind].filepos, map_buf);
+#endif
+
+        /* Exception-safe mechanism that ensures the
+         * pointer will be unmapped properly
+         */
+        struct unmap { unmap(void*&p,size_t s):P(p),S(s){}
+                       ~unmap() { munmap(P,S); }
+                       void*P; size_t S; } unm(map_buf, map_size);
+        
+        return cache_fblocks[ind] = LZMADeCompress(Buf, comp_size);
+    }
+    
+    /* mmap failed for some reason, revert to pread64 */
+
     std::vector<unsigned char> Buf(comp_size);
+    
     ssize_t r = pread64(fd, &Buf[0], comp_size, fblktab[ind].filepos);
 #if FBLOCK_DEBUG
     fprintf(stderr, "- - - - reading fblock %u (%u bytes) from %llu: got %ld\n",
@@ -451,33 +474,7 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
         throw EIO;
     }
 
-    uint_fast64_t orig_size = R64(&Buf[5]);        SizeT orig_got;
-    
-    cromfs_cached_fblock& result = cache_fblocks[ind];
-    result.resize(orig_size);
-
-    CLzmaDecoderState state;
-    LzmaDecodeProperties(&state.Properties, &Buf[0], LZMA_PROPERTIES_SIZE);
-    state.Probs = new CProb[LzmaGetNumProbs(&state.Properties)];
-    
-    LzmaDecode(&state, &Buf[5+8],  comp_size-5-8, &comp_got,
-                       &result[0], orig_size,     &orig_got);
-    
-    delete[] state.Probs;
-    
-    if(orig_got != orig_size)
-    {
-#if FBLOCK_DEBUG
-        fprintf(stderr, "- - - - orig_got=%llu, orig_size=%llu, discrepancy detected (comp_got %llu)\n",
-            (uint_fast64_t)orig_got, (uint_fast64_t)orig_size,
-            (uint_fast64_t)comp_got);
-#endif
-        //fprintf(stderr, "GORE!!! 2\n");
-        throw EIO;
-        result.resize(orig_got);
-    }
-    
-    return result;
+    return cache_fblocks[ind] = LZMADeCompress(Buf);
 }
 
 int_fast64_t cromfs::read_file_data(const cromfs_inode_internal& inode,

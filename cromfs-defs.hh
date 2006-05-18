@@ -72,8 +72,8 @@ struct cromfs_superblock_internal
     uint_fast64_t inotab_offs;
     uint_fast64_t rootdir_offs;
     uint_fast64_t blktab_size;
-    uint_fast64_t compressed_block_size;
-    uint_fast64_t uncompressed_block_size;
+    uint_fast32_t compressed_block_size;
+    uint_fast64_t uncompressed_block_size; /* 64-bit to reduce the number of casts */
     uint_fast64_t bytes_of_files;
 };
 

@@ -1,4 +1,4 @@
-VERSION=1.1.3
+VERSION=1.1.3.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -7,7 +7,10 @@ ARCHFILES=\
 	\
 	COPYING progdesc.php \
 	\
-	doc/FORMAT doc/README.html doc/ChangeLog \
+	doc/FORMAT \
+	doc/README.html \
+	doc/ChangeLog \
+	doc/ImplementationGuide.txt \
 	cromfs.spec \
 	\
 	cromfs.cc cromfs.hh cromfs-defs.hh \

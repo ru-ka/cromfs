@@ -85,99 +85,143 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
    (This has no effect to compression efficiency.)</li>
 </ul>
 
-Development status: Pre-beta. The Cromfs project has been created
-very recently and it hasn't been yet tested extensively. There is no
-warranty against data loss or anything else, so use at your own risk.
+Development status: Beta. The Cromfs project has been created very recently
+and it hasn't been yet tested extensively. There is no warranty against data
+loss or anything else, so use at your own risk.<br />
+That being said, there are no known bugs.
 
 ", 'compare:1. Comparing to other filesystems' => "
 
 This is all very biased, hypothetical, and by no means
 a scientific study, but here goes:
 
+<style type=\"text/css\"><!--
+.good  { background:#CFC }
+.bad   { background:#FCC }
+.hmm   { background:#FFC }
+--></style>
 <table border=1 class=fscom>
  <tr align=left>
   <th>Feature</th>
    <th>Cromfs</th>
    <th>Cramfs</th>
    <th>Squashfs (3.0)</th>
+   <th>Cloop</th>
   </tr>
  <tr align=left>
   <th>Compression unit</th>
-   <td>adjustable (4 MB default)</td>
-   <td>4 kB</td>
-   <td>adjustable (64 kB max)</td>
+   <td class=good>adjustable arbitrarily (2 MB default)</td>
+   <td class=hmm>adjustable, must be power of 2 (4 kB default)</td>
+   <td class=hmm>adjustable, must be power of 2 (64 kB max)</td>
+   <td class=hmm>adjustable in 512-byte units (1 MB max)</td>
   </tr>
  <tr align=left>
-  <th>Files are compressed</th>
-   <td>together (up to block limit)</td>
-   <td>individually</td>
-   <td>individually</td>
+  <th>Files are compressed (up to block size limit)</th>
+   <td class=good>Together</td>
+   <td class=hmm>Individually</td>
+   <td class=hmm>Individually, except for fragments</td>
+   <td class=good>Together</td>
   </tr>
  <tr align=left>
   <th>Maximum file size</th>
-   <td>16 EB (2^44 MB)</td>
-   <td>16 MB (2^4 MB)</td>
-   <td>16 EB (2^44 MB)<br /> (4 GB before v3.0)</td>
+   <td class=hmm>16 EB (2^44 MB) (theoretical; actual limit depends on settings)</td>
+   <td class=bad>16 MB (2^4 MB)</td>
+   <td class=good>16 EB (2^44 MB)<br /> (4 GB before v3.0)</td>
+   <td class=good>Depends on slave filesystem</td>
+  </tr>
+ <tr align=left>
+  <th>Maximum filesystem size</th>
+   <td class=good>16 EB (2^44 MB)</td>
+   <td class=bad>272 MB</td>
+   <td class=good>16 EB (2^44 MB)<br /> (4 GB before v3.0)</td>
+   <td>Unknown</td>
   </tr>
  <tr align=left>
   <th>Duplicate whole file detection</th>
-   <td>Yes</td>
-   <td>No (but hardlinks are detected)</td>
-   <td>Yes</td>
+   <td class=good>Yes</td>
+   <td class=bad>No</td>
+   <td class=good>Yes</td>
+   <td class=bad>No</td>
   </tr>
  <tr align=left>
   <th>Hardlinks detected and saved</th>
-   <td>Yes</td>
-   <td>Unknown</td>
-   <td>Yes, since v3.0</td>
+   <td class=good>Yes</td>
+   <td class=good>Yes</td>
+   <td class=good>Yes, since v3.0</td>
+   <td class=good>depends on slave filesystem</td>
   </tr>
  <tr align=left>
   <th>Near-identical file detection</th>
-   <td>Yes (identical blocks)</td>
-   <td>No</td>
-   <td>No</td>
+   <td class=good>Yes (identical blocks)</td>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
   </tr>
  <tr align=left>
   <th>Compression method</th>
-   <td>LZMA</td>
-   <td>gzip</td>
-   <td>gzip</td>
+   <td class=good>LZMA</td>
+   <td class=hmm>gzip (patches exist to use LZMA)</td>
+   <td class=hmm>gzip (patches exist to use LZMA)</td>
+   <td class=good>gzip or LZMA</td>
   </tr>
  <tr align=left>
   <th>Ownerships</th>
-   <td>uid,gid (since version 1.1.2)</li>
-   <td>uid,gid (but gid truncated to 8 bits)</td>
-   <td>uid,gid</td>
+   <td class=good>uid,gid (since version 1.1.2)</li>
+   <td class=hmm>uid,gid (but gid truncated to 8 bits)</td>
+   <td class=good>uid,gid</td>
+   <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Timestamps</th>
-   <td>mtime only</td>
-   <td>None</td>
-   <td>mtime only</td>
+   <td class=hmm>mtime only</td>
+   <td class=bad>None</td>
+   <td class=hmm>mtime only</td>
+   <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Endianess-safety</th>
-   <td>Works on little-endian only</td>
-   <td>Safe, but not exchangeable</td>
-   <td>Safe</td>
+   <td class=bad>Works on little-endian only</td>
+   <td class=hmm>Safe, but not exchangeable</td>
+   <td class=hmm>Safe, but not exchangeable</td>
+   <td class=hmm>Depends on slave filesystem</td>
  <tr align=left>
   <th>Kernelspace/userspace</th>
    <td>User (fuse)</td>
    <td>Kernel</td>
    <td>Kernel</td>
+   <td>Kernel</td>
  <tr align=left>
   <th>Appending to a previously created filesystem</th>
-   <td>No</td>
-   <td>No</td>
-   <td>Yes</td>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
+   <td class=good>Yes</td>
+   <td class=bad>No (the slave filesystem can
+     be decompressed, modified, and compressed
+     again, but in a sense, so can every other
+     of these.)</td>
  <tr align=left>
   <th>Supported inode types</th>
-   <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
-   <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
-   <td>reg,dir,chrdev,blkdev,fifo,link,sock</td>
+   <td class=good>all</td>
+   <td class=good>all</td>
+   <td class=good>all</td>
+   <td class=good>Depends on slave filesystem</td>
  <tr align=left>
-  <th>Fragmentation</th>
-   <td>commonplace</th>
-   <td>none</td>
-   <td>file tails only</td>
+  <th>Fragmentation<br />(good for compression, bad for access speed)</th>
+   <td class=hmm>Commonplace</th>
+   <td class=hmm>None</td>
+   <td class=good>File tails only</td>
+   <td class=hmm>Depends on slave filesystem</td>
+ <tr align=left>
+  <th>Holes (aka. sparse files); storage optimization
+      of blocks which consist entirely of nul bytes</th>
+   <td class=good>Optimized, not limited to nul-byte blocks.</th>
+   <td class=good>Supported</td>
+   <td class=bad>Not supported</th>
+   <td class=good>Depends on slave filesystem</td>
+ <tr align=left>
+  <th>Waste space (partially filled sectors)</th>
+   <td class=good>No</td>
+   <td>Unknown</td>
+   <td class=hmm>Mostly not</td>
+   <td class=hmm>Depends on slave filesystem, generally yes</td>
 </table>
 
 Note: cromfs now saves the uid and gid in the filesystem. However,
@@ -206,58 +250,104 @@ compression ratio.
    (size taken from \"du -c\" output in the uncompressed filesystem)</th>
  </tr>
  <tr align=\"right\"3 valign=\"top\">
-  <th>cromfs</th>
-  <td><tt>mkcromfs -s16384 -f16777216</tt>
+  <th>Cromfs</th>
+  <td class=good><tt>mkcromfs -s16384 -f16777216</tt>
    <br />With 2k blocks (-b2048 -a16), <b>202,811,971</b> bytes
    <br />With 1k blocks (-b1024 -a32), <b>198,410,407</b> bytes
-   <br />With 512B blocks (-b512 -a2), <b>194,795,834</b> bytes
+   <!--<br />With 512B blocks (-b512 -a2), <b>194,795,834</b> bytes-->
+   <br />With 256B blocks (-b256 -a4), <b>194,386,381</b> bytes
    </td>
-  <td><tt>mkcromfs -b65536 -f2097152</tt>
+  <td class=good><tt>mkcromfs -b65536 -f2097152</tt>
    <br /><b>29,525,376</b> bytes</td>
-  <td><tt>mkcromfs -f1048576</tt>
+  <td class=good><tt>mkcromfs -f1048576</tt>
    <br />With 64k blocks (-b65536), <b>39,778,030</b> bytes
    <br />With 16k blocks (-b16384), <b>39,718,882</b> bytes
    <br />With 1k blocks (-b1024), <b>40,141,729</b> bytes
    </td>
  </tr>
  <tr align=\"right\" valign=\"top\">
-  <th>cramfs</th>
-  <td><tt>mkcramfs -b65536</tt>
+  <th>Cramfs</th>
+  <td class=bad><tt>mkcramfs -b65536</tt>
    <br />dies prematurely, \"filesystem too big\"</td>
-  <td><tt>mkcramfs</tt>
+  <td class=bad><tt>mkcramfs</tt>
    <br />with 2M blocks (-b2097152), <b>58,720,256</b> bytes
    <br />with 64k blocks (-b65536), <b>57,344,000</b> bytes
    <br />with 4k blocks (-b4096), <b>68,435,968</b> bytes
    </td>
-  <td><tt>mkcramfs -b65536</tt>
+  <td class=bad><tt>mkcramfs -b65536</tt>
    <br /><b>51,445,760</b> bytes
    </td>
  </tr>
  <tr align=\"right\" valign=\"top\">
-  <th>squashfs</th>
-  <td><tt>mksquashfs -b65536</tt>
+  <th>Squashfs</th>
+  <td class=bad><tt>mksquashfs -b65536</tt>
    <br />(using an optimized sort file) <b>1,185,546,240</b> bytes</td>
-  <td><tt>mksquashfs -b65536</tt>
+  <td class=hmm><tt>mksquashfs -b65536</tt>
    <br /><b>43,335,680</b> bytes</td>
-  <td><tt>mksquashfs -b65536</tt>
+  <td class=bad><tt>mksquashfs -b65536</tt>
    <br /><b>50,028,544</b> bytes
     </td>
  </tr>
  <tr align=\"right\" valign=\"top\">
-  <th>cloop</th>
-  <td>untested</td>
-  <td><tt>create_compressed_fs image.iso</tt>
+  <th>Cloop</th>
+  <td class=bad><tt>create_compressed_fs</tt>
+   <br />(using an iso9660 image created with mkisofs -R)
+   <br />using 7zip, 1M blocks (-B1048576 -t2 -L-1): <b>1,136,789,006</b> bytes
+   </td>
+  <td class=hmm><tt>create_compressed_fs</tt>
    <br />(using an iso9660 image created with mkisofs -RJ)
    <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>41,201,014</b> bytes
     <br />(1 MB is maximum block size in cloop)
    </td>
-  <td><tt>create_compressed_fs image.iso</tt>
+  <td class=bad><tt>create_compressed_fs</tt>
    <br />(using an iso9660 image)
    <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>48,328,580</b> bytes
    <br />using zlib, 64k blocks (-B65536 -L9): <b>50,641,093</b> bytes
    </td>
  </tr>
+ <tr align=\"right\" valign=\"top\">
+  <th>7-zip (p7zip)<br /> (an archive, not a filesystem)</th>
+  <td><tt>7za -mx9 -ma=2 a</tt>
+   <br /><b>235,037,017</b> bytes
+  <td>untested</td>
+  <td><tt>7za -mx9 -ma2 a</tt>
+    <br /><b>37,205,238</b> bytes
+   </td>
+ </tr>
 </table>
+
+An explanation why mkcromfs beats 7-zip in the NES ROM packing test:
+<blockquote style=\"font-size:92%;color:#222\">
+ 7-zip packs all the files together as one stream. The maximum dictionary
+ size is 32 MB. When 32 MB of data has been packed and more data comes in,
+ similarities between the first megabytes of data and the latest data are
+ not utilized. For example, <i>Mega Man</i> and <i>Rockman</i> are two
+ almost identical versions of the same image, but because there's more
+ than 500 MB of files in between of those when they are processed in
+ alphabetical order, 7-zip does not see that they are similar, and will
+ compress each one separately.<br />
+ 7-zip's chances could be improved by sorting the files so that it will
+ process similar images sequentially.<br />
+<br />
+ mkcromfs however keeps track of all blocks it has encoded, and will remember
+ similarities no matter how long ago they were added to the archive. This is
+ why it outperforms 7-zip in this case.<br />
+<br />
+ In the liveCD compressing test, mkcromfs does not beat 7-zip because this
+ advantage is too minor to overcome the overhead needed to provide random
+ access to the filesystem. It still beats cloop, squashfs and cramfs though.
+</blockquote>
+
+", 'speed:1.1. Speed tests' => "
+
+Speed testing hasn't been done yet. It is difficult to test the speed,
+because it depends on factors such as cache (with compressed filesystems,
+decompression consumes CPU power but usually only needs to be done once)
+and block size (bigger blocks need more time to decompress).
+ <p />
+However, in the general case, it is quite safe to assume
+that mkcromfs is the <i>slowest</i> of all. The same goes
+for resource testing (RAM).
 
 ", 'usage:1. Getting started' => "
 
