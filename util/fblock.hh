@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "memmem.h"
+
 const char* GetTempDir();
 
 class mkcromfs_fblock
@@ -301,13 +303,30 @@ public:
 #endif
         if(!data.empty() && append.OldSize > 0)
         {
-            uint_fast32_t cap = std::min((long)append.OldSize, (long)(FSIZE - data.size()));
-
-            const unsigned char* ptr = Buffer.Buffer;
-            
             uint_fast32_t result = append.OldSize; /* By default, insert at end. */
             
-            for(unsigned a=0; ; ++a)
+            const unsigned char* ptr = Buffer.Buffer;
+            
+            /* The maximum offset where we can search for a complete match
+             * using an optimized algorithm.
+             */
+            int_fast32_t full_match_max = std::max(0L, (long)(append.OldSize - data.size()));
+            if(full_match_max > 0)
+            {
+                uint_fast32_t res = fast_memmem(ptr, full_match_max, &data[0], data.size());
+                if(res < full_match_max)
+                {
+                    append.SetAppendPos(res, data.size());
+                    return append;
+                }
+            }
+            
+            /* The rest of this algorithm checks for partial matches only */
+            /* Though it _can_ check for complete matches too. */
+            
+            uint_fast32_t cap = std::min((long)append.OldSize, (long)(FSIZE - data.size()));
+
+            for(unsigned a=full_match_max; a<cap; ++a)
             {
                 /* We believe std::memchr() might be better optimized
                  * than std::find(). At least in glibc, memchr() does

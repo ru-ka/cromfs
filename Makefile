@@ -1,4 +1,4 @@
-VERSION=1.1.3.1
+VERSION=1.1.4
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -11,6 +11,7 @@ ARCHFILES=\
 	doc/README.html \
 	doc/ChangeLog \
 	doc/ImplementationGuide.txt \
+	doc/WriteAccess.txt \
 	cromfs.spec \
 	\
 	cromfs.cc cromfs.hh cromfs-defs.hh \
@@ -24,7 +25,9 @@ ARCHFILES=\
 	util/lzma.cc util/lzma.hh \
 	util/fblock.cc util/fblock.hh \
 	util/crc32.h util/crc32.cc \
+	util/memmem.h util/memmem.c \
 	util/main.cc \
+	\
 	\
 	util/lzma/ORIGIN \
 	util/lzma/LGPL.txt \

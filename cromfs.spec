@@ -1,12 +1,10 @@
-# $Revision: 1.1 $, $Date: 2006/05/14 15:13:44 $
 Summary:	Compressed ROM filesystem for Linux in user-space
 Name:		cromfs
-Version:	1.1.0.2
-Release:	0.1
+Version:	1.1.4
+Release:	0.2
 License:	GPL
 Group:		Applications
 Source0:	http://bisqwit.iki.fi/src/arch/%{name}-%{version}.tar.bz2
-# Source0-md5:	54b91063f21781330a8a7ef27faae19c
 URL:		http://bisqwit.iki.fi/source/cromfs.html
 BuildRequires:	libfuse-devel
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
@@ -45,15 +43,10 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(644,root,root,755)
-%doc doc/ChangeLog doc/FORMAT README.html
+%doc doc/ChangeLog doc/FORMAT README.html doc/ImplementationGuide.txt doc/WriteAccess.txt
 %attr(755,root,root) %{_bindir}/*
 
 %define date	%(echo `LC_ALL="C" date +"%a %b %d %Y"`)
 %changelog
 * %{date} PLD Team <feedback@pld-linux.org>
 All persons listed below can be reached at <cvs_login>@pld-linux.org
-
-$Log: cromfs.spec,v $
-Revision 1.1  2006/05/14 15:13:44  areq
-- Init PLD spec
-

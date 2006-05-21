@@ -1,0 +1,101 @@
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+Thoughts about write access for cromfs
+
+--------------------------------
+
+Cromfs is a read-only filesystem.
+It is created once, and once created, it cannot be modified.
+This is a fact. You can stop reading.
+
+Now, the rest of this document is for dreamers.
+
+This document lists the issues that hinder creating an effecient
+write-access function for cromfs.
+
+The source code extracts within this document are for conceptual
+reference only.
+
+--------------------------------------------------
+1. Inodes are not fragmented
+
+The block lists used by the file are stored in inode, and they
+are stored in a contiguous array.
+
+  pread64(fd, &blocklist[0], 4 * nblocks, offset+0x18)
+
+Furthermore, the inodes are stored adjacently in the file, and
+changing the number of blocks in one inode would require moving
+all the following inodes forward or backward to accommodate that
+change.
+Because inode numbers are actually pointers into the inodes in
+the inode table (INOTAB), the inode numbers of all the rest of
+the files would need to be changed. The next file at least.
+
+  read_file_data(INOTAB, (inodenum-2) * 4, Buf, 0x18, "inode")
+
+To change the inode number of a file, the file would first
+have to be located, which would require traversing the entire
+directory tree, and changing the directories that contain the
+file. Changing a directory is the same as changing a file btw.
+
+If the number of block allocated by the file (length of file
+within certain precision) does not change, this problem can
+be ignored. This is similar to what the Linux NTFS driver does.
+
+----------------------------------------
+2. File content is stored in shared fblocks, with no reference counting
+3. BLKTAB is not fragmented
+4. Blocks are shared, with no reference counting
+
+Each file (and directory and symlink) content is divided into
+blocks, which are saved into various fblocks. To change the
+content of a file, one needs to change those fblocks.
+
+    std::memcpy(target, read_fblock(block.fblocknum)
+                          [block.startoffs + offset], bytes);
+
+The problem with changing the fblocks is that fblocks are shared
+storage. Any particular byte could be shared, be portion of any
+number of distinct files on the filesystem.
+
+There is no reference counting in fblocks. No way of backtracking.
+Blocks point to fblocks, not vice versa. The only way to find out
+whether a particular section of a fblock is used by any other file
+(i.e. whether it can be changed without affecting other files),
+is to read through the whole block list (BLKTAB) of the filesystem
+and check if they refer to that section in that fblock.
+It is theoretically doable, though cpu-heavy work.
+If it is solitary possession, it can be changed. All good.
+
+However, it is just as possible that it cannot be changed.
+And when it cannot be changed, the data must be written elsewhere.
+Elsewhere means creating a new fblock. It can be appended to the
+end of the file. This can be done. All good. However, one also
+needs to create a new block, that tells where this data can be found.
+The block must be added to the block table -- BLKTAB. Here it
+becomes difficult.
+
+BLKTAB is located in the middle of the file, and it cannot be fragmented.
+In order to add a new entry to BLKTAB, one must give more room for it,
+which involves moving the whole FBLKTAB section forward in the file.
+It is an extremely disk-heavy operation. Doable, but super impractical.
+
+It is possible that one does not need to create a new block -- one could
+just reuse the same slot in the BLKTAB. However, this can only be done
+if there is no longer any other file (or even a portion of the same
+file itself) that refers to that block. To verify this fact, one would
+need to decode each and every inode in the filesystem to see if they
+refer to that block. There is no reference counting in the blocks.
+
+----------------------------------------
+Conclusion
+
+It is possible to implement write access, but it would involve
+reading and moving around tremendous amounts of data each time
+a file is changed.
+It may only be practical in mkcromfs, but even there it needs
+to be planned _considerably_ well to prevent data corruption
+that may happen on power outage or disk error.

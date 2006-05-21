@@ -74,7 +74,7 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
  <li>Max number of inodes (all files, dirs etc combined): 2^60, but depends on file sizes</li>
  <li>Max filesystem size: 2^64 bytes (16777216 TB)</li>
  <li>There are no \".\" and \"..\" entries in directories.</li>
- <li>mkcromfs is slow. You must be patient.</li>
+ <li>cromfs and mkcromfs are slower than their peers.</li>
  <li>The cromfs-driver has a large memory footprint. It is not
    suitable for very size-constrained systems.</li>
  <li>Maximum filename length: 4095 bytes</li>
@@ -252,12 +252,12 @@ compression ratio.
  <tr align=\"right\"3 valign=\"top\">
   <th>Cromfs</th>
   <td class=good><tt>mkcromfs -s16384 -f16777216</tt>
-   <br />With 2k blocks (-b2048 -a16), <b>202,811,971</b> bytes
-   <br />With 1k blocks (-b1024 -a32), <b>198,410,407</b> bytes
+   <br />With 2k blocks (-b2048 -a32), <b>202,811,971</b> bytes
+   <br />With 1k blocks (-b1024 -a16), <b>198,410,407</b> bytes
    <!--<br />With 512B blocks (-b512 -a2), <b>194,795,834</b> bytes-->
    <br />With 256B blocks (-b256 -a4), <b>194,386,381</b> bytes
    </td>
-  <td class=good><tt>mkcromfs -b65536 -f2097152</tt>
+  <td class=good><tt>mkcromfs</tt>
    <br /><b>29,525,376</b> bytes</td>
   <td class=good><tt>mkcromfs -f1048576</tt>
    <br />With 64k blocks (-b65536), <b>39,778,030</b> bytes
@@ -282,7 +282,7 @@ compression ratio.
   <th>Squashfs</th>
   <td class=bad><tt>mksquashfs -b65536</tt>
    <br />(using an optimized sort file) <b>1,185,546,240</b> bytes</td>
-  <td class=hmm><tt>mksquashfs -b65536</tt>
+  <td class=hmm><tt>mksquashfs</tt>
    <br /><b>43,335,680</b> bytes</td>
   <td class=bad><tt>mksquashfs -b65536</tt>
    <br /><b>50,028,544</b> bytes
@@ -466,8 +466,12 @@ and is distributed under the terms of the
  <br/>
 The LZMA code embedded within is licensed under LGPL.
  <p/>
-Patches and other related material can be submitted
+Patches and other related material can be submitted to the
+author
 ".GetEmail('by e-mail at:', 'Joel Yliluoma', 'bisqwi'. 't@iki.fi')."
+ <p>
+The author also wishes to hear if you use cromfs, and for what you
+use it and what you think of it.
 
 ", 'requ:1. Requirements' => "
 
@@ -475,8 +479,9 @@ Patches and other related material can be submitted
  <li>GNU make and gcc-c++ are required to recompile the source code.</li>
  <li>The filesystem works under the <a href=\"http://fuse.sourceforge.net/\">Fuse</a>
   user-space filesystem framework. You need to install both the Fuse kernel
-  module and the userspace programs before mounting Cromfs volumes.<br />
-  You need version fuse version 2.6.0 or newer. (2.5.2 <i>might</i> work.)</li>
+  module and the userspace programs before mounting Cromfs volumes.
+  You need Fuse version 2.5.2 or newer.
+ </li>
 </ul>
 
 

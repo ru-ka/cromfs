@@ -26,6 +26,7 @@ struct IMatchFinder: public IInWindowStream
 
 struct IMatchFinderSetNumPasses
 {
+  //virtual ~IMatchFinderSetNumPasses(){}
   virtual void SetNumPasses(UInt32 numPasses) PURE;
 };
 

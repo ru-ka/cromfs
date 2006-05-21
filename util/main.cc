@@ -61,6 +61,9 @@ const std::string ReportSize(uint_fast64_t size)
 
 class cromfs
 {
+private:
+    uint_fast64_t amount_blockdata;
+    uint_fast64_t amount_fblockdata;
 public:
     cromfs()
     {
@@ -76,6 +79,12 @@ public:
     
     void WriteTo(int fd)
     {
+        /*uint_fast64_t tmp=0;
+        for(unsigned a=0; a<fblocks.size(); ++a)
+            tmp += fblocks[a].get_raw().size();
+        std::printf("fblock size total = %llu\n", tmp);
+        return;*/
+
         std::vector<unsigned char> raw_root_inode   = encode_inode(rootdir);
         cromfs_inode_internal inotab_inode;
 
@@ -328,6 +337,9 @@ private:
     {
         std::vector<cromfs_blocknum_t> blocklist;
         uint_fast64_t nbytes = data.size();
+        
+        uint_fast64_t consumption = 0;
+        
         while(nbytes > 0)
         {
             uint_fast64_t eat = nbytes;
@@ -336,12 +348,34 @@ private:
             std::printf(" - %u/%llu... ", (unsigned)eat, nbytes);
             std::fflush(stdout);
             
+            amount_blockdata  = 0;
+            amount_fblockdata = 0;
+            
             std::vector<unsigned char> buf = data.read(eat);
             blocklist.push_back(find_or_create_block(buf));
+            
+            consumption += amount_blockdata;
+            consumption += amount_fblockdata;
+            consumption += 4; // size of entry in the inode
             
             nbytes -= eat;
         }
         
+        const int_fast64_t minimum_optimal_overhead = 4 + sizeof(cromfs_block_storage);
+        
+        int_fast64_t overhead = consumption - data.size();
+        if(overhead > 0)
+            std::printf(" - overhead is %s%s\n",
+                ReportSize(overhead).c_str(),
+                overhead > minimum_optimal_overhead
+                    ? ""
+                    : ""
+             );
+        else
+            std::printf(" - overhead is %s%s\n",
+                ReportSize(-overhead).c_str(),
+                "; bytes saved");
+
         return blocklist;
     }
     
@@ -503,6 +537,8 @@ private:
                 
                 blocknum = blocks.size();
                 blocks.push_back(block);
+                
+                amount_blockdata += sizeof(block);
 
                 std::printf(" reused indexed material [%u @ %u], became block %u\n",
                     (unsigned)block.fblocknum,
@@ -518,6 +554,9 @@ private:
         b.inherit(block, blockno);
         block_index.insert(std::make_pair(crc, b));
         blocks.push_back(block);
+
+        amount_blockdata += sizeof(block);
+
         return blockno;
     }
     
@@ -657,6 +696,8 @@ private:
         mkcromfs_fblock new_fblock;
         fblocks.push_back(new_fblock);
         
+        amount_fblockdata += 4; /* size of FBLOCK without data */
+        
         /* Note: The "false" in this parameter list tells not to throw exceptions. */
         return AppendToFBlock(fblock_index.end(), fblocknum, data, false);
     }
@@ -769,6 +810,8 @@ private:
         }
 
         fblock.put_appended_raw(appended, data);
+        
+        amount_fblockdata += new_raw_size - old_raw_size;
         
         /* Index all new checksum data */
         const int OldAutoIndexCount = std::max(CalcAutoIndexCount(old_raw_size),0);
