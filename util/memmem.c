@@ -7,15 +7,15 @@
 
 #include <limits.h>
 
-static unsigned max_u(unsigned a, unsigned b)
+static uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b)
 {
     return a>b ? a : b;
 }
-static int max_i(int a, int b)
+static int_fast32_t max_i(int_fast32_t a, int_fast32_t b)
 {
     return a>b ? a : b;
 }
-static int min_i(int a, int b)
+static int_fast32_t min_i(int_fast32_t a, int_fast32_t b)
 {
     return a<b ? a : b;
 }
@@ -23,7 +23,7 @@ static int min_i(int a, int b)
 /* memmem() implementation, GNU memmem.
  * Status: Works, and is slow.
  */
-uint_fast32_t memmem_gnu_memmem
+static uint_fast32_t memmem_gnu_memmem
     (const unsigned char* haystack, uint_fast32_t hlen,
      const unsigned char* needle, uint_fast32_t nlen)
 {
@@ -117,10 +117,7 @@ static int boyermoore_needlematch
  *   http://www-igm.univ-mlv.fr/~lecroq/string/node14.html
  *   http://www.inf.fh-flensburg.de/lang/algorithmen/pattern/bmen.htm
  *   http://en.wikipedia.org/wiki/Boyer-Moore_string_search_algorithm
- *
- * For some reason, this just doesn't work right.
- * Doesn't work. Grr. Hours, hours, hours wasted trying to get it work.
- * It does not work.
+ * Status: Fast, and probably works now.
  */
 static uint_fast32_t memmem_boyermoore
     (const unsigned char* __restrict__ haystack, uint_fast32_t hlen,
@@ -131,11 +128,6 @@ static uint_fast32_t memmem_boyermoore
 {
     int_fast32_t skip[nlen];
     int_fast32_t occ[UCHAR_MAX+1];
-
-/*
-    fprintf(stderr, "%d: hlen=%p:%u nlen=%p:%u\n", (int)__LINE__,
-       haystack,(unsigned)hlen, needle,(unsigned)nlen);
-*/
 
     /* Preprocess */
     if(1) /* scope: preprocess */
@@ -148,66 +140,121 @@ static uint_fast32_t memmem_boyermoore
             for(a=0; a<UCHAR_MAX+1; ++a) occ[a] = -1;
             
             /* Then populate it with the analysis of the needle */
-            for(a=0; a<nlen; ++a) occ[needle[a]] = a;
+            /* But ignoring the last letter */
+            for(a=0; a<nlen-1; ++a) occ[needle[a]] = a;
         }
         if(1) /* scope: init skip[] */
         {
+#if 0 /* Bisqwit's method */
+            /* Complexity: O(nlen^3) ... oops */
             uint_fast32_t a;
             for(a=0; a<nlen; ++a)
             {
                 int_fast32_t value = 0;
                 while(value < nlen && !boyermoore_needlematch(needle, nlen, a, value))
                     ++value;
-                skip[a] = value;
+                skip[nlen-a-1] = value;
                 //printf("skip[%u]: %u\n", a,skip[a]);
 
                 /* This table seems to work just as wikipedia instructs
                  * it to work.
                  */
             }
+#else /* method from http://www-igm.univ-mlv.fr/~lecroq/string/node14.html */
+            /* Seems to be considerably faster than Bisqwit's method */
+            /* Though I have absolutely no idea what it does */
+            int_fast32_t suff[nlen];
+            if(1) /* scope */
+            {
+                int_fast32_t i, f=0, g=nlen-1;
+                suff[g] = nlen;
+                for (i = g; i-- > 0; )
+                {
+                    if (i > g && suff[i + nlen - 1 - f] < i - g)
+                        suff[i] = suff[i + nlen - 1 - f];
+                    else
+                    {
+                        f = i;
+                        g = min_i(g, i);
+                        while (g >= 0 && needle[g] == needle[g + nlen - 1 - f])
+                            --g;
+                        suff[i] = f - g;
+                    }
+                }
+            }
+            if(1) /* another scope */
+            {
+                uint_fast32_t j=0;
+                int_fast32_t i;
+                for (i = 0; i < nlen; ++i) skip[i] = nlen;
+                for (i = nlen - 1; i >= -1; --i)
+                    if (i == -1 || suff[i] == i + 1)
+                        for (; j < nlen - 1 - i; ++j)
+                            if (skip[j] == nlen)
+                                skip[j] = nlen - 1 - i;
+                for (i = 0; i <= nlen - 2; ++i)
+                    skip[nlen - 1 - suff[i]] = nlen - 1 - i;
+            }
+#endif
         }
     }
     
     /* Search */
     if(1) /* scope: search */
     {
+#if 1
         uint_fast32_t hpos=0;
-        
-        /*
-         This loop doesn't, mostly, work at all.
-        */
         while(hpos <= hlen-nlen)
         {
-            printf("Comparing at '%s'\n", haystack+hpos);
-/*
-            fprintf(stderr, "%d: hpos=%u hlen=%p:%u nlen=%p:%u\n", (int)__LINE__,
-               (unsigned)hpos, haystack,(unsigned)hlen, needle,(unsigned)nlen);
-*/
             uint_fast32_t npos=nlen-1;
             while(needle[npos] == haystack[npos+hpos])
             {
                 if(npos == 0) return hpos;
                 --npos;
             }
-            
-            printf("Mismatch at %d: good=%u, bad=%c=%d\n",
-                npos,
-                skip[npos],
-                haystack[npos+hpos],
-                occ[haystack[npos+hpos]]);
-/*
-            fprintf(stderr, "%d: hpos=%u npos=%u hlen=%u nlen=%u\n", (int)__LINE__,
-               (unsigned)hpos, (unsigned)npos, (unsigned)hlen, (unsigned)nlen);
-*/
-            //hpos += max_i(0/*skip[npos]*/, npos-occ[haystack[npos+hpos]]);
-            hpos += npos-occ[haystack[npos+hpos]];
+            hpos += max_i(skip[npos], npos - occ[haystack[npos+hpos]]);
         }
-        printf("give up, hpos: %d:'%s'\n", hpos,haystack+hpos);
+#else /* Turbo BM */
+        /* Doesn't seem to give the same results as the normal method
+         * - Therefore, can't use
+         */
+        uint_fast32_t hpos=0;
+        uint_fast32_t processed_prev=0;
+        int shift=nlen;
+        while (hpos <= hlen-nlen)
+        {
+            uint_fast32_t npos=nlen-1;
+            while (needle[npos] == haystack[npos + hpos])
+            {
+                if(npos == 0) return hpos;
+                --npos;
+                if (processed_prev != 0 && npos == nlen - 1 - shift)
+                    npos -= processed_prev;
+            }
+            
+            if(1) /* scope */
+            {
+                uint_fast32_t processed_now = nlen-1 - npos;
+                int turboShift = processed_prev - processed_now;
+                int bcShift = npos - occ[haystack[npos+hpos]];
+                shift = max_i(turboShift, bcShift);
+                shift = max_i(shift, skip[npos]);
+                if (shift == skip[npos])
+                    processed_prev = min_i(nlen - shift, processed_now);
+                else
+                {
+                    if (turboShift < bcShift)
+                        shift = max_i(shift, processed_prev + 1);
+                    processed_prev = 0;
+                }
+            }
+            hpos += shift;
+        }
+#endif
     }
     return hlen;
 }
 
-#if 0
 /* memmem() implementation, Shift-Or algorithm.
  * Reference: http://en.wikipedia.org/wiki/Shift_Or_Algorithm
  * Status: Works, but slow.
@@ -247,36 +294,44 @@ static uint_fast32_t memmem_shiftor
         for(hpos = 0; hpos < hlen; ++hpos)
         {
             state = (state << 1) | S[haystack[hpos]];
-            if(state < lim) return hpos;
+            if(state < lim) return hpos - nlen + 1;
         }
     }
     return hlen;
 }
-#endif
 
 uint_fast32_t fast_memmem
     (const unsigned char* __restrict__ haystack, uint_fast32_t hlen,
      const unsigned char* __restrict__ needle, uint_fast32_t nlen)
 {
+/*
+    fprintf(stderr, "%d: hlen=%p:%u nlen=%p:%u\n", (int)__LINE__,
+       haystack,(unsigned)hlen, needle,(unsigned)nlen);
+*/
+
 #if 0
     /* gnu memmem() seems to be much slower than the memmem_boyermoore function */
     /* (By a factor of 3) */
-    return mmemem_gnumemmem(haystack,hlen,needle,nlen);
+    return memmem_gnu_memmem(haystack,hlen,needle,nlen);
 #endif
 #if 0
-    /* This algorithm seems to be much slower than the boyer_moore algorithm */
-    /* Therefore, it won't be used. */
+    /* Although shiftor is faster than gnu_memmem, it's slower
+     * than boyermoore (both the vanilla and simplified versions).
+     * (Tested on 64-bit blocks on 64-bit system.)
+     */
     if(__builtin_expect( (long) (nlen <= CHAR_BIT * sizeof(unsigned long)) , 0l))
     {
         return memmem_shiftor(haystack, hlen, needle, (unsigned) nlen);
     }
 #endif
-    return memmem_boyermoore_simplified(haystack, hlen, needle, nlen);
+    return memmem_boyermoore(haystack, hlen, needle, nlen);
 }
 
 #if 0
 int main(void)
 {
+    unsigned a;
+    for(a=0; a<1; ++a) {
 /*
     const char* input = "here is a simple example, yeah";
     const char* key = "example";
@@ -292,6 +347,8 @@ int main(void)
     
     printf("'%s'\n",
     input + fast_memmem(input, strlen(input), key, strlen(key))
-     );
+     )
+     ;
+    }
 }
 #endif

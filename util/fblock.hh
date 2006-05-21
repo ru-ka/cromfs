@@ -311,9 +311,11 @@ public:
              * using an optimized algorithm.
              */
             int_fast32_t full_match_max = std::max(0L, (long)(append.OldSize - data.size()));
-            if(full_match_max > 0)
+            if(full_match_max >= 0) /* number of possible starting positions */
             {
-                uint_fast32_t res = fast_memmem(ptr, full_match_max, &data[0], data.size());
+                /* +data.size() because it is the number of bytes to search */
+                uint_fast32_t res
+                  = fast_memmem(ptr, full_match_max + data.size(), &data[0], data.size());
                 if(res < full_match_max)
                 {
                     append.SetAppendPos(res, data.size());

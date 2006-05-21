@@ -4,6 +4,14 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.4.1 2006-05-22  Joel Yliluoma <bisqwit@iki.fi>
+- mkcromfs speed optimization: Bayer-Moore search algorithm
+  (Slightly faster than the Horspool version)
+- Fixed mkcromfs
+  - mkcromfs from 1.1.4 crashed in certain situations
+  - mkcromfs 1.1.4 failed to create a filesystem
+    (a debugging option was accidentally left activated)
+
 1.1.4 2006-05-21  Joel Yliluoma <bisqwit@iki.fi>
 - mkcromfs speed optimization: Bayer-Moore-Horspool search algorithm
 - Documentation updates

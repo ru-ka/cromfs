@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.4.
+  This is the documentation of cromfs-1.1.4.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -350,6 +350,10 @@ An explanation why mkcromfs beats 7-zip in the NES ROM packing test:
  access to the filesystem. It still beats cloop, squashfs and cramfs though.
 </blockquote>
 
+---<br/>
+Edit 2006-05-22: I was told 32M is not the maximum dictionary
+size in 7-zip.  A new test must be done with 128M dictionary.
+
 </div><H3 id="speed" class="level3"><a name="speed"></a>5.2. Speed tests</H3><div class="level3" id="divspeed">
 
 Speed testing hasn't been done yet. It is difficult to test the speed,
@@ -480,8 +484,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml27><b id=eml13 class=nonmail>juzu8e</b><span id=eml14 class=ismail>Joel</span><span id=eml15 class=nonmail><b>hUukiuj@8u</b></span><span id=eml16 class=ismail> Yli</span><b id=eml17 class=nonmail>@@pe.mes8</b><span id=eml18 class=ismail>luom</span><span id=eml19 class=nonmail><b>a1e</b></span><span id=eml20 class=ismail>a &lt;bi</span><b id=eml21 class=nonmail>H@ehaDnj</b><span id=eml22 class=ismail>sqwi</span><span id=eml23 class=nonmail><b>esc</b></span><span id=eml24 class=ismail>t@ik</span><b id=eml25 class=nonmail>xwm</b><span id=eml26 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=13;i<27;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml37><b id=eml23 class=nonmail>1b</b><span id=eml24 class=ismail>Joel</span><span id=eml25 class=nonmail><b>vv.@e</b></span><span id=eml26 class=ismail> Yli</span><b id=eml27 class=nonmail>k8uetL@We2</b><span id=eml28 class=ismail>luom</span><span id=eml29 class=nonmail><b>TrRB</b></span><span id=eml30 class=ismail>a &lt;bi</span><b id=eml31 class=nonmail>f</b><span id=eml32 class=ismail>sqwi</span><span id=eml33 class=nonmail><b>ul</b></span><span id=eml34 class=ismail>t@ik</span><b id=eml35 class=nonmail>qz8g.5@en</b><span id=eml36 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=23;i<37;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p>
 The author also wishes to hear if you use cromfs, and for what you
@@ -504,9 +508,9 @@ use it and what you think of it.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Fri, 19 May 2006 16:45:35 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Mon, 22 May 2006 02:40:05 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Sun, 21 May 2006 16:52:35 +0300</small>
+  at Mon, 22 May 2006 02:40:06 +0300</small>
  </p>
 </body>
 </html>

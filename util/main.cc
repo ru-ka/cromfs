@@ -79,11 +79,13 @@ public:
     
     void WriteTo(int fd)
     {
-        /*uint_fast64_t tmp=0;
+#if 0 /* for speed profiling */
+        uint_fast64_t tmp=0;
         for(unsigned a=0; a<fblocks.size(); ++a)
             tmp += fblocks[a].get_raw().size();
         std::printf("fblock size total = %llu\n", tmp);
-        return;*/
+        return;
+#endif
 
         std::vector<unsigned char> raw_root_inode   = encode_inode(rootdir);
         cromfs_inode_internal inotab_inode;

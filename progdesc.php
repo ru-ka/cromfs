@@ -338,6 +338,10 @@ An explanation why mkcromfs beats 7-zip in the NES ROM packing test:
  access to the filesystem. It still beats cloop, squashfs and cramfs though.
 </blockquote>
 
+---<br/>
+Edit 2006-05-22: I was told 32M is not the maximum dictionary
+size in 7-zip.  A new test must be done with 128M dictionary.
+
 ", 'speed:1.1. Speed tests' => "
 
 Speed testing hasn't been done yet. It is difficult to test the speed,

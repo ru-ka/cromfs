@@ -1,9 +1,8 @@
-VERSION=1.1.4
+VERSION=1.1.4.1
 
 include Makefile.sets
 
-#OPTIM += -O0 -fno-inline -g
-# -fmudflap
+#OPTIM += -O0 -fno-inline -g -fmudflap
 OPTIM += -O3 -ftree-vectorize 
 
 #LDOPTS += -fmudflap -lmudflap
