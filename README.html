@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.4.1.
+  This is the documentation of cromfs-1.1.4.2.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -247,7 +247,10 @@ If you mount as root, this behavior has no effect.
 Note: I use the -e and -r options in all of these mkcromfs tests
 to avoid unnecessary decompression+recompression steps, in order
 to speed up the filesystem generation. This has no effect in
-compression ratio.
+compression ratio.<br />
+<br />
+In this table, <i>k</i> equals 1024 bytes (2<sup>10</sup>)
+and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
 
 <style type="text/css"><!--
 .comcom b  { color:#007 }
@@ -263,11 +266,11 @@ compression ratio.
  </tr>
  <tr align="right"3 valign="top">
   <th>Cromfs</th>
-  <td class=good><tt>mkcromfs -s16384 -f16777216</tt>
-   <br />With 2k blocks (-b2048 -a32), <b>202,811,971</b> bytes
-   <br />With 1k blocks (-b1024 -a16), <b>198,410,407</b> bytes
-   <!--<br />With 512B blocks (-b512 -a2), <b>194,795,834</b> bytes-->
-   <br />With 256B blocks (-b256 -a4), <b>194,386,381</b> bytes
+  <td class=good><tt>mkcromfs -s16384 -a&hellip; -b&hellip; -f&hellip;</tt>
+   <br />With 16M fblocks, 2k blocks: <b>202,811,971</b> bytes
+   <br />With 16M fblocks, 1k blocks, <b>198,410,407</b> bytes
+   <!--<br />With 16M fblocks, &frac12;k blocks: <b>194,795,834</b> bytes-->
+   <br />With 16M fblocks, &frac14;k blocks: <b>194,386,381</b> bytes
    </td>
   <td class=good><tt>mkcromfs</tt>
    <br /><b>29,525,376</b> bytes</td>
@@ -320,7 +323,9 @@ compression ratio.
  <tr align="right" valign="top">
   <th>7-zip (p7zip)<br /> (an archive, not a filesystem)</th>
   <td><tt>7za -mx9 -ma=2 a</tt>
-   <br /><b>235,037,017</b> bytes
+   <br />with 32M blocks (-md=32m): <b>235,037,017</b> bytes
+   <br />with 128M blocks (-md=128m): <b>222,523,590</b> bytes
+   <br />with 256M blocks (-md=256m): <b>212,533,778</b> bytes
   <td>untested</td>
   <td><tt>7za -mx9 -ma2 a</tt>
     <br /><b>37,205,238</b> bytes
@@ -331,28 +336,30 @@ compression ratio.
 An explanation why mkcromfs beats 7-zip in the NES ROM packing test:
 <blockquote style="font-size:92%;color:#222">
  7-zip packs all the files together as one stream. The maximum dictionary
- size is 32 MB. When 32 MB of data has been packed and more data comes in,
+ size is 256 MB. (Note: The default for "maximum compression" is 32 MB.)
+ When 256 MB of data has been packed and more data comes in,
  similarities between the first megabytes of data and the latest data are
  not utilized. For example, <i>Mega Man</i> and <i>Rockman</i> are two
  almost identical versions of the same image, but because there's more
- than 500 MB of files in between of those when they are processed in
+ than 400 MB of files in between of those when they are processed in
  alphabetical order, 7-zip does not see that they are similar, and will
  compress each one separately.<br />
  7-zip's chances could be improved by sorting the files so that it will
- process similar images sequentially.<br />
+ process similar images sequentially. It already attempts to accomplish
+ this by sorting the files by filename extension and filename, but it
+ is not always the optimal way, as shown here.<br />
 <br />
  mkcromfs however keeps track of all blocks it has encoded, and will remember
- similarities no matter how long ago they were added to the archive. This is
- why it outperforms 7-zip in this case.<br />
+ similarities no matter how long ago they were added to the archive.
+ (<a href="/src/cromfs-blockindexing.txt">Click here</a> to read
+ how it does that.)
+ This is why it outperforms 7-zip in this case, even
+ when it only used 16 MB fblocks.<br />
 <br />
  In the liveCD compressing test, mkcromfs does not beat 7-zip because this
  advantage is too minor to overcome the overhead needed to provide random
  access to the filesystem. It still beats cloop, squashfs and cramfs though.
 </blockquote>
-
----<br/>
-Edit 2006-05-22: I was told 32M is not the maximum dictionary
-size in 7-zip.  A new test must be done with 128M dictionary.
 
 </div><H3 id="speed" class="level3"><a name="speed"></a>5.2. Speed tests</H3><div class="level3" id="divspeed">
 
@@ -438,7 +445,7 @@ To improve the filesystem generation speed, try these tips:
  <li>Use the --decompresslookups option (-e), if you have the
      diskspace to spare.</li>
  <li>Use the TEMP environment variable to control where the temp
-     files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs ...</tt></li>
+     files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0
@@ -484,8 +491,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml37><b id=eml23 class=nonmail>1b</b><span id=eml24 class=ismail>Joel</span><span id=eml25 class=nonmail><b>vv.@e</b></span><span id=eml26 class=ismail> Yli</span><b id=eml27 class=nonmail>k8uetL@We2</b><span id=eml28 class=ismail>luom</span><span id=eml29 class=nonmail><b>TrRB</b></span><span id=eml30 class=ismail>a &lt;bi</span><b id=eml31 class=nonmail>f</b><span id=eml32 class=ismail>sqwi</span><span id=eml33 class=nonmail><b>ul</b></span><span id=eml34 class=ismail>t@ik</span><b id=eml35 class=nonmail>qz8g.5@en</b><span id=eml36 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=23;i<37;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml44><b id=eml30 class=nonmail>f/eZif.</b><span id=eml31 class=ismail>Joel</span><span id=eml32 class=nonmail><b>e</b></span><span id=eml33 class=ismail> Yli</span><b id=eml34 class=nonmail>ep.</b><span id=eml35 class=ismail>luom</span><span id=eml36 class=nonmail><b>yxtgk</b></span><span id=eml37 class=ismail>a &lt;bi</span><b id=eml38 class=nonmail>j7h@y5Ge1t</b><span id=eml39 class=ismail>sqwi</span><span id=eml40 class=nonmail><b>.enaf</b></span><span id=eml41 class=ismail>t@ik</span><b id=eml42 class=nonmail>5/3</b><span id=eml43 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=30;i<44;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p>
 The author also wishes to hear if you use cromfs, and for what you
@@ -508,9 +515,9 @@ use it and what you think of it.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Mon, 22 May 2006 02:40:05 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Mon, 22 May 2006 12:46:41 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Mon, 22 May 2006 02:40:06 +0300</small>
+  at Mon, 22 May 2006 14:46:08 +0300</small>
  </p>
 </body>
 </html>

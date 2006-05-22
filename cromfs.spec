@@ -1,6 +1,6 @@
 Summary:	Compressed ROM filesystem for Linux in user-space
 Name:		cromfs
-Version:	1.1.4
+Version:	1.1.4.2
 Release:	0.2
 License:	GPL
 Group:		Applications
@@ -11,15 +11,20 @@ BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %description
 Cromfs is a compressed read-only filesystem for Linux. Cromfs is
-intended for permanently archiving gigabytes of big files that have
-lots of redundancy.
+intended for permanently archiving gigabytes of big files that
+have lots of redundancy.
 
-In terms of compression it is much similar to 7-zip files, except that
-practical realtime access (albeit much slower than on most other
-filesystems) can be provided for the whole archive contents; the user
-does not need to launch a program to decompress a single file, nor
-does he need to wait while the system decompresses 500 files from a
-1000-file archive to get him the 1 file he wanted to open.
+In terms of compression it is much similar to 7-zip files, except
+that fast random access is provided for the whole archive contents;
+the user does not need to launch a program to decompress a single
+file, nor does he need to wait while the system decompresses 500
+files from a 1000-file archive to get him the 1 file he wanted
+to open.
+
+Note: The primary design goal of cromfs is compression power.
+It is much slower than its peers, and uses more RAM. If all you
+care about is "powerful compression" and "random file access",
+then you will be happy with cromfs.
 
 The creation of cromfs was inspired from Squashfs and Cramfs.
 

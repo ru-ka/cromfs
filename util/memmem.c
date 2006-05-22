@@ -86,30 +86,28 @@ static uint_fast32_t memmem_boyermoore_simplified
     }
 }
 
+/* This helper function checks, whether the last "portion" bytes
+ * of "needle" (which is "nlen" bytes long) exist within the "needle"
+ * at offset "offset" (counted from the end of the string),
+ * and whether the character preceding "offset" is not a match.
+ * Notice that the range being checked may reach beyond the
+ * beginning of the string. Such range is ignored.
+ */
 static int boyermoore_needlematch
     (const unsigned char* needle, uint_fast32_t nlen,
-     uint_fast32_t portion,
-     int_fast32_t offset)
+     uint_fast32_t portion, uint_fast32_t offset)
 {
     int_fast32_t virtual_begin = nlen-offset-portion;
-    if(virtual_begin > 0)
-    {
-        /*
-        printf("Comparing '%*s' and '%*s'\n",
-            portion, needle+nlen-portion,
-            portion, needle+virtual_begin);
-        */
-        return
-            memcmp(needle + nlen - portion,
-                   needle + virtual_begin,
-                   portion) == 0
-         && needle[virtual_begin-1] != needle[nlen-portion-1];
-    }
+    int_fast32_t ignore = 0;
+    if(virtual_begin < 0) { ignore = -virtual_begin; virtual_begin = 0; }
     
-    int_fast32_t ignore = -virtual_begin;
-    return memcmp(needle + nlen - portion + ignore,
-                  needle,
-                  portion - ignore) == 0;
+    if(virtual_begin > 0 && needle[virtual_begin-1] == needle[nlen-portion-1])
+        return 0;
+
+    return
+        memcmp(needle + nlen - portion + ignore,
+               needle + virtual_begin,
+               portion - ignore) == 0;
 }
 
 /* memmem() implementation, Boyer-Moore algorithm.
@@ -126,7 +124,7 @@ static uint_fast32_t memmem_boyermoore
     (const unsigned char* __restrict__ haystack, uint_fast32_t hlen,
      const unsigned char* __restrict__ needle,   uint_fast32_t nlen)
 {
-    int_fast32_t skip[nlen];
+    uint_fast32_t skip[nlen];
     int_fast32_t occ[UCHAR_MAX+1];
 
     /* Preprocess */
@@ -150,7 +148,7 @@ static uint_fast32_t memmem_boyermoore
             uint_fast32_t a;
             for(a=0; a<nlen; ++a)
             {
-                int_fast32_t value = 0;
+                uint_fast32_t value = 0;
                 while(value < nlen && !boyermoore_needlematch(needle, nlen, a, value))
                     ++value;
                 skip[nlen-a-1] = value;
@@ -212,7 +210,7 @@ static uint_fast32_t memmem_boyermoore
                 if(npos == 0) return hpos;
                 --npos;
             }
-            hpos += max_i(skip[npos], npos - occ[haystack[npos+hpos]]);
+            hpos += max_u(skip[npos], npos - occ[haystack[npos+hpos]]);
         }
 #else /* Turbo BM */
         /* Doesn't seem to give the same results as the normal method
@@ -315,9 +313,9 @@ uint_fast32_t fast_memmem
     return memmem_gnu_memmem(haystack,hlen,needle,nlen);
 #endif
 #if 0
-    /* Although shiftor is faster than gnu_memmem, it's slower
+    /* Although shift-or is faster than gnu_memmem, it's slower
      * than boyermoore (both the vanilla and simplified versions).
-     * (Tested on 64-bit blocks on 64-bit system.)
+     * (Tested on 64-byte blocks on 64-bit system.)
      */
     if(__builtin_expect( (long) (nlen <= CHAR_BIT * sizeof(unsigned long)) , 0l))
     {

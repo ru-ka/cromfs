@@ -1,0 +1,61 @@
+cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+How mkcromfs remembers how which blocks it has encoded.
+
+--------------------------------
+
+One of the greatest powers of mkcromfs is that it remembers all blocks
+it has encoded, and if it meets an identical block again later, in the
+same file or in another file, it can encode it as a reference to the
+previous data instead of adding it into the stream that is compressed
+by LZMA.
+
+It does this by the means of hashing:
+
+    #ifdef USE_HASHMAP
+        typedef __gnu_cxx::hash_multimap<crc32_t, block_info> block_index_t;
+    #else
+        typedef std::multimap<crc32_t, block_info> block_index_t;
+    #endif
+
+This STL container (either one of them, the GNU version is just somewhat
+faster in effect) is an associative container where the key is a CRC32
+value (32-bit integer) and the value is a block_info struct. It works
+the same way as the Array in PHP. 
+
+block_info is a struct that contains two integers that tell
+which fblock the data was written in and at which offset.
+
+When mkcromfs wants to encode a new block, it calculates a CRC32 of
+the block, and checks for it in this map.
+
+    block_index_t::iterator i = block_index.find(crc);
+
+If it is found,
+   it loads the data from the fblock indicated in the block_info struct,
+   and checks if it's identical to the data that is being encoded.
+   If it is, it will reuse that struct.
+If it is not found, or the data was not identical, it will insert a
+new key-value pair to the map and add the block data to the stream.
+
+    block_index.insert(std::make_pair(crc, blk));
+
+As for CRC32: It does not matter which kind of hash you use.
+I originally used MD5, but I switched to CRC32 for better memory effeciency.
+Because a mere hash can never be unique, the same hash can refer
+to multiple different blocks, and a data verification is therefore
+always mandatory.
+
+When adding the block data to the stream, it does a search to see
+if the data already exists in the particular fblock it's appending,
+and will overlap the block with the tail of the fblock if it's able
+to do so.
+
+--------------------------------
+
+I chose to document this technique, because it could be useful in other
+compression programs as well. block_info could be implemented as
+containing a filename and the starting offset. This way, no lookups
+within the encoded data would be necessary.

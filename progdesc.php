@@ -235,7 +235,10 @@ If you mount as root, this behavior has no effect.
 Note: I use the -e and -r options in all of these mkcromfs tests
 to avoid unnecessary decompression+recompression steps, in order
 to speed up the filesystem generation. This has no effect in
-compression ratio.
+compression ratio.<br />
+<br />
+In this table, <i>k</i> equals 1024 bytes (2<sup>10</sup>)
+and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
 
 <style type=\"text/css\"><!--
 .comcom b  { color:#007 }
@@ -251,11 +254,11 @@ compression ratio.
  </tr>
  <tr align=\"right\"3 valign=\"top\">
   <th>Cromfs</th>
-  <td class=good><tt>mkcromfs -s16384 -f16777216</tt>
-   <br />With 2k blocks (-b2048 -a32), <b>202,811,971</b> bytes
-   <br />With 1k blocks (-b1024 -a16), <b>198,410,407</b> bytes
-   <!--<br />With 512B blocks (-b512 -a2), <b>194,795,834</b> bytes-->
-   <br />With 256B blocks (-b256 -a4), <b>194,386,381</b> bytes
+  <td class=good><tt>mkcromfs -s16384 -a&hellip; -b&hellip; -f&hellip;</tt>
+   <br />With 16M fblocks, 2k blocks: <b>202,811,971</b> bytes
+   <br />With 16M fblocks, 1k blocks, <b>198,410,407</b> bytes
+   <!--<br />With 16M fblocks, &frac12;k blocks: <b>194,795,834</b> bytes-->
+   <br />With 16M fblocks, &frac14;k blocks: <b>194,386,381</b> bytes
    </td>
   <td class=good><tt>mkcromfs</tt>
    <br /><b>29,525,376</b> bytes</td>
@@ -308,7 +311,9 @@ compression ratio.
  <tr align=\"right\" valign=\"top\">
   <th>7-zip (p7zip)<br /> (an archive, not a filesystem)</th>
   <td><tt>7za -mx9 -ma=2 a</tt>
-   <br /><b>235,037,017</b> bytes
+   <br />with 32M blocks (-md=32m): <b>235,037,017</b> bytes
+   <br />with 128M blocks (-md=128m): <b>222,523,590</b> bytes
+   <br />with 256M blocks (-md=256m): <b>212,533,778</b> bytes
   <td>untested</td>
   <td><tt>7za -mx9 -ma2 a</tt>
     <br /><b>37,205,238</b> bytes
@@ -319,28 +324,30 @@ compression ratio.
 An explanation why mkcromfs beats 7-zip in the NES ROM packing test:
 <blockquote style=\"font-size:92%;color:#222\">
  7-zip packs all the files together as one stream. The maximum dictionary
- size is 32 MB. When 32 MB of data has been packed and more data comes in,
+ size is 256 MB. (Note: The default for \"maximum compression\" is 32 MB.)
+ When 256 MB of data has been packed and more data comes in,
  similarities between the first megabytes of data and the latest data are
  not utilized. For example, <i>Mega Man</i> and <i>Rockman</i> are two
  almost identical versions of the same image, but because there's more
- than 500 MB of files in between of those when they are processed in
+ than 400 MB of files in between of those when they are processed in
  alphabetical order, 7-zip does not see that they are similar, and will
  compress each one separately.<br />
  7-zip's chances could be improved by sorting the files so that it will
- process similar images sequentially.<br />
+ process similar images sequentially. It already attempts to accomplish
+ this by sorting the files by filename extension and filename, but it
+ is not always the optimal way, as shown here.<br />
 <br />
  mkcromfs however keeps track of all blocks it has encoded, and will remember
- similarities no matter how long ago they were added to the archive. This is
- why it outperforms 7-zip in this case.<br />
+ similarities no matter how long ago they were added to the archive.
+ (<a href=\"/src/cromfs-blockindexing.txt\">Click here</a> to read
+ how it does that.)
+ This is why it outperforms 7-zip in this case, even
+ when it only used 16 MB fblocks.<br />
 <br />
  In the liveCD compressing test, mkcromfs does not beat 7-zip because this
  advantage is too minor to overcome the overhead needed to provide random
  access to the filesystem. It still beats cloop, squashfs and cramfs though.
 </blockquote>
-
----<br/>
-Edit 2006-05-22: I was told 32M is not the maximum dictionary
-size in 7-zip.  A new test must be done with 128M dictionary.
 
 ", 'speed:1.1. Speed tests' => "
 
@@ -426,7 +433,7 @@ To improve the filesystem generation speed, try these tips:
  <li>Use the --decompresslookups option (-e), if you have the
      diskspace to spare.</li>
  <li>Use the TEMP environment variable to control where the temp
-     files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs ...</tt></li>
+     files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0

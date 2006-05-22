@@ -374,7 +374,7 @@ private:
                     : ""
              );
         else
-            std::printf(" - overhead is %s%s\n",
+            std::printf(" - overhead is -%s%s\n",
                 ReportSize(-overhead).c_str(),
                 "; bytes saved");
 
