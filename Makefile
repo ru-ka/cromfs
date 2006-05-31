@@ -1,4 +1,4 @@
-VERSION=1.1.4.2
+VERSION=1.1.4.3
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -13,6 +13,7 @@ ARCHFILES=\
 	doc/ImplementationGuide.txt \
 	doc/WriteAccess.txt \
 	doc/BlockIndexing.txt \
+	doc/boxart.png \
 	cromfs.spec \
 	\
 	cromfs.cc cromfs.hh cromfs-defs.hh \

@@ -7,14 +7,17 @@
 
 #include <limits.h>
 
+static uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b) __attribute__((pure));
 static uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b)
 {
     return a>b ? a : b;
 }
+static int_fast32_t max_i(int_fast32_t a, int_fast32_t b) __attribute__((pure));
 static int_fast32_t max_i(int_fast32_t a, int_fast32_t b)
 {
     return a>b ? a : b;
 }
+static int_fast32_t min_i(int_fast32_t a, int_fast32_t b) __attribute__((pure));
 static int_fast32_t min_i(int_fast32_t a, int_fast32_t b)
 {
     return a<b ? a : b;
@@ -93,6 +96,9 @@ static uint_fast32_t memmem_boyermoore_simplified
  * Notice that the range being checked may reach beyond the
  * beginning of the string. Such range is ignored.
  */
+static int boyermoore_needlematch
+    (const unsigned char* needle, uint_fast32_t nlen,
+     uint_fast32_t portion, uint_fast32_t offset) __attribute__((pure));
 static int boyermoore_needlematch
     (const unsigned char* needle, uint_fast32_t nlen,
      uint_fast32_t portion, uint_fast32_t offset)
@@ -210,7 +216,7 @@ static uint_fast32_t memmem_boyermoore
                 if(npos == 0) return hpos;
                 --npos;
             }
-            hpos += max_u(skip[npos], npos - occ[haystack[npos+hpos]]);
+            hpos += max_i(skip[npos], npos - occ[haystack[npos+hpos]]);
         }
 #else /* Turbo BM */
         /* Doesn't seem to give the same results as the normal method
@@ -322,6 +328,7 @@ uint_fast32_t fast_memmem
         return memmem_shiftor(haystack, hlen, needle, (unsigned) nlen);
     }
 #endif
+    if(__builtin_expect( (nlen == 1), 0l )) return memchr(haystack, *needle, hlen);
     return memmem_boyermoore(haystack, hlen, needle, nlen);
 }
 

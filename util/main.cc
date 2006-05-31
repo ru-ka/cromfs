@@ -26,6 +26,9 @@ static uint_fast32_t MaxFblockCountForBruteForce = 0;
 static long FSIZE = 2097152;
 static long BSIZE = 65536;
 
+//static uint_fast32_t MaxSearchLength = FSIZE;
+
+
 #include "lzma.hh"
 #include "datasource.hh"
 #include "fblock.hh"
@@ -43,7 +46,7 @@ struct mkcromfs_block : public cromfs_block_storage
         cromfs_block_storage::operator=(b);
         blocknum = blockno;
     }
-};
+} __attribute__((packed));
 
 const std::string ReportSize(uint_fast64_t size)
 {
@@ -1171,6 +1174,8 @@ int main(int argc, char** argv)
     cromfs fs;
     fs.WalkRootDir(path.c_str());
     std::fprintf(stderr, "Writing %s...\n", outfn.c_str());
+    
+    //MaxSearchLength = FSIZE;
     
     ftruncate(fd, 0);
     fs.WriteTo(fd);

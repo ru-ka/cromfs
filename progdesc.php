@@ -16,6 +16,7 @@ function usagetext($prog)
 $text = array(
    '1. Purpose' => "
 
+<img src=\"http://bisqwit.iki.fi/src/cromfs-boxart.png\" align=\"left\" alt=\"cromfs\" />
 Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
 for permanently archiving gigabytes of big files that have lots of redundancy.
  <p/>

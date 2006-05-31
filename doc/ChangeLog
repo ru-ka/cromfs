@@ -4,6 +4,10 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.4.3 2006-06-01  Joel Yliluoma <bisqwit@iki.fi>
+- Minor tuning in mkcromfs
+- Nice image of a box to the program homepage. :)
+
 1.1.4.2 2006-05-22  Joel Yliluoma <bisqwit@iki.fi>
 - Documentation updates
 

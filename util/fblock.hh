@@ -71,9 +71,11 @@ public:
         return compressed;
     }
     
-    int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs)
+    int compare_raw_portion(const unsigned char* data,
+                            uint_fast32_t data_size,
+                            uint_fast32_t my_offs)
     {
-        /* Notice: offs + data.size() may be larger than the fblock size.
+        /* Notice: my_offs + data_size may be larger than the fblock size.
          * This can happen if there is a collision in the checksum index. A smaller
          * block might have been indexed, and it matches to a larger request.
          * We must check for that case, and reject if it is so.
@@ -88,28 +90,28 @@ public:
             std::vector<unsigned char> raw = get_raw();
             if(DecompressWhenLookup) put_raw(raw);
 
-            ssize_t size      = data.size();
-            ssize_t remaining = raw.size() - offs;
+            ssize_t size      = data_size;
+            ssize_t remaining = raw.size() - my_offs;
             if(remaining < size) return -1;
-            return std::memcmp(&raw[offs], &data[0], size);
+            return std::memcmp(&raw[my_offs], &data[0], size);
         }
         
-        if(offs + data.size() > filesize) return -1;
+        if(my_offs + data_size > filesize) return -1;
         
         if(!mmapped) Remap();
         if(mmapped)
         {
-            return std::memcmp(mmapped + offs, &data[0], data.size());
+            return std::memcmp(mmapped + my_offs, &data[0], data_size);
         }
         
-        /* mmap only works when the starting offset is aligned
+        /* mmap only works when the starting my_offset is aligned
          * on a page boundary. Therefore, we force it to align.
          */
-        uint_fast32_t prev_offs = offs & ~4095; /* 4095 is assumed to be page size-1 */
+        uint_fast32_t prev_my_offs = my_offs & ~4095; /* 4095 is assumed to be page size-1 */
         /* Because of aligning, calculate the amount of bytes
          * that were mmapped but are not part of the comparison.
          */
-        uint_fast32_t ignore = offs - prev_offs;
+        uint_fast32_t ignore = my_offs - prev_my_offs;
         
         int result = -1;
         int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
@@ -121,13 +123,13 @@ public:
              * difference within the first 3 bytes, only about 4 kB
              * of the file will be read. This is really fast.
              */
-            void* p = mmap(NULL, ignore+data.size(), PROT_READ, MAP_SHARED, fd, prev_offs);
+            void* p = mmap(NULL, ignore+data_size, PROT_READ, MAP_SHARED, fd, prev_my_offs);
             if(p != (void*)-1)
             {
                 close(fd);
-                const char* pp = (const char*)p;
-                result = std::memcmp(&data[0], pp + ignore, data.size());
-                munmap(p, ignore+data.size());
+                const unsigned char* pp = (const unsigned char*)p;
+                result = std::memcmp(&data[0], pp + ignore, data_size);
+                munmap(p, ignore+data_size);
             }
             else
             {
@@ -135,17 +137,92 @@ public:
                  * instead. pread is llseek+read combined. This should
                  * work if anything is going to work at all.
                  */
-                std::vector<unsigned char> tmpbuf(data.size());
-                ssize_t r = pread(fd, &tmpbuf[0], data.size(), offs);
+                std::vector<unsigned char> tmpbuf(data_size);
+                ssize_t r = pread(fd, &tmpbuf[0], data_size, my_offs);
                 close(fd);
-                if(r != (ssize_t)data.size())
+                if(r != (ssize_t)data_size)
                     result = -1;
                 else
-                    result = std::memcmp(&data[0], &tmpbuf[0], data.size());
+                    result = std::memcmp(&data[0], &tmpbuf[0], data_size);
             }
         }
         return result;
     }
+    
+    int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs)
+    {
+        return compare_raw_portion(&data[0], data.size(), offs);
+    }
+    
+#if 0
+    int compare_raw_portion_another
+       (mkcromfs_fblock& another,
+        uint_fast32_t data_size,
+        uint_fast32_t my_offs,
+        uint_fast32_t other_offs)
+    {
+        if(is_compressed)
+        {
+            std::vector<unsigned char> raw = get_raw();
+            if(DecompressWhenLookup) put_raw(raw);
+            if(my_offs + data_size > raw.size()) return -1;
+            return another.compare_raw_portion(&raw[my_offs], data_size, other_offs);
+        }
+        
+        if(my_offs + data_size > filesize) return -1;
+        
+        if(!mmapped) Remap();
+        if(mmapped)
+        {
+            return another.compare_raw_portion
+                (mmapped + my_offs, data_size, other_offs);
+        }
+        
+        /* mmap only works when the starting offset is aligned
+         * on a page boundary. Therefore, we force it to align.
+         */
+        uint_fast32_t prev_my_offs = my_offs & ~4095; /* 4095 is assumed to be page size-1 */
+        /* Because of aligning, calculate the amount of bytes
+         * that were mmapped but are not part of the comparison.
+         */
+        uint_fast32_t ignore = my_offs - prev_my_offs;
+        
+        int result = -1;
+        int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
+        if(fd >= 0)
+        {
+            /* Try to use mmap. This way, only the portion of file
+             * that actually needs to be compared, will be accessed.
+             * If we are comparing an 1M block and memcmp detects a
+             * difference within the first 3 bytes, only about 4 kB
+             * of the file will be read. This is really fast.
+             */
+            void* p = mmap(NULL, ignore+data_size, PROT_READ, MAP_SHARED, fd, prev_my_offs);
+            if(p != (void*)-1)
+            {
+                close(fd);
+                const unsigned char* pp = (const unsigned char*)p;
+                result = another.compare_raw_portion(pp+ignore, data_size, other_offs);
+                munmap(p, ignore+data_size);
+            }
+            else
+            {
+                /* If mmap didn't like our idea, try to use pread
+                 * instead. pread is llseek+read combined. This should
+                 * work if anything is going to work at all.
+                 */
+                std::vector<unsigned char> tmpbuf(data_size);
+                ssize_t r = pread(fd, &tmpbuf[0], data_size, my_offs);
+                close(fd);
+                if(r != (ssize_t)data_size)
+                    result = -1;
+                else
+                    result = another.compare_raw_portion(&tmpbuf[0], data_size, other_offs);
+            }
+        }
+        return result;
+    }
+#endif
     
     void put_raw(const std::vector<unsigned char>& raw)
     {
@@ -213,7 +290,8 @@ public:
     };
     
     /* Load file contents, analyze how to append/overlap but don't do it */
-    AppendInfo AnalyzeAppend(const std::vector<unsigned char>& data)
+    AppendInfo AnalyzeAppend(const std::vector<unsigned char>& data,
+                             uint_fast32_t minimum_pos = 0)
     {
         AppendInfo append;
         
@@ -310,12 +388,15 @@ public:
             /* The maximum offset where we can search for a complete match
              * using an optimized algorithm.
              */
-            int_fast32_t full_match_max = std::max(0L, (long)(append.OldSize - data.size()));
-            if(full_match_max >= 0) /* number of possible starting positions */
+            int_fast32_t full_match_max = (long)append.OldSize - (long)data.size();
+            if(full_match_max >= (int_fast32_t)minimum_pos) /* number of possible starting positions */
             {
+                //std::fprintf(stderr, "full_match_max = %d\n", (int)full_match_max);
                 /* +data.size() because it is the number of bytes to search */
-                uint_fast32_t res
-                  = fast_memmem(ptr, full_match_max + data.size(), &data[0], data.size());
+                uint_fast32_t res = minimum_pos + 
+                    fast_memmem(ptr + minimum_pos,
+                                full_match_max + data.size() - minimum_pos,
+                                &data[0], data.size());
                 if(res < full_match_max)
                 {
                     append.SetAppendPos(res, data.size());
@@ -327,8 +408,9 @@ public:
             /* Though it _can_ check for complete matches too. */
             
             uint_fast32_t cap = std::min((long)append.OldSize, (long)(FSIZE - data.size()));
-
-            for(unsigned a=full_match_max; a<cap; ++a)
+            
+            if(full_match_max < (int_fast32_t)minimum_pos) full_match_max = minimum_pos;
+            for(uint_fast32_t a=full_match_max; a<cap; ++a)
             {
                 /* We believe std::memchr() might be better optimized
                  * than std::find(). At least in glibc, memchr() does
