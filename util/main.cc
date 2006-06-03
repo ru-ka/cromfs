@@ -238,6 +238,12 @@ private:
         
         for(unsigned a=0; a<entries.size(); ++a)
         {
+#if 0 /* PROFILING TEST */
+            if(fblocks.size() >= 4)
+            {
+                break;
+            }
+#endif
             const std::string& entname = entries[a];
             struct stat st;
             const std::string pathname = path + "/" + entname;
@@ -588,6 +594,15 @@ private:
                 ++priority_candidates;
             }
             
+            /* Add the previous, and previous's previous, etc, to the priority list.. */
+            cromfs_fblocknum_t j = fblocks.size();
+            if(i != fblock_index.end() && j > 0 && i->second == j) --j;
+            while(j > 0 && candidates.size() < MaxFblockCountForBruteForce)
+            {
+                candidates.push_back(--j);
+                ++priority_candidates;
+            }
+            
             for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0; )
             {
                 /*__label__ skip_candidate; - not worth using gcc extension here */
@@ -602,6 +617,7 @@ private:
             uint_fast32_t smallest_size = 0;
             uint_fast32_t smallest_pos  = 0;
             int_fast32_t smallest_hole = 0;
+            uint_fast32_t smallest_orig = 0;
             
             bool found_candidate = false;
             
@@ -612,12 +628,14 @@ private:
                 cromfs_fblocknum_t fblocknum = candidates[a];
                 mkcromfs_fblock& fblock = fblocks[fblocknum];
                 
+                //printf("?"); fflush(stdout);
                 mkcromfs_fblock::AppendInfo appended = fblock.AnalyzeAppend(data);
                 
                 uint_fast32_t this_size = appended.AppendedSize - appended.OldSize;
                 int_fast32_t hole_size = FSIZE - appended.AppendedSize;
 
                 //printf("[cand %u:%u]", (unsigned)fblocknum, (unsigned)this_size);
+                //fflush(stdout);
                 
                 /* Don't do the smallest hole test. This would counter
                  * the purpose of MinimumFreeSpace.
@@ -633,6 +651,7 @@ private:
                     smallest_pos  = appended.AppendBaseOffset;
                     smallest_size = this_size;
                     smallest_hole = hole_size;
+                    smallest_orig = appended.OldSize;
                     //printf("[!]");
                     if(smallest_size == 0) break; /* couldn't get better */
                 }
@@ -652,6 +671,7 @@ private:
                 //mkcromfs_fblock& fblock = fblocks[fblocknum];
                 mkcromfs_fblock::AppendInfo appended;
                 
+                appended.OldSize = smallest_orig;
                 appended.SetAppendPos(smallest_pos, data.size());
                 
                 /* Find an iterator from fblock_index, if it exists. */
@@ -739,6 +759,7 @@ private:
     
     void UnmapOneRandomlyButNot(cromfs_fblocknum_t forbid)
     {
+        //return;
         static cromfs_fblocknum_t counter = 0;
         if(counter < fblocks.size() && counter != forbid)
             fblocks[counter].Unmap();
@@ -748,7 +769,8 @@ private:
 
     void CompressOneRandomlyButNot(cromfs_fblocknum_t forbid)
     {
-        static unsigned counter = 0;
+        //return;
+        static unsigned counter = RandomCompressPeriod;
         if(!counter) counter = RandomCompressPeriod; else { --counter; return; }
         
         /* postpone it if there are no fblocks */
@@ -1018,13 +1040,10 @@ int main(int argc, char** argv)
                     "     where N is around 16 on 32-bit systems, around 28 on 64-bit\n"
                     "     systems, plus memory allocation overhead.\n"
                     " --bruteforcelimit, -c <value>\n"
-                    "     Set the maximum number of randomly selected fblocks to search\n"
-                    "     for overlapping content when deciding which fblock to append to.\n"
+                    "     Set the maximum number of previous fblocks to search for\n"
+                    "     overlapping content when deciding which fblock to append to.\n"
                     "     The default value, 0, means to do straight-forward selection\n"
                     "     based on the free space in the fblock.\n"
-                    "     Note: If you use --bruteforcelimit, you should set minfreespace\n"
-                    "     to a value larger than your bsize in order to leave some spare\n"
-                    "     fblocks for the bruteforcing to test.\n"
                     "\n");
                 return 0;
             }
@@ -1090,9 +1109,9 @@ int main(int argc, char** argv)
             {
                 char* arg = optarg;
                 long val = strtol(arg, &arg, 10);
-                if(val < 1)
+                if(val < 0)
                 {
-                    std::fprintf(stderr, "mkcromfs: The minimum allowed minfreespace is 1. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed minfreespace is 0. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 MinimumFreeSpace = val;

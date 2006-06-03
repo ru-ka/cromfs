@@ -1,11 +1,15 @@
-VERSION=1.1.4.3
+VERSION=1.1.5
 
 include Makefile.sets
 
 #OPTIM += -O0 -fno-inline -g -fmudflap
+#LDOPTS += -fmudflap -lmudflap
+
 OPTIM += -O3 -ftree-vectorize 
 
-#LDOPTS += -fmudflap -lmudflap
+#OPTIM += -O1 -pg -g
+#LDOPTS += -pg
+
 
 OBJS += lzma/C/7zip/Compress/LZMA/LZMAEncoder.o
 OBJS += lzma/C/7zip/Compress/LZ/LZInWindow.o

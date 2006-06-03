@@ -7,18 +7,18 @@
 
 #include <limits.h>
 
-static uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b) __attribute__((pure));
-static uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b)
+static inline uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b) __attribute__((pure));
+static inline uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b)
 {
     return a>b ? a : b;
 }
-static int_fast32_t max_i(int_fast32_t a, int_fast32_t b) __attribute__((pure));
-static int_fast32_t max_i(int_fast32_t a, int_fast32_t b)
+static inline int_fast32_t max_i(int_fast32_t a, int_fast32_t b) __attribute__((pure));
+static inline int_fast32_t max_i(int_fast32_t a, int_fast32_t b)
 {
     return a>b ? a : b;
 }
-static int_fast32_t min_i(int_fast32_t a, int_fast32_t b) __attribute__((pure));
-static int_fast32_t min_i(int_fast32_t a, int_fast32_t b)
+static inline int_fast32_t min_i(int_fast32_t a, int_fast32_t b) __attribute__((pure));
+static inline int_fast32_t min_i(int_fast32_t a, int_fast32_t b)
 {
     return a<b ? a : b;
 }
@@ -166,7 +166,7 @@ static uint_fast32_t memmem_boyermoore
             }
 #else /* method from http://www-igm.univ-mlv.fr/~lecroq/string/node14.html */
             /* Seems to be considerably faster than Bisqwit's method */
-            /* Though I have absolutely no idea what it does */
+            /* Though I have absolutely no idea how it works */
             int_fast32_t suff[nlen];
             if(1) /* scope */
             {
@@ -329,7 +329,16 @@ uint_fast32_t fast_memmem
     }
 #endif
     if(__builtin_expect( (nlen == 1), 0l )) return memchr(haystack, *needle, hlen);
+    
+    
+    /* according to gprof, the non-simplified version
+     * is faster than the simplified version.
+     * In a test case, memmem_boyermoore took 53% of program's
+     * execution time and memmem_boyermoore_simplified took 88%.
+     */
+    
     return memmem_boyermoore(haystack, hlen, needle, nlen);
+    //return memmem_boyermoore_simplified(haystack, hlen, needle, nlen);
 }
 
 #if 0

@@ -89,13 +89,11 @@ public:
              */
             std::vector<unsigned char> raw = get_raw();
             if(DecompressWhenLookup) put_raw(raw);
-
             ssize_t size      = data_size;
             ssize_t remaining = raw.size() - my_offs;
             if(remaining < size) return -1;
             return std::memcmp(&raw[my_offs], &data[0], size);
         }
-        
         if(my_offs + data_size > filesize) return -1;
         
         if(!mmapped) Remap();
@@ -339,6 +337,15 @@ public:
         {
             std::vector<unsigned char> rawdata = get_raw();
             append.OldSize = rawdata.size();
+            if(DecompressWhenLookup)
+            {
+                put_raw(rawdata);
+                if(!is_compressed)
+                {
+                    if(!mmapped) Remap();
+                    if(mmapped) goto UseMMapping;
+                }
+            }
             Buffer.AssignCopyFrom(&rawdata[0], rawdata.size());
         }
         else
@@ -348,6 +355,7 @@ public:
             if(!mmapped) Remap();
             if(mmapped)
             {
+        UseMMapping:
                 Buffer.AssignRefFrom(mmapped, filesize);
             }
             else
@@ -493,7 +501,15 @@ public:
         
         int fd = open(getfn().c_str(), O_RDWR | O_CREAT | O_LARGEFILE, 0644);
         if(fd < 0) { std::perror(getfn().c_str()); return; }
-        pwrite(fd, &data[data.size() - added_length], added_length, append.OldSize);
+        if(pwrite(fd, &data[data.size() - added_length], added_length, append.OldSize)  < 0)
+        {
+            fprintf(stderr, "pwrite failed - tried to write last %u from %p(size=%u) -- oldsize=%u, appendedsize=%u\n",
+                (unsigned)added_length, &data[0], (unsigned)data.size(),
+                (unsigned)append.OldSize,
+                (unsigned)append.AppendedSize
+                 );
+            perror("pwrite");
+        }
         ftruncate(fd, filesize = append.AppendedSize);
         RemapFd(fd);
         close(fd);
@@ -554,7 +570,7 @@ public:
         Unmap();
         if(is_compressed) return;
         
-        int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
+        int fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
         if(fd >= 0)
         {
             RemapFd(fd);

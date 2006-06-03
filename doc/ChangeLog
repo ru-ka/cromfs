@@ -4,14 +4,18 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
-1.1.4.3 2006-06-01  Joel Yliluoma <bisqwit@iki.fi>
+1.1.5	2006-06-03 Joel Yliluoma <bisqwit@iki.fi>
+- Made the --bruteforcelimit option more useful
+  in mkcromfs (performance tuning).
+
+1.1.4.3	2006-06-01 Joel Yliluoma <bisqwit@iki.fi>
 - Minor tuning in mkcromfs
 - Nice image of a box to the program homepage. :)
 
-1.1.4.2 2006-05-22  Joel Yliluoma <bisqwit@iki.fi>
+1.1.4.2	2006-05-22 Joel Yliluoma <bisqwit@iki.fi>
 - Documentation updates
 
-1.1.4.1 2006-05-22  Joel Yliluoma <bisqwit@iki.fi>
+1.1.4.1	2006-05-22 Joel Yliluoma <bisqwit@iki.fi>
 - mkcromfs speed optimization: Bayer-Moore search algorithm
   (Slightly faster than the Horspool version)
 - Fixed mkcromfs
@@ -19,15 +23,15 @@ Changelog
   - mkcromfs 1.1.4 failed to create a filesystem
     (a debugging option was accidentally left activated)
 
-1.1.4 2006-05-21  Joel Yliluoma <bisqwit@iki.fi>
+1.1.4	2006-05-21  Joel Yliluoma <bisqwit@iki.fi>
 - mkcromfs speed optimization: Bayer-Moore-Horspool search algorithm
 - Documentation updates
 
-1.1.3.1 2006-05-18 Joel Yliluoma <bisqwit@iki.fi>
+1.1.3.1	2006-05-18 Joel Yliluoma <bisqwit@iki.fi>
 - Documentation updates
 - Rewrite of cromfs::read_fblock to utilize mmap64
 
-1.1.3 2006-05-17 Joel Yliluoma <bisqwit@iki.fi>
+1.1.3	2006-05-17 Joel Yliluoma <bisqwit@iki.fi>
 - Changing some occassions of std::map and std::multimap
   into gnu hash_map in mkcromfs. This might enable some
   extra speed. (Though the bottleneck is in the disk access.)
@@ -35,7 +39,7 @@ Changelog
   implemented in a way that shouldn't make reiser4fs crash.)
 - Possibly a crash bug fix in mkcromfs
 
-1.1.2.3 2006-05-16 Joel Yliluoma <bisqwit@iki.fi>
+1.1.2.3	2006-05-16 Joel Yliluoma <bisqwit@iki.fi>
 - Upgraded LZMA SDK to version 4.42.
   (Ps: Someone _really_ should rewrite the LZMA compressor
   using _SANE_ C++. The official version is just horrible.
@@ -116,7 +120,7 @@ Changelog
 - Added commandline options in mkcromfs:
  --decompresslookups, --randomcompressperiod and --minfreespace
 
-1.0.3   2006-05-11 Joel Yliluoma <bisqwit@iki.fi>
+1.0.3  	2006-05-11 Joel Yliluoma <bisqwit@iki.fi>
 - Documentation updates
 - Broken mkcromfs release
 - Added statistics reporting in mkcromfs at end

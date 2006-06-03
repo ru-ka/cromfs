@@ -360,6 +360,20 @@ and block size (bigger blocks need more time to decompress).
 However, in the general case, it is quite safe to assume
 that mkcromfs is the <i>slowest</i> of all. The same goes
 for resource testing (RAM).
+ <p />
+cromfs-driver requires an amount of RAM proportional to a few factors.
+It can be approximated with this formula:<p />
+ <code>
+  Max_RAM_usage = FBLOCK_CACHE_MAX_SIZE * fblock_size + READDIR_CACHE_MAX_SIZE * 60k
+ </code><p />
+Where
+<ul>
+ <li>fblock_size is the value of \"--fblock\" used when the filesystem was created</li>
+ <li>FBLOCK_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 10)</li>
+ <li>READDIR_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 3)</li>
+ <li>60k is an estimate of a large directory size (2000 files with average name length of 10-20 letters)</li>
+</ul>
+For example, with 1 MB fblocks, the memory usage would be around 10 MB.
 
 ", 'usage:1. Getting started' => "
 
@@ -421,18 +435,20 @@ To improve the compression, try these tips:
      identical content should be processed right after one other.</li>
  <li>Adjust the --bruteforcelimit option (-c). Larger values will require
      mkcromfs to check more fblocks for each block it encodes (making the
-     encoding much slower), in the hope it improves compression.
-     The fewer your fblocks are in number (larger in size),
-     the better the chances it does good.
-    <br />
-     Note: If you use --bruteforcelimit, you should also adjust
-     your --minfreespace setting as instructed in <tt>mkcromfs --help</tt>.
+     encoding much slower), in the hope it improves compression.<br />
+     Basically, --bruteforcelimit is a way to virtually multiply
+     the --fsize (thus improving compression) by an integer factor
+     without increasing the memory usage of cromfs-driver.
   </li>
 </ul>
 To improve the filesystem generation speed, try these tips:
 <ul>
  <li>Use the --decompresslookups option (-e), if you have the
      diskspace to spare.</li>
+ <li>Use a large value for the --randomcompressperiod option,
+     for example -r10000. This together with -e will significantly
+     improve the speed of mkcromfs, on the cost of temporary disk
+     space usage.</li>
  <li>Use the TEMP environment variable to control where the temp
      files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks

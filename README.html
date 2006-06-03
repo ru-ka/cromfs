@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.4.3.
+  This is the documentation of cromfs-1.1.5.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -372,6 +372,20 @@ and block size (bigger blocks need more time to decompress).
 However, in the general case, it is quite safe to assume
 that mkcromfs is the <i>slowest</i> of all. The same goes
 for resource testing (RAM).
+ <p />
+cromfs-driver requires an amount of RAM proportional to a few factors.
+It can be approximated with this formula:<p />
+ <code>
+  Max_RAM_usage = FBLOCK_CACHE_MAX_SIZE * fblock_size + READDIR_CACHE_MAX_SIZE * 60k
+ </code><p />
+Where
+<ul>
+ <li>fblock_size is the value of "--fblock" used when the filesystem was created</li>
+ <li>FBLOCK_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 10)</li>
+ <li>READDIR_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 3)</li>
+ <li>60k is an estimate of a large directory size (2000 files with average name length of 10-20 letters)</li>
+</ul>
+For example, with 1 MB fblocks, the memory usage would be around 10 MB.
 
 </div><H2 id="usage" class="level2"><a name="usage"></a>6. Getting started</H2><div class="level2" id="divusage">
 
@@ -433,18 +447,20 @@ To improve the compression, try these tips:
      identical content should be processed right after one other.</li>
  <li>Adjust the --bruteforcelimit option (-c). Larger values will require
      mkcromfs to check more fblocks for each block it encodes (making the
-     encoding much slower), in the hope it improves compression.
-     The fewer your fblocks are in number (larger in size),
-     the better the chances it does good.
-    <br />
-     Note: If you use --bruteforcelimit, you should also adjust
-     your --minfreespace setting as instructed in <tt>mkcromfs --help</tt>.
+     encoding much slower), in the hope it improves compression.<br />
+     Basically, --bruteforcelimit is a way to virtually multiply
+     the --fsize (thus improving compression) by an integer factor
+     without increasing the memory usage of cromfs-driver.
   </li>
 </ul>
 To improve the filesystem generation speed, try these tips:
 <ul>
  <li>Use the --decompresslookups option (-e), if you have the
      diskspace to spare.</li>
+ <li>Use a large value for the --randomcompressperiod option,
+     for example -r10000. This together with -e will significantly
+     improve the speed of mkcromfs, on the cost of temporary disk
+     space usage.</li>
  <li>Use the TEMP environment variable to control where the temp
      files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
@@ -492,8 +508,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml38><b id=eml24 class=nonmail>7n</b><span id=eml25 class=ismail>Joel</span><span id=eml26 class=nonmail><b>yyNl41</b></span><span id=eml27 class=ismail> Yli</span><b id=eml28 class=nonmail>hjg11rb</b><span id=eml29 class=ismail>luom</span><span id=eml30 class=nonmail><b>hhyceee.u</b></span><span id=eml31 class=ismail>a &lt;bi</span><b id=eml32 class=nonmail>px8shr2n.p</b><span id=eml33 class=ismail>sqwi</span><span id=eml34 class=nonmail><b>yu0x</b></span><span id=eml35 class=ismail>t@ik</span><b id=eml36 class=nonmail>@vmhQes.g</b><span id=eml37 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=24;i<38;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml16><b id=eml2 class=nonmail>dHvo@</b><span id=eml3 class=ismail>Joel</span><span id=eml4 class=nonmail><b>m@@arXen</b></span><span id=eml5 class=ismail> Yli</span><b id=eml6 class=nonmail>p/</b><span id=eml7 class=ismail>luom</span><span id=eml8 class=nonmail><b>gk..e1c@</b></span><span id=eml9 class=ismail>a &lt;bi</span><b id=eml10 class=nonmail>sJmtsj</b><span id=eml11 class=ismail>sqwi</span><span id=eml12 class=nonmail><b>lwlh@1@9Or</b></span><span id=eml13 class=ismail>t@ik</span><b id=eml14 class=nonmail>pa1aeNEde@</b><span id=eml15 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=2;i<16;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p>
 The author also wishes to hear if you use cromfs, and for what you
@@ -516,9 +532,9 @@ use it and what you think of it.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Tue, 30 May 2006 18:49:48 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Sat, 03 Jun 2006 18:38:34 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Thu, 01 Jun 2006 00:18:36 +0300</small>
+  at Sat, 03 Jun 2006 18:38:35 +0300</small>
  </p>
 </body>
 </html>
