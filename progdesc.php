@@ -364,7 +364,7 @@ for resource testing (RAM).
 cromfs-driver requires an amount of RAM proportional to a few factors.
 It can be approximated with this formula:<p />
  <code>
-  Max_RAM_usage = FBLOCK_CACHE_MAX_SIZE * fblock_size + READDIR_CACHE_MAX_SIZE * 60k
+  Max_RAM_usage = FBLOCK_CACHE_MAX_SIZE &times; fblock_size + READDIR_CACHE_MAX_SIZE &times; 60k + 8 &times; num_blocks
  </code><p />
 Where
 <ul>
@@ -372,8 +372,12 @@ Where
  <li>FBLOCK_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 10)</li>
  <li>READDIR_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 3)</li>
  <li>60k is an estimate of a large directory size (2000 files with average name length of 10-20 letters)</li>
+ <li>num_blocks is the number of block structures in the filesystem
+     (maximum size is <code>ceil(total_size_of_files / block_size)</code>,
+      but it may be smaller.)
 </ul>
-For example, with 1 MB fblocks, the memory usage would be around 10 MB.
+For example, for a 500 MB archive with 16&nbsp;kB blocks and 1&nbsp;MB fblocks,
+the memory usage would be around 10.2&nbsp;MB.
 
 ", 'usage:1. Getting started' => "
 

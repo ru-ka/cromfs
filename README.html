@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.6.
+  This is the documentation of cromfs-1.1.6.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -376,7 +376,7 @@ for resource testing (RAM).
 cromfs-driver requires an amount of RAM proportional to a few factors.
 It can be approximated with this formula:<p />
  <code>
-  Max_RAM_usage = FBLOCK_CACHE_MAX_SIZE * fblock_size + READDIR_CACHE_MAX_SIZE * 60k
+  Max_RAM_usage = FBLOCK_CACHE_MAX_SIZE &times; fblock_size + READDIR_CACHE_MAX_SIZE &times; 60k + 8 &times; num_blocks
  </code><p />
 Where
 <ul>
@@ -384,8 +384,12 @@ Where
  <li>FBLOCK_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 10)</li>
  <li>READDIR_CACHE_MAX_SIZE is a constant defined in cromfs.cc (default: 3)</li>
  <li>60k is an estimate of a large directory size (2000 files with average name length of 10-20 letters)</li>
+ <li>num_blocks is the number of block structures in the filesystem
+     (maximum size is <code>ceil(total_size_of_files / block_size)</code>,
+      but it may be smaller.)
 </ul>
-For example, with 1 MB fblocks, the memory usage would be around 10 MB.
+For example, for a 500 MB archive with 16&nbsp;kB blocks and 1&nbsp;MB fblocks,
+the memory usage would be around 10.2&nbsp;MB.
 
 </div><H2 id="usage" class="level2"><a name="usage"></a>6. Getting started</H2><div class="level2" id="divusage">
 
@@ -508,8 +512,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml21><b id=eml7 class=nonmail>1e6ufsepmm</b><span id=eml8 class=ismail>Joel</span><span id=eml9 class=nonmail><b>7o@kP3@n2</b></span><span id=eml10 class=ismail> Yli</span><b id=eml11 class=nonmail>5u7k1txq</b><span id=eml12 class=ismail>luom</span><span id=eml13 class=nonmail><b>@e@e0Sy</b></span><span id=eml14 class=ismail>a &lt;bi</span><b id=eml15 class=nonmail>inq7h</b><span id=eml16 class=ismail>sqwi</span><span id=eml17 class=nonmail><b>ec075J</b></span><span id=eml18 class=ismail>t@ik</span><b id=eml19 class=nonmail>pH</b><span id=eml20 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=7;i<21;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml38><b id=eml24 class=nonmail>eYeie</b><span id=eml25 class=ismail>Joel</span><span id=eml26 class=nonmail><b>c</b></span><span id=eml27 class=ismail> Yli</span><b id=eml28 class=nonmail>M@ene5eth</b><span id=eml29 class=ismail>luom</span><span id=eml30 class=nonmail><b>1</b></span><span id=eml31 class=ismail>a &lt;bi</span><b id=eml32 class=nonmail>tedqs1@e</b><span id=eml33 class=ismail>sqwi</span><span id=eml34 class=nonmail><b>Yveqt</b></span><span id=eml35 class=ismail>t@ik</span><b id=eml36 class=nonmail>1h</b><span id=eml37 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=24;i<38;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p>
 The author also wishes to hear if you use cromfs, and for what you
@@ -532,9 +536,9 @@ use it and what you think of it.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Sat, 03 Jun 2006 18:38:34 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Sun, 04 Jun 2006 17:11:03 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Sun, 04 Jun 2006 05:22:25 +0300</small>
+  at Sun, 04 Jun 2006 23:58:17 +0300</small>
  </p>
 </body>
 </html>

@@ -18,9 +18,9 @@ namespace
             }
         }
         inline uint_fast32_t update(uint_fast32_t crc, unsigned char b) const
-#ifdef __GNUC__
+/*
             __attribute__((pure))
-#endif
+*/
         {
             return ((crc >> 8) /* & 0x00FFFFFF*/) ^ crctable[(unsigned char)(crc^b)];
         }

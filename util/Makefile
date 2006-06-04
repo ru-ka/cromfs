@@ -1,4 +1,4 @@
-VERSION=1.1.6
+VERSION=1.1.6.1
 
 include Makefile.sets
 
@@ -39,3 +39,4 @@ include depfun.mak
 
 clean:
 	rm -f $(OBJS_MK) $(OBJS_UN)
+	rm -f mkcromfs unmkcromfs

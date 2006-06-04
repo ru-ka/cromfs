@@ -326,8 +326,10 @@ cromfs_inode_internal cromfs::read_uncompressed_inode(uint_fast64_t offset)
     
     ExtractInodeHeader(inode, Buf);
     
+#if INODE_DEBUG
     printf("read_uncompressed_inode(%lld): %s\n",
         offset, DumpInode(inode).c_str());
+#endif
     
     uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
     
@@ -431,6 +433,11 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
         EraseRandomlyOne(cache_fblocks);
     }
     
+    return cache_fblocks[ind] = read_fblock_uncached(ind);
+}
+
+cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t ind)
+{
     if(fblktab.empty()) reread_fblktab();
     
     uint_fast32_t comp_size = fblktab[ind].length;
@@ -455,7 +462,7 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
                        ~unmap() { munmap(P,S); }
                        void*P; size_t S; } unm(map_buf, map_size);
         
-        return cache_fblocks[ind] = LZMADeCompress(Buf, comp_size);
+        return LZMADeCompress(Buf, comp_size);
     }
     
     /* mmap failed for some reason, revert to pread64 */
@@ -474,7 +481,7 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t ind)
         throw EIO;
     }
 
-    return cache_fblocks[ind] = LZMADeCompress(Buf);
+    return LZMADeCompress(Buf);
 }
 
 int_fast64_t cromfs::read_file_data(const cromfs_inode_internal& inode,

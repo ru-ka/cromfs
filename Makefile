@@ -1,4 +1,4 @@
-VERSION=1.1.6
+VERSION=1.1.6.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -90,7 +90,12 @@ OBJS=cromfs.o cromfs-ops.o main.o
 
 LDLIBS += -lfuse
 
-all: cromfs-driver util/mkcromfs
+DEPFUN_INSTALL=ignore
+
+PROGS = cromfs-driver util/mkcromfs util/unmkcromfs
+DOCS  = doc/FORMAT README.html doc/ChangeLog doc/*.txt
+
+all: $(PROGS)
 
 cromfs-driver: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS)
@@ -98,6 +103,22 @@ cromfs-driver: $(OBJS)
 
 util/mkcromfs: FORCE
 	make -C util mkcromfs
+
+util/unmkcromfs: FORCE
+	make -C util unmkcromfs
+
+clean:
+	rm -rf $(OBJS) $(PROGS) install
+	make -C util clean
+
+install: $(PROGS) FORCE
+	- mkdir install install/progs install/docs
+	cp -p $(PROGS) install/progs/
+	cp -p $(DOCS) install/docs/
+	- strip install/progs/*
+	@echo "*****************************************"
+	@echo "The 'install' directory was prepared. Copy the contents to the locations you see fit."
+	@echo "*****************************************"
 
 include depfun.mak
 

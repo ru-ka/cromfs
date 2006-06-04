@@ -4,13 +4,17 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.6.1	2006-06-04 Joel Yliluoma <bisqwit@iki.fi>
+- Compilation workaround
+- More options in unmkcromfs
+
 1.1.6	2006-06-04 Joel Yliluoma <bisqwit@iki.fi>
 - Added a new utility: unmkcromfs
   It extracts the contents of a cromfs volume without mounting it
   using an optimized algorithm that minimizes duplicate data access.
 
 1.1.5	2006-06-03 Joel Yliluoma <bisqwit@iki.fi>
-- Made the --bruteforcelimit option more useful
+- Made the --bruteforcelimit option (-c) more useful
   in mkcromfs (performance tuning).
 
 1.1.4.3	2006-06-01 Joel Yliluoma <bisqwit@iki.fi>
@@ -22,7 +26,7 @@ Changelog
 
 1.1.4.1	2006-05-22 Joel Yliluoma <bisqwit@iki.fi>
 - mkcromfs speed optimization: Bayer-Moore search algorithm
-  (Slightly faster than the Horspool version)
+  (Noticeably faster than the Horspool version)
 - Fixed mkcromfs
   - mkcromfs from 1.1.4 crashed in certain situations
   - mkcromfs 1.1.4 failed to create a filesystem

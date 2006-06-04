@@ -121,3 +121,7 @@ static void W64(void* p, uint_fast64_t value)
     W32(data+0, (value));
     W32(data+4, (value >> UINT64_C(32)));
 }
+
+
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)

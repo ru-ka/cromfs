@@ -38,6 +38,7 @@ protected:
     cromfs_inode_internal read_uncompressed_inode(uint_fast64_t offset);
     
     cromfs_cached_fblock& read_fblock(cromfs_fblocknum_t ind);
+    cromfs_cached_fblock read_fblock_uncached(cromfs_fblocknum_t ind);
     
     uint_fast64_t CalcSizeInBlocks(uint_fast64_t filesize) const;
 
