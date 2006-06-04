@@ -2,7 +2,7 @@
 
 #include <string>
 
-typedef int romfs_exception;
+typedef int cromfs_exception;
 
 class cromfs
 {
@@ -27,7 +27,7 @@ public:
 
     void forget_blktab();
 
-private:
+protected:
     void reread_superblock();
     void reread_blktab();
     void reread_fblktab();
@@ -41,7 +41,7 @@ private:
     
     uint_fast64_t CalcSizeInBlocks(uint_fast64_t filesize) const;
 
-private:
+protected:
     int fd; // file handle
     
     cromfs_inode_internal rootdir, inotab;

@@ -29,7 +29,7 @@ the fuse_reply_err() function.
 
 #define CROMFS_CTX_END() \
     } \
-    catch(romfs_exception e) \
+    catch(cromfs_exception e) \
     { \
         REPLY_ERR(e); \
         return; \
@@ -60,7 +60,7 @@ extern "C" {
             fs = new cromfs(fd);
         }
         /*catch(char){}*/
-        catch(romfs_exception e)
+        catch(cromfs_exception e)
         {
             errno=e;
             perror("cromfs");

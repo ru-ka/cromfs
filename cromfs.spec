@@ -1,7 +1,7 @@
 Summary:	Compressed ROM filesystem for Linux in user-space
 Name:		cromfs
-Version:	1.1.4.2
-Release:	0.2
+Version:	1.1.6
+Release:	0.3
 License:	GPL
 Group:		Applications
 Source0:	http://bisqwit.iki.fi/src/arch/%{name}-%{version}.tar.bz2
@@ -40,15 +40,16 @@ The creation of cromfs was inspired from Squashfs and Cramfs.
 rm -rf $RPM_BUILD_ROOT
 
 install -d $RPM_BUILD_ROOT%{_bindir}
-install  cromfs-driver $RPM_BUILD_ROOT%{_bindir}
-install  util/mkcromfs $RPM_BUILD_ROOT%{_bindir}
+install  cromfs-driver   $RPM_BUILD_ROOT%{_bindir}
+install  util/mkcromfs   $RPM_BUILD_ROOT%{_bindir}
+install  util/unmkcromfs $RPM_BUILD_ROOT%{_bindir}
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(644,root,root,755)
-%doc doc/ChangeLog doc/FORMAT README.html doc/ImplementationGuide.txt doc/WriteAccess.txt
+%doc doc/ChangeLog doc/FORMAT README.html doc/ImplementationGuide.txt doc/WriteAccess.txt doc/BlockIndexing.txt
 %attr(755,root,root) %{_bindir}/*
 
 %define date	%(echo `LC_ALL="C" date +"%a %b %d %Y"`)

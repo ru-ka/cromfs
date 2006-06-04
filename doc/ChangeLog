@@ -4,6 +4,11 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.6	2006-06-04 Joel Yliluoma <bisqwit@iki.fi>
+- Added a new utility: unmkcromfs
+  It extracts the contents of a cromfs volume without mounting it
+  using an optimized algorithm that minimizes duplicate data access.
+
 1.1.5	2006-06-03 Joel Yliluoma <bisqwit@iki.fi>
 - Made the --bruteforcelimit option more useful
   in mkcromfs (performance tuning).
