@@ -1,4 +1,4 @@
-VERSION=1.1.6.1
+VERSION=1.1.7
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -77,7 +77,15 @@ ARCHFILES=\
 	util/lzma/C/Common/MyGuidDef.h \
 	util/lzma/C/Common/MyCom.h \
 	util/lzma/C/Common/CRC.cpp \
-	util/lzma/C/Common/Types.h
+	util/lzma/C/Common/Types.h \
+	\
+	tests/run.sh \
+	tests/a/fblock.hh tests/a/lzma.hh \
+	tests/a/md5-copy.hh tests/a/md5.hh \
+	tests/a/util.hh \
+	tests/a/fifo tests/a/fifo-copy \
+	tests/a/dir2 tests/a/dir2/util.cc \
+	tests/a/dir2/util.hh
 
 include Makefile.sets
 
@@ -119,6 +127,9 @@ install: $(PROGS) FORCE
 	@echo "*****************************************"
 	@echo "The 'install' directory was prepared. Copy the contents to the locations you see fit."
 	@echo "*****************************************"
+
+test: $(PROGS) FORCE
+	cd tests && ./run.sh
 
 include depfun.mak
 

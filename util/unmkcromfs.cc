@@ -1,3 +1,6 @@
+#define _LARGEFILE64_SOURCE
+#define __STDC_CONSTANT_MACROS
+
 #include "../cromfs.hh"
 #include "util.hh"
 
@@ -52,6 +55,9 @@ static const std::string DumpTime(uint_fast32_t time)
     return Buf;
 }
 
+/* This object tries to merge several file writes
+ * together to reduce the syscall traffic.
+ */
 class FileOutputter
 {
 public:
@@ -120,9 +126,10 @@ public:
     {
         cromfs_dirinfo dir;
         std::multimap<cromfs_fblocknum_t, std::string> fblock_users;
+        std::multimap<cromfs_inodenum_t, std::string> inode_files;
         
         std::printf("Scanning directories...\n");
-        merge_dir_recursive(dir, fblock_users, 1, "");
+        merge_dir_recursive(dir, fblock_users, inode_files, 1, "");
         
         if(listing_mode) return;
         
@@ -134,11 +141,24 @@ public:
         unsigned expect_files = 0;
         unsigned expect_links = 0;
         
+        std::map<cromfs_inodenum_t, std::string> seen_inodes;
+        std::set<std::string> duplicate_inodes;
+        
         umask(0);
         for(cromfs_dirinfo::iterator i = dir.begin(); i != dir.end(); ++i)
         {
-            cromfs_inode_internal ino = read_inode(i->second);
+            cromfs_inodenum_t inonum = i->second;
+            
+            cromfs_inode_internal ino = read_inode(inonum);
             std::string target = targetdir + "/" + i->first;
+            
+            if(seen_inodes.find(inonum) != seen_inodes.end())
+            {
+                /* Don't create the inode twice */
+                duplicate_inodes.insert(i->first);
+                continue;
+            }
+            seen_inodes[inonum] = i->first;
             
             int r = 0;
             if(S_ISDIR(ino.mode))
@@ -158,6 +178,11 @@ public:
             else
             {
                 r = mknod( target.c_str(), ino.mode | 0600, ino.rdev);
+                if(r < 0 && errno == EEXIST)
+                {
+                    unlink( target.c_str() );
+                    r = mknod( target.c_str(), S_IFREG | 0600, 0);
+                }
             }
             
             if(S_ISREG(ino.mode)) ++expect_files;
@@ -181,7 +206,7 @@ public:
              * is why we used 0600 and 0700 here.
              */
             
-            //printf("%s: %d\n", i->first.c_str(), (int) i->second);
+            //printf("%s: %d\n", i->first.c_str(), (int) inonum);
         }
         
         uint_fast64_t total_written = 0;
@@ -193,20 +218,22 @@ public:
                    );
         for(cromfs_fblocknum_t fblockno = 0; fblockno < fblktab.size(); ++fblockno)
         {
+            /* Count the number of files/symlinks that require data
+             * from this particular fblock.
+             */
             unsigned nfiles = 0;
 
             for(std::multimap<cromfs_fblocknum_t, std::string>::iterator
                 i = fblock_users.find(fblockno);
                 i != fblock_users.end() && i->first == fblockno;
                 ++i) ++nfiles;
-
             
             if(!nfiles)
             {
-                // This fblock only contains directories
-                // or parts of the inode table, or none of
-                // the selected files.
-                // Do not waste resources decompressing it now.
+                /* This fblock only contains directories or parts of the
+                 * inode table, or none of the selected files.
+                 * Do not waste resources decompressing it now.
+                 */
                 std::printf("fblock %u / %u: skipping\n",
                     (unsigned)fblockno, (unsigned)fblktab.size());
                 std::fflush(stdout);
@@ -231,13 +258,15 @@ public:
             
             uint_fast64_t wrote_size = 0;
 
+            /* Write into each file that requires data from this fblock */
             for(std::multimap<cromfs_fblocknum_t, std::string>::iterator
                 i = fblock_users.find(fblockno);
                 i != fblock_users.end() && i->first == fblockno;
                 ++i)
             {
-                std::string target = targetdir + "/" + i->second;
-                cromfs_inode_internal ino = read_inode_and_blocks(dir[i->second]);
+                const cromfs_inodenum_t inonum = dir[i->second];
+                const std::string target = targetdir + "/" + i->second;
+                const cromfs_inode_internal ino = read_inode_and_blocks(inonum);
                 
                 // std::printf("%s <- fblock %u...\n", i->second.c_str(), (unsigned)fblockno);
                 
@@ -257,12 +286,13 @@ public:
                 
                 FileOutputter file(fd, ino.bytesize);
                 
+                /* Find which blocks need this fblock */
                 for(unsigned a=0; a<ino.blocklist.size(); ++a)
                 {
                     if(ino.blocklist[a] >= blktab.size())
                     {
-                        std::fprintf(stderr, "inode %u is corrupt (block #%u indicates block %llu, but block table has only %llu)\n",
-                            (unsigned)dir[i->second],
+                        std::fprintf(stderr, "inode %u (used by %s) is corrupt (block #%u indicates block %llu, but block table has only %llu)\n",
+                            (unsigned)inonum, i->second.c_str(),
                             a,
                             (unsigned long long)ino.blocklist[a],
                             (unsigned long long)blktab.size()
@@ -272,27 +302,33 @@ public:
                     const cromfs_block_storage& block = blktab[ino.blocklist[a]];
                     if(block.fblocknum != fblockno) continue;
                     
+                    /* Allright, it uses data from this fblock. */
+
+                    /* Count how much. */
                     uint_fast64_t block_size = sblock.uncompressed_block_size;
                     uint_fast64_t file_offset = a * block_size;
-                    if(a+1 == ino.blocklist.size()
-                    && (ino.bytesize % block_size) > 0)
+                    /* the last block may be smaller than the block size */
+                    if(a+1 == ino.blocklist.size() && (ino.bytesize % block_size) > 0)
+                    {
                         block_size = ino.bytesize % block_size;
+                    }
                     
                     if(block.startoffs + block_size > fblock.size())
                     {
-                        std::fprintf(stderr, "block %u (block #%u of inode %u) is corrupt (points to byte %llu, fblock size is %llu)\n",
+                        std::fprintf(stderr, "block %u (block #%u of inode %u) is corrupt (points to bytes %llu-%llu, fblock size is %llu)\n",
                             (unsigned)ino.blocklist[a],
                             a,
-                            (unsigned)dir[i->second],
-                            (unsigned long long)block.startoffs,
+                            (unsigned)inonum,
+                            (unsigned long long)(block.startoffs),
+                            (unsigned long long)(block.startoffs + block_size-1),
                             (unsigned long long)fblock.size()
                                 );
                         continue;
                     }
                     
                     /* Leave holes into the files (allowed by POSIX standard). */
-                    /* When the block consists entirely of zeroes, it does not need
-                     * to be written.
+                    /* When the block consists entirely of zeroes, it does
+                     * not need to be written.
                      */
                     if(!use_sparse
                     || !is_zero_block(&fblock[block.startoffs], block_size))
@@ -302,7 +338,7 @@ public:
                     wrote_size += block_size;
                 }
                 
-                /* file goes out of scope, will be automatically closed. */
+                /* "file" goes out of scope, and hence it will be automatically closed. */
             }
             
             if(expect_size < wrote_size)
@@ -325,11 +361,17 @@ public:
         
         std::printf("Fixing up symlinks and access timestamps\n");
         
-        // reverse order so that dirs are touched after the files within
+        /* Reverse order so that dirs are touched after the files within.
+         * This is something GNU tar can't do -- to extract modification
+         * times of directories properly.
+         */
         for(cromfs_dirinfo::reverse_iterator i = dir.rbegin(); i != dir.rend(); ++i)
         {
-            cromfs_inode_internal ino = read_inode(i->second);
-            std::string target = targetdir + "/" + i->first;
+            if(duplicate_inodes.find(i->first) != duplicate_inodes.end()) continue;
+            
+            const cromfs_inodenum_t inonum = i->second;
+            const cromfs_inode_internal ino = read_inode(inonum);
+            const std::string target = targetdir + "/" + i->first;
             
             if(S_ISLNK(ino.mode))
             {
@@ -375,21 +417,56 @@ public:
                 perror(target.c_str());
             }
             
-            if(chown( target.c_str(), ino.uid, ino.gid) < 0)
+            if(lchown( target.c_str(), ino.uid, ino.gid) < 0)
             {
                 perror(target.c_str());
             }
 
-            struct utimbuf data = { ino.time, ino.time};
+            struct utimbuf data = { ino.time, ino.time };
             
-            if(utime(target.c_str(), &data) < 0)
+            /* it is not possible to use utime() to change symlinks' modtime */
+            if(!S_ISLNK(ino.mode)
+            && utime(target.c_str(), &data) < 0)
                 perror(target.c_str());
+        }
+        
+        std::printf("Creating %u hardlinks...\n",
+            (unsigned) (inode_files.size() - seen_inodes.size())
+                   );
+        for(std::map<cromfs_inodenum_t, std::string>::iterator
+            i = seen_inodes.begin(); i != seen_inodes.end(); ++i)
+        {
+            cromfs_inodenum_t inonum   = i->first;
+            const std::string& link_fn = i->second;
+            
+            for(std::multimap<cromfs_inodenum_t, std::string>::iterator
+                j = inode_files.find(inonum);
+                j != inode_files.end() && j->first == inonum;
+                ++j)
+            {
+                if(j->second != link_fn)
+                {
+                    std::string oldpath = targetdir + "/" + link_fn;
+                    std::string newpath = targetdir + "/" + j->second;
+                    int r = link(oldpath.c_str(), newpath.c_str());
+                    if(r < 0 && errno == EEXIST)
+                    {
+                        unlink( newpath.c_str() );
+                        link(oldpath.c_str(), newpath.c_str());
+                    }
+                    if(r < 0)
+                    {
+                        perror(newpath.c_str());
+                    }
+                }
+            }
         }
     }
 
 private:
     void merge_dir_recursive(cromfs_dirinfo& target,
                              std::multimap<cromfs_fblocknum_t, std::string>& fblock_users,
+                             std::multimap<cromfs_inodenum_t, std::string>& inode_files,
                              cromfs_inodenum_t root_ino,
                              const std::string& parent)
     {
@@ -419,24 +496,40 @@ private:
                 if(!MatchFile(entname)) continue;
             }
             
+            bool is_duplicate_inode = inode_files.find(i->second) != inode_files.end();
+            
             target[entname] = i->second;
+            
+            if(is_duplicate_inode && S_ISDIR(ino.mode))
+            {
+                std::fprintf(stderr, "Corrupt filesystem: two or more directories have the same inode number\n");
+            }
+            
+            inode_files.insert(std::make_pair(i->second, entname));
             
             if(S_ISDIR(ino.mode))
             {
-                merge_dir_recursive(target, fblock_users, i->second, entname + "/");
+                merge_dir_recursive(target, fblock_users, inode_files, i->second, entname + "/");
             }
             else if(S_ISLNK(ino.mode) /* only symlinks and regular files have content */
                  || S_ISREG(ino.mode)) // to limit extraction to certain type
             {
-                // list the fblocks needed by this file
-                std::set<cromfs_fblocknum_t> fblist;
-                for(unsigned a=0; a<ino.blocklist.size(); ++a)
-                    fblist.insert(blktab[ino.blocklist[a]].fblocknum);
-
-                for(std::set<cromfs_fblocknum_t>::iterator
-                    j = fblist.begin(); j != fblist.end(); ++j)
+                if(!is_duplicate_inode)
                 {
-                    fblock_users.insert(std::make_pair(*j, entname));
+                    /* List the fblocks needed by this file, but only
+                     * for the first occurance to prevent duplicate
+                     * writes into hardlinked files.
+                     */
+                    
+                    std::set<cromfs_fblocknum_t> fblist;
+                    for(unsigned a=0; a<ino.blocklist.size(); ++a)
+                        fblist.insert(blktab[ino.blocklist[a]].fblocknum);
+
+                    for(std::set<cromfs_fblocknum_t>::iterator
+                        j = fblist.begin(); j != fblist.end(); ++j)
+                    {
+                        fblock_users.insert(std::make_pair(*j, entname));
+                    }
                 }
             }
             else if(ino.bytesize > 0)

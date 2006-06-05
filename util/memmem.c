@@ -7,6 +7,14 @@
 
 #include <limits.h>
 
+#ifdef __GNUC__
+# define likely(x)       __builtin_expect(!!(x), 1)
+# define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+# define likely(x)   (x)
+# define unlikely(x) (x)
+#endif
+
 static inline uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b) __attribute__((pure));
 static inline uint_fast32_t max_u(uint_fast32_t a, uint_fast32_t b)
 {
@@ -190,7 +198,14 @@ static uint_fast32_t memmem_boyermoore
             {
                 uint_fast32_t j=0;
                 int_fast32_t i;
-                for (i = 0; i < nlen; ++i) skip[i] = nlen;
+                
+                // the if(likely(nlen > 0) is here to inform gcc that
+                // nlen is not likely zero. It helps it placing
+                // the for() better.
+                if(likely(nlen > 0))
+                    for (i = 0; i < nlen; ++i)
+                        skip[i] = nlen;
+                
                 for (i = nlen - 1; i >= -1; --i)
                     if (i == -1 || suff[i] == i + 1)
                         for (; j < nlen - 1 - i; ++j)
@@ -213,8 +228,7 @@ static uint_fast32_t memmem_boyermoore
             uint_fast32_t npos=nlen-1;
             while(needle[npos] == haystack[npos+hpos])
             {
-                if(npos == 0) return hpos;
-                --npos;
+                if(unlikely(npos-- == 0)) return hpos;
             }
             hpos += max_i(skip[npos], npos - occ[haystack[npos+hpos]]);
         }
@@ -230,8 +244,7 @@ static uint_fast32_t memmem_boyermoore
             uint_fast32_t npos=nlen-1;
             while (needle[npos] == haystack[npos + hpos])
             {
-                if(npos == 0) return hpos;
-                --npos;
+                if(npos-- == 0) return hpos;
                 if (processed_prev != 0 && npos == nlen - 1 - shift)
                     npos -= processed_prev;
             }
@@ -261,7 +274,7 @@ static uint_fast32_t memmem_boyermoore
 
 /* memmem() implementation, Shift-Or algorithm.
  * Reference: http://en.wikipedia.org/wiki/Shift_Or_Algorithm
- * Status: Works, but slow.
+ * Status: Works, but not faster than boyer-moore.
  */
 static uint_fast32_t memmem_shiftor
     (const unsigned char* __restrict__ haystack, uint_fast32_t hlen,

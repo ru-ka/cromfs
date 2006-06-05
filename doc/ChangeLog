@@ -4,6 +4,10 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
+1.1.7	2006-06-04 Joel Yliluoma <bisqwit@iki.fi>
+- Hardlink extraction support in unmkcromfs
+- Added tests: make test
+
 1.1.6.1	2006-06-04 Joel Yliluoma <bisqwit@iki.fi>
 - Compilation workaround
 - More options in unmkcromfs

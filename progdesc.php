@@ -223,6 +223,12 @@ a scientific study, but here goes:
    <td>Unknown</td>
    <td class=hmm>Mostly not</td>
    <td class=hmm>Depends on slave filesystem, generally yes</td>
+ <tr align=left>
+  <th>Extended attributes</th>
+   <td class=bad>No</td>
+   <td>Unknown</td>
+   <td>Unknown</td>
+   <td>Unknown, may depend on slave filesystem</td>
 </table>
 
 Note: cromfs now saves the uid and gid in the filesystem. However,
