@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.1.7.
+  This is the documentation of cromfs-1.2.0.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -64,12 +64,14 @@ See the <a href="http://bisqwit.iki.fi/src/cromfs-changelog.txt">ChangeLog</a>.
   </li>
  <li>Files are stored in solid blocks, meaning that parts of different
   files are compressed together for effective compression</li>
+ <li>Furthermore, different files utilize the same data blocks where
+  possible, to reduce the amount of data that needs to be compressed</li>
  <li>Most of inode types recognized by Linux are supported (see <a href="#compare">comparisons</a>).</li>
  <li>The <a href="http://www.7-zip.com/sdk.html">LZMA compression</a> is used.
   In the general case, LZMA compresses better than gzip and bzip2.</li>
- <li>As with usual filesystems, the files on a cromfs volume can be accessed
-  in arbitrary order; the waits to open a specific file are small, despite
-  the files being semisolidly archived.</li>
+ <li>As with usual filesystems, the files on a cromfs volume can be
+  randomly accessed in arbitrary order; by all the means one would
+  expect, including memorymapping.</li>
  <li>Works on 64-bit and 32-bit systems.</li>
 </ul>
 
@@ -278,6 +280,10 @@ and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
    <br />With 16M fblocks, 1k blocks, <b>198,410,407</b> bytes
    <!--<br />With 16M fblocks, &frac12;k blocks: <b>194,795,834</b> bytes-->
    <br />With 16M fblocks, &frac14;k blocks: <b>194,386,381</b> bytes
+   <!--br />With 16M fblocks, &frac14;k blocks and -c8 option: <b>191,283,335</b> bytes
+        (not included on the page because I also replaced symlinks
+         with hardlinks)
+   -->
    </td>
   <td class=good><tt>mkcromfs</tt>
    <br /><b>29,525,376</b> bytes</td>
@@ -343,7 +349,8 @@ and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
 An explanation why mkcromfs beats 7-zip in the NES ROM packing test:
 <blockquote style="font-size:92%;color:#222">
  7-zip packs all the files together as one stream. The maximum dictionary
- size is 256 MB. (Note: The default for "maximum compression" is 32 MB.)
+ size in 32-bit mode is 256 MB.
+ (Note: The default for "maximum compression" is 32 MB.)
  When 256 MB of data has been packed and more data comes in,
  similarities between the first megabytes of data and the latest data are
  not utilized. For example, <i>Mega Man</i> and <i>Rockman</i> are two
@@ -407,7 +414,7 @@ the memory usage would be around 10.2&nbsp;MB.
     <ul><li>If an attempt to read from "/dev/fuse" (as root) gives "no such device",
     it does not work. If it gives "operation not permitted", it might work.</li></ul></li>
   </ul></li>
- <li>Build "cromfs-driver" and "util/mkcromfs", i.e. command "make":
+ <li>Build "cromfs-driver", "util/mkcromfs", "util/cvcromfs" and "util/unmkcromfs", i.e. command "make":
   <pre>$ make</pre>
   
   If you get compilation problems related to <tt>hash_map</tt> or <tt>hash</tt>, 
@@ -452,7 +459,33 @@ To improve the compression, try these tips:
      increase the chances of mkcromfs finding an identical block
      from something it already processed (if your data has that
      opportunity). Finding that two blocks are identical always
-     means better compression.</li>
+     means better compression.<br />
+     You can use this formula to pick an optimal
+     maximum value for -a:<br />
+      <code>amount_of_spare_RAM &times; blocksize / (32 &times; total_size_of_files &times; estimated_remaining_ratio)</code>
+
+<!--
+sum_fblocks = total_size_of_files * estimated_remaining_ratio
+autoindexratio = blocksize / autoindexperiod
+amount_of_RAM = 32 * sum_fblocks / autoindexperiod
+  hence
+amount_of_RAM = 32 * sum_fblocks / (blocksize / autoindexratio)
+  hence
+amount_of_RAM = autoindexratio * 32 * sum_fblocks / blocksize
+  hence
+autoindexratio = amount_of_RAM * blocksize / 32 / sum_fblocks
+  hence
+autoindexratio = amount_of_RAM * blocksize / (32 * total_size_of_files * estimated_remaining_ratio)
+-->
+     <br />
+     where <code>estimated_remaining_ratio</code> is a decimal number
+     smaller than 1.0, indicating how much you think block merging will
+     reduce the amount of data to compress (i.e. how little will remain
+     to compress before even feeding it to LZMA).<br />
+     With 800 MB of RAM, 4 GB of files, block size (-b) of
+     512 bytes and estimated_remaining_ratio of 0.90 (10% reduction),
+     this formula would thus give a value of about 4 for the -a option.
+  </li>
  <li>Sort your files. Files which have similar or partially
      identical content should be processed right after one other.</li>
  <li>Adjust the --bruteforcelimit option (-c). Larger values will require
@@ -460,7 +493,11 @@ To improve the compression, try these tips:
      encoding much slower), in the hope it improves compression.<br />
      Basically, --bruteforcelimit is a way to virtually multiply
      the --fsize (thus improving compression) by an integer factor
-     without increasing the memory usage of cromfs-driver.
+     without increasing the memory or CPU usage of cromfs-driver.
+     Using it is recommended, unless you want mkcromfs to be fast.<br />
+     Although there are no upper limits on the recommended values of -c,
+     it is not meaningful to make it larger than the fblock count on the
+     filesystem being created.
   </li>
 </ul>
 To improve the filesystem generation speed, try these tips:
@@ -470,13 +507,16 @@ To improve the filesystem generation speed, try these tips:
  <li>Use a large value for the --randomcompressperiod option,
      for example -r10000. This together with -e will significantly
      improve the speed of mkcromfs, on the cost of temporary disk
-     space usage.</li>
+     space usage. A small value causes mkcromfs to randomly compress
+     one of the temporary fblocks more often. It has no effect to
+     the compression ratio of the resulting filesystem.
+  </li>
  <li>Use the TEMP environment variable to control where the temp
      files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0
-     means that only one fblock will be assumed as a candidate.</li>
+     means that the candidate fblock will be selected straightforwardly.</li>
 </ul>
 To control the memory usage, use these tips:
 <ul>
@@ -518,8 +558,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml41><b id=eml27 class=nonmail>ctx</b><span id=eml28 class=ismail>Joel</span><span id=eml29 class=nonmail><b>e/m</b></span><span id=eml30 class=ismail> Yli</span><b id=eml31 class=nonmail>quj@we/ox</b><span id=eml32 class=ismail>luom</span><span id=eml33 class=nonmail><b>j@W1q.h</b></span><span id=eml34 class=ismail>a &lt;bi</span><b id=eml35 class=nonmail>y1kre</b><span id=eml36 class=ismail>sqwi</span><span id=eml37 class=nonmail><b>b8ke@qlep</b></span><span id=eml38 class=ismail>t@ik</span><b id=eml39 class=nonmail>drhef</b><span id=eml40 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=27;i<41;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml30><b id=eml16 class=nonmail>h2z@@</b><span id=eml17 class=ismail>Joel</span><span id=eml18 class=nonmail><b>BrtO0</b></span><span id=eml19 class=ismail> Yli</span><b id=eml20 class=nonmail>decxi@</b><span id=eml21 class=ismail>luom</span><span id=eml22 class=nonmail><b>1ujf8les9p</b></span><span id=eml23 class=ismail>a &lt;bi</span><b id=eml24 class=nonmail>d</b><span id=eml25 class=ismail>sqwi</span><span id=eml26 class=nonmail><b>xe</b></span><span id=eml27 class=ismail>t@ik</span><b id=eml28 class=nonmail>k@xzy8x</b><span id=eml29 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=16;i<30;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p>
 The author also wishes to hear if you use cromfs, and for what you
@@ -542,9 +582,9 @@ use it and what you think of it.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Mon, 05 Jun 2006 14:04:27 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Mon, 05 Jun 2006 23:59:19 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Mon, 05 Jun 2006 14:12:23 +0300</small>
+  at Mon, 12 Jun 2006 10:56:59 +0300</small>
  </p>
 </body>
 </html>

@@ -24,13 +24,12 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include <string>
 #include <map>
 
-#ifdef USE_HASHMAP
-# include <ext/hash_map>
-#endif
 
 
+#define CROMFS_SIGNATURE_01   UINT64_C(0x313053464d4f5243)
+#define CROMFS_SIGNATURE_02   UINT64_C(0x323053464d4f5243)
 
-#define CROMFS_SIGNATURE   UINT64_C(0x313053464d4f5243)
+#define CROMFS_SIGNATURE    CROMFS_SIGNATURE_02
 
 /* Use "least" instead of "fast" for these types, because they
  * are included in structs and vectors that are directly copied
@@ -75,6 +74,7 @@ struct cromfs_superblock_internal
     uint_fast32_t compressed_block_size;
     uint_fast64_t uncompressed_block_size; /* 64-bit to reduce the number of casts */
     uint_fast64_t bytes_of_files;
+    uint_fast64_t sig;
 };
 
 typedef std::vector<unsigned char> cromfs_datablock;

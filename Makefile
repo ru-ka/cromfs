@@ -1,4 +1,4 @@
-VERSION=1.1.7
+VERSION=1.2.0
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -29,8 +29,11 @@ ARCHFILES=\
 	util/fblock.cc util/fblock.hh \
 	util/crc32.h util/crc32.cc \
 	util/memmem.h util/memmem.c \
+	util/boyermoore.hh \
 	util/mkcromfs.cc \
 	util/unmkcromfs.cc \
+	util/cvcromfs.cc \
+	util/mkcromfs_sets.hh \
 	\
 	\
 	util/lzma/ORIGIN \
@@ -85,7 +88,9 @@ ARCHFILES=\
 	tests/a/util.hh \
 	tests/a/fifo tests/a/fifo-copy \
 	tests/a/dir2 tests/a/dir2/util.cc \
-	tests/a/dir2/util.hh
+	tests/a/dir2/util.hh \
+	tests/a/sparse.bin \
+	tests/test-boyermoore.cc
 
 include Makefile.sets
 
@@ -100,7 +105,7 @@ LDLIBS += -lfuse
 
 DEPFUN_INSTALL=ignore
 
-PROGS = cromfs-driver util/mkcromfs util/unmkcromfs
+PROGS = cromfs-driver util/mkcromfs util/unmkcromfs util/cvcromfs
 DOCS  = doc/FORMAT README.html doc/ChangeLog doc/*.txt
 
 all: $(PROGS)
@@ -114,6 +119,9 @@ util/mkcromfs: FORCE
 
 util/unmkcromfs: FORCE
 	make -C util unmkcromfs
+
+util/cvcromfs: FORCE
+	make -C util cvcromfs
 
 clean:
 	rm -rf $(OBJS) $(PROGS) install

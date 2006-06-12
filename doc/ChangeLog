@@ -4,7 +4,12 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 Changelog
 
-1.1.7	2006-06-04 Joel Yliluoma <bisqwit@iki.fi>
+1.2.0	2006-06-06 Joel Yliluoma <bisqwit@iki.fi>
+- New filesystem format (old filesystems are still supported)
+  The inode table inode and root directory inode are now compressed.
+- New utility: cvcromfs (to convert filesystems between versions 01 and 02)
+
+1.1.7	2006-06-05 Joel Yliluoma <bisqwit@iki.fi>
 - Hardlink extraction support in unmkcromfs
 - Added tests: make test
 

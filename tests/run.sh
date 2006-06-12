@@ -1,4 +1,4 @@
-#!/bin/sh
+[A#!/bin/sh
 
 # - Symlinks are not tested here, because they fail date comparison
 #   (symlink timestamps cannot be set)
@@ -11,9 +11,10 @@ make -C ../util mkcromfs unmkcromfs
 
 ## TEST 1
 
-../util/mkcromfs a tmp.bin -b16384 -f65536 -e > /dev/null
+rm -f tmp.cromfs
+../util/mkcromfs a tmp.cromfs -b16384 -f65536 -e  >/dev/null
 rm -rf b
-../util/unmkcromfs tmp.bin b >/dev/null
+../util/unmkcromfs tmp.cromfs b >/dev/null
 
 ( cd a && tar cf - *) | tar tvvf - | sort > a.listing
 ( cd b && tar cf - *) | tar tvvf - | sort > b.listing
@@ -23,23 +24,30 @@ if diff -u a.listing b.listing; then
 else
 	echo "*** TEST 1: FAIL"
 fi
-rm -f a.listing b.listing
+rm -rf a.listing b.listing b tmp.cromfs
 
 
 ## TEST 2 (no sparse files)
 
-../util/mkcromfs a tmp.bin -b64 -f512 > /dev/null
+rm -f tmp.cromfs
+../util/mkcromfs a tmp.cromfs -b64 -f512 > /dev/null
 rm -rf b
-../util/unmkcromfs tmp.bin b -s >/dev/null
+../util/unmkcromfs tmp.cromfs b -s >/dev/null
 
 ( cd a && tar cf - *) | tar tvvf - | sort > a.listing
 ( cd b && tar cf - *) | tar tvvf - | sort > b.listing
 
-rm -rf b tmp.bin
+rm -rf b tmp.cromfs
 
 if diff -u a.listing b.listing; then
 	echo "*** TEST 2: PASS"
 else
 	echo "*** TEST 2: FAIL"
 fi
-rm -rf a.listing b.listing tmp.bin b
+rm -rf a.listing b.listing tmp.cromfs b
+
+if [ "$CXX" = "" ]; then CXX=g++; fi
+$CXX -o test-boyermoore -O3 test-boyermoore.cc -ftree-vectorize
+echo "Testing Boyer-Moore search algorithm..."
+./test-boyermoore
+rm -f test-boyermoore

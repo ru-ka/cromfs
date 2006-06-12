@@ -52,12 +52,14 @@ See the <a href=\"http://bisqwit.iki.fi/src/cromfs-changelog.txt\">ChangeLog</a>
   </li>
  <li>Files are stored in solid blocks, meaning that parts of different
   files are compressed together for effective compression</li>
+ <li>Furthermore, different files utilize the same data blocks where
+  possible, to reduce the amount of data that needs to be compressed</li>
  <li>Most of inode types recognized by Linux are supported (see <a href=\"#compare\">comparisons</a>).</li>
  <li>The <a href=\"http://www.7-zip.com/sdk.html\">LZMA compression</a> is used.
   In the general case, LZMA compresses better than gzip and bzip2.</li>
- <li>As with usual filesystems, the files on a cromfs volume can be accessed
-  in arbitrary order; the waits to open a specific file are small, despite
-  the files being semisolidly archived.</li>
+ <li>As with usual filesystems, the files on a cromfs volume can be
+  randomly accessed in arbitrary order; by all the means one would
+  expect, including memorymapping.</li>
  <li>Works on 64-bit and 32-bit systems.</li>
 </ul>
 
@@ -266,6 +268,10 @@ and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
    <br />With 16M fblocks, 1k blocks, <b>198,410,407</b> bytes
    <!--<br />With 16M fblocks, &frac12;k blocks: <b>194,795,834</b> bytes-->
    <br />With 16M fblocks, &frac14;k blocks: <b>194,386,381</b> bytes
+   <!--br />With 16M fblocks, &frac14;k blocks and -c8 option: <b>191,283,335</b> bytes
+        (not included on the page because I also replaced symlinks
+         with hardlinks)
+   -->
    </td>
   <td class=good><tt>mkcromfs</tt>
    <br /><b>29,525,376</b> bytes</td>
@@ -331,7 +337,8 @@ and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
 An explanation why mkcromfs beats 7-zip in the NES ROM packing test:
 <blockquote style=\"font-size:92%;color:#222\">
  7-zip packs all the files together as one stream. The maximum dictionary
- size is 256 MB. (Note: The default for \"maximum compression\" is 32 MB.)
+ size in 32-bit mode is 256 MB.
+ (Note: The default for \"maximum compression\" is 32 MB.)
  When 256 MB of data has been packed and more data comes in,
  similarities between the first megabytes of data and the latest data are
  not utilized. For example, <i>Mega Man</i> and <i>Rockman</i> are two
@@ -395,7 +402,7 @@ the memory usage would be around 10.2&nbsp;MB.
     <ul><li>If an attempt to read from \"/dev/fuse\" (as root) gives \"no such device\",
     it does not work. If it gives \"operation not permitted\", it might work.</li></ul></li>
   </ul></li>
- <li>Build \"cromfs-driver\" and \"util/mkcromfs\", i.e. command \"make\":
+ <li>Build \"cromfs-driver\", \"util/mkcromfs\", \"util/cvcromfs\" and \"util/unmkcromfs\", i.e. command \"make\":
   <pre>\$ make</pre>
   
   If you get compilation problems related to <tt>hash_map</tt> or <tt>hash</tt>, 
@@ -440,7 +447,33 @@ To improve the compression, try these tips:
      increase the chances of mkcromfs finding an identical block
      from something it already processed (if your data has that
      opportunity). Finding that two blocks are identical always
-     means better compression.</li>
+     means better compression.<br />
+     You can use this formula to pick an optimal
+     maximum value for -a:<br />
+      <code>amount_of_spare_RAM &times; blocksize / (32 &times; total_size_of_files &times; estimated_remaining_ratio)</code>
+
+<!--
+sum_fblocks = total_size_of_files * estimated_remaining_ratio
+autoindexratio = blocksize / autoindexperiod
+amount_of_RAM = 32 * sum_fblocks / autoindexperiod
+  hence
+amount_of_RAM = 32 * sum_fblocks / (blocksize / autoindexratio)
+  hence
+amount_of_RAM = autoindexratio * 32 * sum_fblocks / blocksize
+  hence
+autoindexratio = amount_of_RAM * blocksize / 32 / sum_fblocks
+  hence
+autoindexratio = amount_of_RAM * blocksize / (32 * total_size_of_files * estimated_remaining_ratio)
+-->
+     <br />
+     where <code>estimated_remaining_ratio</code> is a decimal number
+     smaller than 1.0, indicating how much you think block merging will
+     reduce the amount of data to compress (i.e. how little will remain
+     to compress before even feeding it to LZMA).<br />
+     With 800 MB of RAM, 4 GB of files, block size (-b) of
+     512 bytes and estimated_remaining_ratio of 0.90 (10% reduction),
+     this formula would thus give a value of about 4 for the -a option.
+  </li>
  <li>Sort your files. Files which have similar or partially
      identical content should be processed right after one other.</li>
  <li>Adjust the --bruteforcelimit option (-c). Larger values will require
@@ -448,7 +481,11 @@ To improve the compression, try these tips:
      encoding much slower), in the hope it improves compression.<br />
      Basically, --bruteforcelimit is a way to virtually multiply
      the --fsize (thus improving compression) by an integer factor
-     without increasing the memory usage of cromfs-driver.
+     without increasing the memory or CPU usage of cromfs-driver.
+     Using it is recommended, unless you want mkcromfs to be fast.<br />
+     Although there are no upper limits on the recommended values of -c,
+     it is not meaningful to make it larger than the fblock count on the
+     filesystem being created.
   </li>
 </ul>
 To improve the filesystem generation speed, try these tips:
@@ -458,13 +495,16 @@ To improve the filesystem generation speed, try these tips:
  <li>Use a large value for the --randomcompressperiod option,
      for example -r10000. This together with -e will significantly
      improve the speed of mkcromfs, on the cost of temporary disk
-     space usage.</li>
+     space usage. A small value causes mkcromfs to randomly compress
+     one of the temporary fblocks more often. It has no effect to
+     the compression ratio of the resulting filesystem.
+  </li>
  <li>Use the TEMP environment variable to control where the temp
      files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0
-     means that only one fblock will be assumed as a candidate.</li>
+     means that the candidate fblock will be selected straightforwardly.</li>
 </ul>
 To control the memory usage, use these tips:
 <ul>

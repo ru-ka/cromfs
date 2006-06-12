@@ -35,7 +35,7 @@ protected:
     void read_block(cromfs_blocknum_t ind, uint_fast32_t offset,
                     unsigned char* target, uint_fast32_t size);
     
-    cromfs_inode_internal read_uncompressed_inode(uint_fast64_t offset);
+    cromfs_inode_internal read_raw_inode_and_blocks(uint_fast64_t offset);
     
     cromfs_cached_fblock& read_fblock(cromfs_fblocknum_t ind);
     cromfs_cached_fblock read_fblock_uncached(cromfs_fblocknum_t ind);
@@ -48,12 +48,7 @@ protected:
     cromfs_inode_internal rootdir, inotab;
     cromfs_superblock_internal sblock;
     
-#if defined(USE_HASHMAP) && 0
-    /* Probably not good to use with small map sizes */
-    typedef __gnu_cxx::hash_map<cromfs_fblocknum_t, cromfs_cached_fblock> fblock_cache_type;
-#else
     typedef std::map<cromfs_fblocknum_t, cromfs_cached_fblock> fblock_cache_type;
-#endif
 
     fblock_cache_type cache_fblocks;
     

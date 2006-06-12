@@ -4,6 +4,8 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 cromfs filesystem structure / format description.
 
+VERSION 02
+
 --------------------------------
 Note: Inode 1 is assumed to be the root directory by the kernel.
 
@@ -12,7 +14,7 @@ Note: All integers are encoded in little-endian byte order.
 OVERALL STRUCTURE
 
 OBJECT: SUPERBLOCK
-	0000	u64	CROMFS SIGNATURE "CROMFS01"
+	0000	u64	CROMFS SIGNATURE "CROMFS02"
 	0008	u64	Location of BLKDATA within the filesystem
 	0010	u64	Location of FBLKTAB within the filesystem (must be last)
 	0018	u64	Location of the Inotab inode within the filesystem
@@ -25,9 +27,16 @@ OBJECT: SUPERBLOCK
 	0...	BLKDATA	LZMA-compressed array of BLOCK entries.
 	0...	FBLOCK[] FBLKTAB = compressed storage
 
-(Note: The rootdir and inotab inodes could also be compressed...
- especially inotab could be worthwhile. It may contain a long
- list of blocks. It could be considered for a future version.)
+In CROMFS02, root directory and inotab are stored compressed.
+In CROMFS01, they are stored uncompressed.
+This is the only difference between those versions.
+
+Note:
+- Inotab must be placed immediately after the root directory.
+- BLKDATA must be placed immediately after inotab.
+- FBLKTAB must be placed immediately after BLKDATA.
+- There must be no content after FBLKTAB.
+  If you require padding, put it before the root directory.
 
 ---------------------------
 

@@ -1,7 +1,7 @@
 Summary:	Compressed ROM filesystem for Linux in user-space
 Name:		cromfs
-Version:	1.1.7
-Release:	0.3.1
+Version:	1.2.0
+Release:	0.4
 License:	GPL
 Group:		Applications
 Source0:	http://bisqwit.iki.fi/src/arch/%{name}-%{version}.tar.bz2
@@ -43,6 +43,7 @@ install -d $RPM_BUILD_ROOT%{_bindir}
 install  cromfs-driver   $RPM_BUILD_ROOT%{_bindir}
 install  util/mkcromfs   $RPM_BUILD_ROOT%{_bindir}
 install  util/unmkcromfs $RPM_BUILD_ROOT%{_bindir}
+install  util/cvromfs    $RPM_BUILD_ROOT%{_bindir}
 
 %clean
 rm -rf $RPM_BUILD_ROOT

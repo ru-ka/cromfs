@@ -9,6 +9,10 @@
 #include <map>
 #include <algorithm>
 
+#ifdef USE_HASHMAP
+# include <ext/hash_map>
+#endif
+
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -16,23 +20,25 @@
 #include <errno.h>
 #include <sys/time.h>
 
-static bool DecompressWhenLookup = false;
-static unsigned RandomCompressPeriod = 20;
-static uint_fast32_t MinimumFreeSpace = 16;
-static uint_fast32_t AutoIndexPeriod = 256;
-static uint_fast32_t MaxFblockCountForBruteForce = 0;
-
-static long FSIZE = 2097152;
-static long BSIZE = 65536;
-
-//static uint_fast32_t MaxSearchLength = FSIZE;
-
+#include "mkcromfs_sets.hh"
 
 #include "lzma.hh"
 #include "datasource.hh"
 #include "fblock.hh"
 #include "crc32.h"
 #include "util.hh"
+
+/* Settings */
+#include "mkcromfs_sets.hh"
+bool DecompressWhenLookup = false;
+unsigned RandomCompressPeriod = 20;
+uint_fast32_t MinimumFreeSpace = 16;
+uint_fast32_t AutoIndexPeriod = 256;
+uint_fast32_t MaxFblockCountForBruteForce = 0;
+long FSIZE = 2097152;
+long BSIZE = 65536;
+//uint_fast32_t MaxSearchLength = FSIZE;
+
 
 #define NO_BLOCK ((cromfs_blocknum_t)~0ULL)
 struct mkcromfs_block : public cromfs_block_storage
@@ -91,6 +97,13 @@ public:
         
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
+        std::printf("Compressing inotab (%s) and root (%s) inodes...\n",
+            ReportSize(raw_inotab_inode.size()).c_str(),
+            ReportSize(raw_root_inode.size()).c_str()
+                );
+        raw_inotab_inode = LZMACompress(raw_inotab_inode);
+        raw_root_inode   = LZMACompress(raw_root_inode);
+        
         std::printf("Compressing %u block records (%u bytes each)...",
             (unsigned)blocks.size(), (unsigned)sizeof(blocks[0])); fflush(stdout);
         std::vector<unsigned char> raw_blktab
@@ -102,9 +115,9 @@ public:
         
         unsigned char Superblock[0x38];
         uint_fast64_t root_ino_addr   = sizeof(Superblock);
-        uint_fast64_t inotab_ino_addr = root_ino_addr + raw_root_inode.size();
-        uint_fast64_t blktab_addr = inotab_ino_addr + raw_inotab_inode.size();
-        uint_fast64_t fblktab_addr = blktab_addr + raw_blktab.size();
+        uint_fast64_t inotab_ino_addr = root_ino_addr   + raw_root_inode.size();
+        uint_fast64_t blktab_addr     = inotab_ino_addr + raw_inotab_inode.size();
+        uint_fast64_t fblktab_addr    = blktab_addr     + raw_blktab.size();
 
         W64(Superblock+0x00, CROMFS_SIGNATURE);
         W64(Superblock+0x08, blktab_addr);
@@ -378,7 +391,7 @@ private:
     
     const std::vector<unsigned char> encode_inode(const cromfs_inode_internal& inode)
     {
-        std::vector<unsigned char> result(0x18 + 4 + 4*inode.blocklist.size());
+        std::vector<unsigned char> result(0x18 + 4*inode.blocklist.size());
         put_inode(&result[0], inode);
         return result;
     }
@@ -545,7 +558,7 @@ private:
             }
         }
         
-        cromfs_block_storage block = create_new_block(data);
+        cromfs_block_storage block = create_new_block(BoyerMooreNeedle(data));
         cromfs_blocknum_t blockno = blocks.size();
         mkcromfs_block b;
         b.inherit(block, blockno);
@@ -563,7 +576,8 @@ private:
         return fblocks[block.fblocknum].compare_raw_portion(data, block.startoffs) == 0;
     }
     
-    const cromfs_block_storage create_new_block(const std::vector<unsigned char>& data)
+    const cromfs_block_storage create_new_block
+        (const BoyerMooreNeedle& data)
     {
         if(MaxFblockCountForBruteForce > 0 && fblocks.size() > 1)
         {
@@ -783,7 +797,7 @@ private:
         (fblock_index_type::iterator index_iterator,
          mkcromfs_fblock::AppendInfo& appended,
          const cromfs_fblocknum_t fblocknum,
-         const std::vector<unsigned char>& data,
+         const BoyerMooreNeedle& data,
          bool prevent_overuse)
     {
         mkcromfs_fblock& fblock = fblocks[fblocknum];
@@ -912,7 +926,7 @@ private:
     const cromfs_block_storage AppendToFBlock
         (fblock_index_type::iterator index_iterator,
          const cromfs_fblocknum_t fblocknum,
-         const std::vector<unsigned char>& data,
+         const BoyerMooreNeedle& data,
          bool prevent_overuse)
     {
         mkcromfs_fblock& fblock = fblocks[fblocknum];

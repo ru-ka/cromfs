@@ -119,19 +119,41 @@ private:
 
 class cromfs_decoder: public cromfs
 {
+private:
+    std::multimap<cromfs_fblocknum_t, std::string> fblock_users;
+    std::multimap<cromfs_inodenum_t, std::string> inode_files;
+    cromfs_dirinfo dir;
+
 public:
     cromfs_decoder(int fd): cromfs(fd) { }
     
+    void cleanup()
+    {
+        dir.clear();
+        fblock_users.clear();
+        inode_files.clear();
+    }
+    
     void extract(const std::string& targetdir)
     {
-        cromfs_dirinfo dir;
-        std::multimap<cromfs_fblocknum_t, std::string> fblock_users;
-        std::multimap<cromfs_inodenum_t, std::string> inode_files;
+        cleanup();
         
-        std::printf("Scanning directories...\n");
-        merge_dir_recursive(dir, fblock_users, inode_files, 1, "");
+        ScanDirectories();
         
         if(listing_mode) return;
+        
+        /*
+         * This is written as one huge function, because there is a lot
+         * of work to be done, and it is not straight-away obvious which
+         * way is the right order to do each step. For example, hardlinks
+         * could be created immediately after inodes, or after writing the
+         * files, or after fixing up the symlinks. There are lots of data
+         * that is shared between the steps (the file size counters, inode
+         * number tables), that it's easiest to keep it as one whole function.
+         * It allows keeping some liberty of reorganizing stuff around.
+         *
+         * Only the initial phase (directory scanning) is a clearly separate task.
+         */
         
         std::printf("Creating %u inodes... (the files and directories)\n",
             (unsigned)dir.size()
@@ -461,33 +483,52 @@ public:
                 }
             }
         }
+        cleanup();
     }
 
 private:
-    void merge_dir_recursive(cromfs_dirinfo& target,
-                             std::multimap<cromfs_fblocknum_t, std::string>& fblock_users,
-                             std::multimap<cromfs_inodenum_t, std::string>& inode_files,
-                             cromfs_inodenum_t root_ino,
+    void ScanDirectories()
+    {
+        std::printf("Scanning directories...\n");
+
+        if(listing_mode)
+        {
+            printf("mode #fblocks uid/gid    size        datetime       name\n");
+        }
+
+        merge_dir_recursive(1, "");
+    }
+    
+private:
+    void merge_dir_recursive(cromfs_inodenum_t root_ino,
                              const std::string& parent)
     {
-        cromfs_dirinfo dir = read_dir(root_ino, 0, (uint_fast32_t)~0U);
-        for(cromfs_dirinfo::iterator i = dir.begin(); i != dir.end(); ++i)
+        cromfs_dirinfo& target = dir;
+        
+        cromfs_dirinfo thisdir = read_dir(root_ino, 0, (uint_fast32_t)~0U);
+        for(cromfs_dirinfo::iterator i = thisdir.begin(); i != thisdir.end(); ++i)
         {
             std::string entname = parent + i->first;
 
             cromfs_inode_internal ino = read_inode_and_blocks(i->second);
             
+            std::set<cromfs_fblocknum_t> fblist;
+            for(unsigned a=0; a<ino.blocklist.size(); ++a)
+                fblist.insert(blktab[ino.blocklist[a]].fblocknum);
+
             if(listing_mode)
             {
                 if(MatchFile(entname))
                 {
-                    std::printf("%s %u/%u %11llu %s %s\n",
+                    std::printf("%s%3u %u/%u %11llu %s %s\n",
                         TranslateMode(ino.mode).c_str(),
+                        (unsigned)fblist.size(),
                         (unsigned)ino.uid,
                         (unsigned)ino.gid,
                         (unsigned long long)ino.bytesize,
                         DumpTime(ino.time).c_str(),
-                        entname.c_str());
+                        entname.c_str()
+                               );
                 }
             }
             
@@ -509,7 +550,7 @@ private:
             
             if(S_ISDIR(ino.mode))
             {
-                merge_dir_recursive(target, fblock_users, inode_files, i->second, entname + "/");
+                merge_dir_recursive(i->second, entname + "/");
             }
             else if(S_ISLNK(ino.mode) /* only symlinks and regular files have content */
                  || S_ISREG(ino.mode)) // to limit extraction to certain type
@@ -521,10 +562,6 @@ private:
                      * writes into hardlinked files.
                      */
                     
-                    std::set<cromfs_fblocknum_t> fblist;
-                    for(unsigned a=0; a<ino.blocklist.size(); ++a)
-                        fblist.insert(blktab[ino.blocklist[a]].fblocknum);
-
                     for(std::set<cromfs_fblocknum_t>::iterator
                         j = fblist.begin(); j != fblist.end(); ++j)
                     {

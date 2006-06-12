@@ -34,6 +34,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #define CROMFS_FSIZE  (sblock.compressed_block_size)
 #define CROMFS_BSIZE (sblock.uncompressed_block_size)
 
+#define SBLOCK_DEBUG    0
 #define READBLOCK_DEBUG 0
 #define FBLOCK_DEBUG    0
 #define INODE_DEBUG     0
@@ -54,19 +55,12 @@ static void EraseRandomlyOne(T& container)
 {
     if(container.empty()) return;
     
-#ifdef USE_HASHMAP
-    unsigned pos = std::rand() % container.size();
-    typename T::iterator i = container.begin();
-    std::advance(i, pos);
-    container.erase(i);
-#else
     typename T::key_type
         smallest = container.begin()->first,
         biggest  = container.rbegin()->first,
         random   = smallest + std::rand() % (biggest-smallest);
 
     container.erase(container.lower_bound(random));
-#endif
 }
 
 const std::string DumpInode(const cromfs_inode_internal& inode)
@@ -147,10 +141,12 @@ void cromfs::reread_superblock()
     if(pread64(fd, Buf, sizeof(Buf), 0) == -1) throw errno;
     
     uint_fast64_t sig  = R64(Buf+0x0000);
-    if(sig != CROMFS_SIGNATURE) throw EINVAL;
+    if(sig != CROMFS_SIGNATURE_01
+    && sig != CROMFS_SIGNATURE_02) throw EINVAL;
     
     cache_fblocks.clear();
-
+    
+    sblock.sig = sig;
     sblock.blktab_offs             = R64(Buf+0x0008);
     sblock.fblktab_offs            = R64(Buf+0x0010);
     sblock.inotab_offs             = R64(Buf+0x0018);
@@ -161,6 +157,7 @@ void cromfs::reread_superblock()
     
     sblock.blktab_size = sblock.fblktab_offs - sblock.blktab_offs;
     
+#if SBLOCK_DEBUG
     fprintf(stderr,
         "BlockTab at %llX\n"
         "FBlkTab at %llX\n"
@@ -173,9 +170,10 @@ void cromfs::reread_superblock()
         sblock.rootdir_offs,
         (unsigned)CROMFS_FSIZE,
         (unsigned)CROMFS_BSIZE);
+#endif
     
-    inotab  = read_uncompressed_inode(sblock.inotab_offs);
-    rootdir = read_uncompressed_inode(sblock.rootdir_offs);
+    inotab  = read_raw_inode_and_blocks(sblock.inotab_offs);
+    rootdir = read_raw_inode_and_blocks(sblock.rootdir_offs);
     
     forget_blktab();
     reread_blktab();
@@ -184,7 +182,7 @@ void cromfs::reread_superblock()
     
     if(fblktab.empty()) throw EINVAL;
     
-    #if DEBUG_INOTAB
+#if DEBUG_INOTAB
     fprintf(stderr, "rootdir inode: %s\n", DumpInode(rootdir).c_str());
     fprintf(stderr, "intab inode: %s\n", DumpInode(inotab).c_str());
     
@@ -196,7 +194,7 @@ void cromfs::reread_superblock()
         uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize);
         a+=(0x18 + 4*nblocks) / 4;
     }
-    #endif
+#endif
 }
 
 void cromfs::reread_fblktab()
@@ -316,28 +314,74 @@ static void ExtractInodeHeader(cromfs_inode_internal& inode, const unsigned char
         { inode.links = rdev_links; inode.rdev = 0; }
 }
 
-cromfs_inode_internal cromfs::read_uncompressed_inode(uint_fast64_t offset)
+cromfs_inode_internal cromfs::read_raw_inode_and_blocks(uint_fast64_t offset)
 {
-    unsigned char Buf[0x18];
-    
     cromfs_inode_internal inode;
-    
-    if(pread64(fd, Buf, 0x18, offset+0) == -1) throw errno;
-    
-    ExtractInodeHeader(inode, Buf);
-    
+
+    switch(sblock.sig)
+    {
+        default:
+        case CROMFS_SIGNATURE_02:
+        {
+            uint_fast64_t size = 0;
+            if(offset == sblock.rootdir_offs)
+                size = sblock.inotab_offs - offset;
+            else if(offset == sblock.inotab_offs)
+                size = sblock.blktab_offs - offset;
+            else
+            {
+                // unknown inode
 #if INODE_DEBUG
-    printf("read_uncompressed_inode(%lld): %s\n",
-        offset, DumpInode(inode).c_str());
+                fprintf(stderr, "Unknown inode: %llx\n", (unsigned long long)offset);
 #endif
-    
-    uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
-    
-    inode.blocklist.resize(nblocks);
-    
-    /* FIXME: not endianess-safe */
-    if(pread64(fd, &inode.blocklist[0], 4 * nblocks, offset+0x18) == -1) throw errno;
-    
+                throw EIO;
+            }
+            std::vector<unsigned char> Buf(size);
+            if(pread64(fd, &Buf[0], size, offset+0) == -1) throw errno;
+            Buf = LZMADeCompress(&Buf[0], size);
+            
+            ExtractInodeHeader(inode, &Buf[0]);
+
+            uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
+            inode.blocklist.resize(nblocks);
+            
+            if(Buf.size() < 4*nblocks+0x18)
+            {
+                /* Invalid inode */
+#if INODE_DEBUG
+                fprintf(stderr, "Buf.size=%u, expected %u (%u blocks)\n",
+                    (unsigned)Buf.size(),
+                    (unsigned)(4*nblocks+0x18),
+                    (unsigned)nblocks);
+#endif
+                throw EIO;
+            }
+
+            /* FIXME: not endianess-safe */
+            memcpy(&inode.blocklist[0], &Buf[0x18], 4*nblocks);
+            
+            break;
+        }
+        case CROMFS_SIGNATURE_01:
+        {
+            unsigned char Buf[0x18];
+            
+            if(pread64(fd, Buf, 0x18, offset+0) == -1) throw errno;
+            
+            ExtractInodeHeader(inode, Buf);
+            
+#if INODE_DEBUG
+            printf("read_raw_inode_and_blocks(%lld): %s\n",
+                offset, DumpInode(inode).c_str());
+#endif
+            
+            uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
+            inode.blocklist.resize(nblocks);
+            
+            /* FIXME: not endianess-safe */
+            if(pread64(fd, &inode.blocklist[0], 4 * nblocks, offset+0x18) == -1) throw errno;
+        }
+    }
     return inode;
 }
 
