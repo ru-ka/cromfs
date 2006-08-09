@@ -399,7 +399,7 @@ public:
             {
                 std::vector<char> buffer(ino.bytesize + 1, '\0');
                 
-                int fd = open(target.c_str(), O_RDONLY);
+                int fd = open(target.c_str(), O_RDONLY | O_LARGEFILE);
                 if(fd < 0)
                 {
                     perror(target.c_str());
@@ -666,7 +666,7 @@ int main(int argc, char** argv)
         }
     }
     
-    int fd = open(fsfile.c_str(), O_RDONLY);
+    int fd = open(fsfile.c_str(), O_RDONLY | O_LARGEFILE);
     if(fd < 0) { perror(fsfile.c_str()); return -1; }
     if(isatty(fd)) { std::fprintf(stderr, "input is a terminal. Doesn't work that way.\n");
                      return -1; }

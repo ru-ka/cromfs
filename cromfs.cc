@@ -175,6 +175,11 @@ void cromfs::reread_superblock()
     inotab  = read_raw_inode_and_blocks(sblock.inotab_offs);
     rootdir = read_raw_inode_and_blocks(sblock.rootdir_offs);
     
+    rootdir.mode = S_IFDIR | 0555;
+    rootdir.links = 2;
+    rootdir.uid = 0;
+    rootdir.gid = 0;
+    
     forget_blktab();
     reread_blktab();
     

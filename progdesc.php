@@ -95,14 +95,19 @@ That being said, there are no known bugs.
 
 ", 'compare:1. Comparing to other filesystems' => "
 
-This is all very biased, hypothetical, and by no means
-a scientific study, but here goes:
+This is all very biased probably, hypothetical,
+and by no means a scientific study, but here goes:
 
 <style type=\"text/css\"><!--
 .good  { background:#CFC }
 .bad   { background:#FCC }
 .hmm   { background:#FFC }
 --></style>
+
+<p>Legend: <span class=good>Good</span>,
+<span class=bad>Bad</span>,
+<span class=hmm>Partial</span>
+
 <table border=1 class=fscom>
  <tr align=left>
   <th>Feature</th>
@@ -186,11 +191,15 @@ a scientific study, but here goes:
    <td class=hmm>Safe, but not exchangeable</td>
    <td class=hmm>Depends on slave filesystem</td>
  <tr align=left>
-  <th>Kernelspace/userspace</th>
-   <td>User (fuse)</td>
-   <td>Kernel</td>
-   <td>Kernel</td>
-   <td>Kernel</td>
+  <th>Kernelspace/userspace<br />
+    (fuse is good for security and modularity
+     but cannot be used in bootdisks etc,
+     kernel is vice versa)
+  </th>
+   <td class=hmm>User (fuse)</td>
+   <td class=hmm>Kernel</td>
+   <td class=hmm>Kernel</td>
+   <td class=hmm>Kernel</td>
  <tr align=left>
   <th>Appending to a previously created filesystem</th>
    <td class=bad>No</td>
@@ -200,6 +209,12 @@ a scientific study, but here goes:
      be decompressed, modified, and compressed
      again, but in a sense, so can every other
      of these.)</td>
+ <tr align=left>
+  <th>Mounting as read-write</th>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
  <tr align=left>
   <th>Supported inode types</th>
    <td class=good>all</td>
@@ -215,7 +230,7 @@ a scientific study, but here goes:
  <tr align=left>
   <th>Holes (aka. sparse files); storage optimization
       of blocks which consist entirely of nul bytes</th>
-   <td class=good>Optimized, not limited to nul-byte blocks.</th>
+   <td class=good>Identical blocks are merged and compressed, not limited to nul-blocks.</th>
    <td class=good>Supported</td>
    <td class=bad>Not supported</th>
    <td class=good>Depends on slave filesystem</td>
@@ -224,7 +239,7 @@ a scientific study, but here goes:
    <td class=good>No</td>
    <td>Unknown</td>
    <td class=hmm>Mostly not</td>
-   <td class=hmm>Depends on slave filesystem, generally yes</td>
+   <td class=hmm>Depends on slave filesystem, usually yes</td>
  <tr align=left>
   <th>Extended attributes</th>
    <td class=bad>No</td>
@@ -272,6 +287,7 @@ and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
         (not included on the page because I also replaced symlinks
          with hardlinks)
    -->
+   <br />Even smaller sizes achievable by using the -c option.
    </td>
   <td class=good><tt>mkcromfs</tt>
    <br /><b>29,525,376</b> bytes</td>
@@ -417,6 +433,7 @@ the memory usage would be around 10.2&nbsp;MB.
    </li>
  <li>Observe the sample filesystem:
   <pre>\$ cd sample
+\$ du
 \$ ls -al</pre>
    </li>
  <li>Unmounting the filesystem:
@@ -535,10 +552,28 @@ To control the filesystem speed, use these tips:
  <li>Use fast hardware&hellip;</li>
 </ul>
 
+", 'bootfs:1. Using cromfs in bootdisks and tiny Linux distributions' => "
+
+Cromfs can be used in bootdisks and tiny Linux distributions only
+by starting the cromfs-driver from a ramdisk (initrd), and then
+pivot_rooting into the mounted filesystem (but not before the
+filesystem has been initialized; there is a delay of a few seconds).
+ <p>
+Requirements to use cromfs in the root filesystem:
+<ul>
+ <li>Cromfs-driver should probably be statically linked.</li>
+ <li>Initrd, which contains the cromfs-driver program</li>
+ <li>Fuse driver in the kernel (it may be loaded from the initrd).</li>
+ <li>Use of pivot_root to change the root into the mounted image
+  <ul><li>One must wait until the cromfs-driver outputs \"ready\"
+      before accessing the filesystem</li></ul>
+ </li>
+</ul>
+
 ", 'copying:1. Copying' => "
 
 cromfs has been written by Joel Yliluoma, a.k.a.
-<a href=\"http://iki.fi/bisqwit/\">Bisqwit</a>,<br>
+<a href=\"http://iki.fi/bisqwit/\">Bisqwit</a>,<br />
 and is distributed under the terms of the
 <a href=\"http://www.gnu.org/licenses/licenses.html#GPL\">General Public License</a> (GPL).
  <br/>

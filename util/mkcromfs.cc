@@ -40,6 +40,10 @@ long BSIZE = 65536;
 //uint_fast32_t MaxSearchLength = FSIZE;
 
 
+static bool DisplayBlockSelections = true;
+static bool DisplayFiles = true;
+static bool DisplayEndProcess = true;
+
 #define NO_BLOCK ((cromfs_blocknum_t)~0ULL)
 struct mkcromfs_block : public cromfs_block_storage
 {
@@ -84,34 +88,53 @@ public:
 
         std::vector<unsigned char> raw_root_inode   = encode_inode(rootdir);
         cromfs_inode_internal inotab_inode;
-
-        std::printf("Blockifying the inode table...\n");
+        
+        if(DisplayEndProcess)
+        {
+            std::printf("Blockifying the inode table...\n");
+        }
+        
         { datasource_vector inotab_source(inotab);
           inotab_inode.mode = 0x12345678;
           inotab_inode.time = time(NULL);
           inotab_inode.links = 1;
           inotab_inode.bytesize = inotab.size();
           inotab_inode.blocklist = Blockify(inotab_source); }
-        std::printf("Uncompressed inode table is %s (stored in fblocks, compressed).\n",
-            ReportSize(inotab_inode.bytesize).c_str());
+        
+        if(DisplayEndProcess)
+        {
+            std::printf("Uncompressed inode table is %s (stored in fblocks, compressed).\n",
+                ReportSize(inotab_inode.bytesize).c_str());
+        }
         
         std::vector<unsigned char> raw_inotab_inode = encode_inode(inotab_inode);
         
-        std::printf("Compressing inotab (%s) and root (%s) inodes...\n",
-            ReportSize(raw_inotab_inode.size()).c_str(),
-            ReportSize(raw_root_inode.size()).c_str()
-                );
+        if(DisplayEndProcess)
+        {
+            std::printf("Compressing inotab (%s) and root (%s) inodes...\n",
+                ReportSize(raw_inotab_inode.size()).c_str(),
+                ReportSize(raw_root_inode.size()).c_str()
+                    );
+        }
         raw_inotab_inode = LZMACompress(raw_inotab_inode);
         raw_root_inode   = LZMACompress(raw_root_inode);
         
-        std::printf("Compressing %u block records (%u bytes each)...",
-            (unsigned)blocks.size(), (unsigned)sizeof(blocks[0])); fflush(stdout);
+        if(DisplayEndProcess)
+        {
+            std::printf("Compressing %u block records (%u bytes each)...",
+                (unsigned)blocks.size(), (unsigned)sizeof(blocks[0]));
+            fflush(stdout);
+        }
         std::vector<unsigned char> raw_blktab
             ((unsigned char*)&*blocks.begin(),
              (unsigned char*)&*blocks.end() /* Not really standard here */
             );
         raw_blktab = LZMACompress(raw_blktab);
-        std::printf(" compressed into %s\n", ReportSize(raw_blktab.size()).c_str()); fflush(stdout);
+        
+        if(DisplayEndProcess)
+        {
+            std::printf(" compressed into %s\n", ReportSize(raw_blktab.size()).c_str()); fflush(stdout);
+        }
         
         unsigned char Superblock[0x38];
         uint_fast64_t root_ino_addr   = sizeof(Superblock);
@@ -144,13 +167,19 @@ public:
             
         for(unsigned a=0; a<fblocks.size(); ++a)
         {
-            std::printf("\rWriting fblock %u...", a); std::fflush(stdout);
+            if(DisplayEndProcess)
+            {
+                std::printf("\rWriting fblock %u...", a); std::fflush(stdout);
+            }
             
             char Buf[64];
             std::vector<unsigned char> fblock, fblock_raw;
             fblocks[a].get(fblock_raw, fblock);
             
-            std::printf(" %u bytes       ", (unsigned)fblock.size());
+            if(DisplayEndProcess)
+            {
+                std::printf(" %u bytes       ", (unsigned)fblock.size());
+            }
             
             W64(Buf, fblock.size());
             write(fd, Buf, 4);
@@ -167,20 +196,25 @@ public:
              */
             fblocks[a].Delete();
         }
-        std::printf(
-            "\n%u fblocks were written: %s = %.2f %% of %s\n",
-            (unsigned)fblocks.size(),
-            ReportSize(compressed_total).c_str(),
-            compressed_total * 100.0 / (double)uncompressed_total,
-            ReportSize(uncompressed_total).c_str()
-           );
-        uint_fast64_t file_size = lseek64(fd, 0, SEEK_CUR);
-        std::printf(
-            "Filesystem size: %s = %.2f %% of original %s\n",
-            ReportSize(file_size).c_str(),
-            file_size * 100.0 / (double)bytes_of_files,
-            ReportSize(bytes_of_files).c_str()
+        
+        if(DisplayEndProcess)
+        {
+            uint_fast64_t file_size = lseek64(fd, 0, SEEK_CUR);
+
+            std::printf(
+                "\n%u fblocks were written: %s = %.2f %% of %s\n",
+                (unsigned)fblocks.size(),
+                ReportSize(compressed_total).c_str(),
+                compressed_total * 100.0 / (double)uncompressed_total,
+                ReportSize(uncompressed_total).c_str()
                );
+            std::printf(
+                "Filesystem size: %s = %.2f %% of original %s\n",
+                ReportSize(file_size).c_str(),
+                file_size * 100.0 / (double)bytes_of_files,
+                ReportSize(bytes_of_files).c_str()
+                   );
+        }
     }
     
     void WalkRootDir(const std::string& path)
@@ -192,13 +226,18 @@ public:
         std::vector<unsigned char> Buf = encode_directory(dirinfo);
         datasource_vector f(Buf);
         
-        std::printf("Blockifying the root dir...\n");
+        if(DisplayEndProcess)
+        {
+            std::printf("Blockifying the root dir...\n");
+        }
         
-        inode.mode     = S_IFDIR | 0777;
+        inode.mode     = S_IFDIR | 0555;
         inode.time     = time(NULL);
         inode.links    = dirinfo.size();
         inode.bytesize = f.size();
         inode.blocklist = Blockify(f);
+        inode.uid       = 0;
+        inode.gid       = 0;
         
         rootdir = inode;
     }
@@ -247,7 +286,10 @@ private:
             struct stat st;
             const std::string pathname = path + "/" + entname;
             
-            std::printf("%s ...\n", pathname.c_str());
+            if(DisplayFiles)
+            {
+                std::printf("%s ...\n", pathname.c_str());
+            }
             
             if(lstat(pathname.c_str(), &st) < 0)
             {
@@ -274,8 +316,11 @@ private:
                     cromfs_dirinfo dirinfo = WalkDir(pathname);
                     std::vector<unsigned char> Buf = encode_directory(dirinfo);
                     datasource_vector f(Buf);
-
-                    std::printf("Blockifying %s ...\n", pathname.c_str());
+                    
+                    if(DisplayBlockSelections)
+                    {
+                        std::printf("Blockifying %s ...\n", pathname.c_str());
+                    }
 
                     inode.links     = dirinfo.size();
                     inode.bytesize  = f.size();
@@ -324,7 +369,10 @@ private:
             {
                 /* A hardlink was found! */
                 
-                std::printf("- reusing inode %ld (hardlink)\n", (long)inonum);
+                if(DisplayFiles)
+                {
+                    std::printf("- reusing inode %ld (hardlink)\n", (long)inonum);
+                }
                 
                 /* Reuse the same inode number. */
                 dirinfo[entname] = inonum;
@@ -355,8 +403,11 @@ private:
             uint_fast64_t eat = nbytes;
             if(eat > (uint_fast64_t)BSIZE) eat = BSIZE;
             
-            std::printf(" - %u/%llu... ", (unsigned)eat, nbytes);
-            std::fflush(stdout);
+            if(DisplayBlockSelections)
+            {
+                std::printf(" - %u/%llu... ", (unsigned)eat, nbytes);
+                std::fflush(stdout);
+            }
             
             amount_blockdata  = 0;
             amount_fblockdata = 0;
@@ -373,19 +424,21 @@ private:
         
         const int_fast64_t minimum_optimal_overhead = 4 + sizeof(cromfs_block_storage);
         
-        int_fast64_t overhead = consumption - data.size();
-        if(overhead > 0)
-            std::printf(" - overhead is %s%s\n",
-                ReportSize(overhead).c_str(),
-                overhead > minimum_optimal_overhead
-                    ? ""
-                    : ""
-             );
-        else
-            std::printf(" - overhead is -%s%s\n",
-                ReportSize(-overhead).c_str(),
-                "; bytes saved");
-
+        if(DisplayBlockSelections)
+        {
+            int_fast64_t overhead = consumption - data.size();
+            if(overhead > 0)
+                std::printf(" - overhead is %s%s\n",
+                    ReportSize(overhead).c_str(),
+                    overhead > minimum_optimal_overhead
+                        ? ""
+                        : ""
+                 );
+            else
+                std::printf(" - overhead is -%s%s\n",
+                    ReportSize(-overhead).c_str(),
+                    "; bytes saved");
+        }
         return blocklist;
     }
     
@@ -538,10 +591,13 @@ private:
                 
                 if(blocknum != NO_BLOCK)
                 {
-                    std::printf(" reused block %u [%u @ %u]\n",
-                        (unsigned)blocknum,
-                        (unsigned)block.fblocknum,
-                        (unsigned)block.startoffs);
+                    if(DisplayBlockSelections)
+                    {
+                        std::printf(" reused block %u [%u @ %u]\n",
+                            (unsigned)blocknum,
+                            (unsigned)block.fblocknum,
+                            (unsigned)block.startoffs);
+                    }
                     return blocknum;
                 }
                 
@@ -549,11 +605,14 @@ private:
                 blocks.push_back(block);
                 
                 amount_blockdata += sizeof(block);
-
-                std::printf(" reused indexed material [%u @ %u], became block %u\n",
-                    (unsigned)block.fblocknum,
-                    (unsigned)block.startoffs,
-                    (unsigned)blocknum);
+                
+                if(DisplayBlockSelections)
+                {
+                    std::printf(" reused indexed material [%u @ %u], became block %u\n",
+                        (unsigned)block.fblocknum,
+                        (unsigned)block.startoffs,
+                        (unsigned)blocknum);
+                }
                 return blocknum;
             }
         }
@@ -818,22 +877,28 @@ private:
             {
                 throw false;
             }
-            std::printf(" (OVERUSE) ");
+            if(DisplayBlockSelections)
+            {
+                std::printf(" (OVERUSE) ");
+            }
         }
         
-        std::printf("block %u => [%u @ %u] size now %u, remain %d",
-            (unsigned)blocks.size(),
-            (unsigned)fblocknum,
-            (unsigned)new_data_offset,
-            (unsigned)new_raw_size,
-            (int)new_remaining_room);
-        
-        if(new_data_offset < old_raw_size)
+        if(DisplayBlockSelections)
         {
-            if(new_data_offset + data.size() < old_raw_size)
-                std::printf(" (overlap fully)");
-            else
-                std::printf(" (overlap %d)", (int)(old_raw_size - new_data_offset));
+            std::printf("block %u => [%u @ %u] size now %u, remain %d",
+                (unsigned)blocks.size(),
+                (unsigned)fblocknum,
+                (unsigned)new_data_offset,
+                (unsigned)new_raw_size,
+                (int)new_remaining_room);
+            
+            if(new_data_offset < old_raw_size)
+            {
+                if(new_data_offset + data.size() < old_raw_size)
+                    std::printf(" (overlap fully)");
+                else
+                    std::printf(" (overlap %d)", (int)(old_raw_size - new_data_offset));
+            }
         }
 
         fblock.put_appended_raw(appended, data);
@@ -885,7 +950,10 @@ private:
             }
         }
         
-        std::printf("\n");
+        if(DisplayBlockSelections)
+        {
+            std::printf("\n");
+        }
         
         cromfs_block_storage result;
         result.fblocknum = fblocknum;
@@ -985,9 +1053,10 @@ int main(int argc, char** argv)
                             1, 0,'a'},
             {"bruteforcelimit",
                             1, 0,'c'},
+            {"quiet",       0, 0,'q'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:q", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -1044,6 +1113,10 @@ int main(int argc, char** argv)
                     "     overlapping content when deciding which fblock to append to.\n"
                     "     The default value, 0, means to do straight-forward selection\n"
                     "     based on the free space in the fblock.\n"
+                    " --quiet, -q\n"
+                    "     -q supresses the detailed information outputting while compressing.\n"
+                    "     -qq supresses also the listing of the filenames.\n"
+                    "     -qqq supresses also the summary and progress at the last phase.\n"
                     "\n");
                 return 0;
             }
@@ -1129,6 +1202,15 @@ int main(int argc, char** argv)
                 MaxFblockCountForBruteForce = val;
                 break;
             }
+            case 'q':
+            {
+                if(DisplayBlockSelections) DisplayBlockSelections = false;
+                else if(DisplayFiles) DisplayFiles = false;
+                else if(DisplayEndProcess) DisplayEndProcess = false;
+                else
+                    std::fprintf(stderr, "mkcromfs: -qqqq not known, -qqq is the maximum.\n");
+                break;
+            }
         }
     }
     if(argc != optind+2)
@@ -1192,15 +1274,22 @@ int main(int argc, char** argv)
 
     cromfs fs;
     fs.WalkRootDir(path.c_str());
-    std::fprintf(stderr, "Writing %s...\n", outfn.c_str());
+    
+    if(DisplayEndProcess)
+    {
+        std::printf("Writing %s...\n", outfn.c_str());
+    }
     
     //MaxSearchLength = FSIZE;
     
     ftruncate(fd, 0);
     fs.WriteTo(fd);
     close(fd);
-
-    std::fprintf(stderr, "End\n");
+    
+    if(DisplayEndProcess)
+    {
+        std::printf("End\n");
+    }
     
     return 0;
 }

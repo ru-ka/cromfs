@@ -108,7 +108,12 @@ extern "C" {
         attr.st_gid     = i.gid ? i.gid : getgid();
         attr.st_size    = i.bytesize;
         attr.st_blksize = 4096;
-        attr.st_blocks  = (i.bytesize + attr.st_blksize - 1) / (attr.st_blksize);
+        
+        const unsigned unit = 512; // attr.st_blksize;
+        // For some reason, 512 seems to be the right
+        // value that has "du" work right, not 4096.
+        
+        attr.st_blocks  = (i.bytesize + unit - 1) / (unit);
         attr.st_atime   = i.time;
         attr.st_mtime   = i.time;
         attr.st_ctime   = i.time;

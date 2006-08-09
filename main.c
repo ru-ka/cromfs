@@ -78,6 +78,7 @@ int main(int argc, char *argv[])
                 fuse_session_add_chan(se, ch);
                 
                 fprintf(stderr, "ready\n");
+                
                 err = fuse_session_loop(se);
             }
             fuse_remove_signal_handlers(se);

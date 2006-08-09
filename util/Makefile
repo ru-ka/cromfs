@@ -1,4 +1,4 @@
-VERSION=1.2.0
+VERSION=1.2.1
 
 include Makefile.sets
 
@@ -6,7 +6,8 @@ include Makefile.sets
 # -fmudflap
 #LDOPTS += -fmudflap -lmudflap
 
-OPTIM += -O3 -ftree-vectorize 
+OPTIM += -O3
+# -ftree-vectorize 
 
 #OPTIM += -O1 -pg -g
 #LDOPTS += -pg

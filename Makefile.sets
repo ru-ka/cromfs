@@ -17,6 +17,8 @@ WARNINGS=-Wall \
     -Wwrite-strings \
     -Wsign-compare \
     -Wredundant-decls \
+    -Winit-self \
+    -Wextra \
     -Wcast-align -Wformat
 
 #    -Wtraditional

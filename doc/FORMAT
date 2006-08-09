@@ -1,19 +1,26 @@
+Cromfs filesystem structure / format description.
+
 cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
-
-cromfs filesystem structure / format description.
 
 VERSION 02
 
 --------------------------------
 Note: Inode 1 is assumed to be the root directory by the kernel.
 
-Note: All integers are encoded in little-endian byte order.
+Types:
+	u64 = unsigned 64-bit little-endian integer
+	u32 = unsigned 32-bit little-endian integer
+	u16 = unsigned 16-bit little-endian integer
+	char = unsigned 8-bit byte
+	smth[] = zero or more instances of smth (a contiguous array)
+	Other types are STRUCTs, and are explained in the document.
 
 OVERALL STRUCTURE
 
 OBJECT: SUPERBLOCK
+	Offset	Type	Meaning
 	0000	u64	CROMFS SIGNATURE "CROMFS02"
 	0008	u64	Location of BLKDATA within the filesystem
 	0010	u64	Location of FBLKTAB within the filesystem (must be last)
@@ -22,10 +29,10 @@ OBJECT: SUPERBLOCK
 	0028	u32	FSIZE Maximum size of uncompressed FBLOCK (default: 2M)
 	002C	u32	BSIZE Size of uncompressed blocks (default: 64k)
 	0030	u64	Bytes of file data on disk (only there for statvfs)
-	0...	INODE	Root directory
-	0...	INODE	Inotab (only the "list of blocks" is used)
-	0...	BLKDATA	LZMA-compressed array of BLOCK entries.
-	0...	FBLOCK[] FBLKTAB = compressed storage
+	....	INODE	Root directory
+	....	INODE	Inotab (only the "list of blocks" is used)
+	....	BLKDATA	LZMA-compressed array of BLOCK entries.
+	....	FBLOCK[] FBLKTAB = compressed storage
 
 In CROMFS02, root directory and inotab are stored compressed.
 In CROMFS01, they are stored uncompressed.

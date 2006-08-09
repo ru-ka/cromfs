@@ -1,13 +1,24 @@
+Cromfs changelog
+
 cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-Changelog
+1.2.1	2006-08-09 Joel Yliluoma <bisqwit@iki.fi>
+- Added -q, -qq, -qqq in mkcromfs
+- Fixed the weird permissions of mountpoints
+- Disabled GCC option -ftree-vectorize by default,
+  because GCC-4 is not widespread enough yet.
+- Large file support fixed in unmkcromfs
+- Fixed the stat()/lstat() calls; they previously reported
+  blkcounts 8 times to small, causing "du" to report wrong sizes.
 
 1.2.0	2006-06-06 Joel Yliluoma <bisqwit@iki.fi>
 - New filesystem format (old filesystems are still supported)
   The inode table inode and root directory inode are now compressed.
 - New utility: cvcromfs (to convert filesystems between versions 01 and 02)
+  (also helpful if new and more effecient versions of LZMA are released,
+   to recompress existing filesystems)
 
 1.1.7	2006-06-05 Joel Yliluoma <bisqwit@iki.fi>
 - Hardlink extraction support in unmkcromfs
