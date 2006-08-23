@@ -562,7 +562,7 @@ filesystem has been initialized; there is a delay of a few seconds).
 Requirements to use cromfs in the root filesystem:
 <ul>
  <li>Cromfs-driver should probably be statically linked.</li>
- <li>Initrd, which contains the cromfs-driver program</li>
+ <li>An initrd, that contains the cromfs-driver program</li>
  <li>Fuse driver in the kernel (it may be loaded from the initrd).</li>
  <li>Use of pivot_root to change the root into the mounted image
   <ul><li>One must wait until the cromfs-driver outputs \"ready\"

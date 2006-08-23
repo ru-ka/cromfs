@@ -1,4 +1,4 @@
-VERSION=1.2.1
+VERSION=1.2.2
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -20,6 +20,8 @@ ARCHFILES=\
 	cromfs-ops.cc cromfs-ops.hh \
 	main.c \
 	LzmaDecode.c LzmaDecode.h \
+	\
+	dummy_thread.c \
 	\
 	util/Makefile.sets util/Makefile util/depfun.mak \
 	\
@@ -95,7 +97,7 @@ ARCHFILES=\
 include Makefile.sets
 
 #CXXFLAGS += -O1 -fno-inline -g
-CXXFLAGS += -O3
+CXXFLAGS += -O3 -fno-rtti
 
 CPPFLAGS += `pkg-config --cflags fuse`
 
@@ -105,7 +107,7 @@ LDLIBS += -lfuse
 
 DEPFUN_INSTALL=ignore
 
-PROGS = cromfs-driver util/mkcromfs util/unmkcromfs util/cvcromfs
+PROGS = cromfs-driver cromfs-driver-static util/mkcromfs util/unmkcromfs util/cvcromfs
 DOCS  = doc/FORMAT README.html doc/ChangeLog doc/*.txt
 
 all: $(PROGS)
@@ -113,7 +115,14 @@ all: $(PROGS)
 cromfs-driver: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
+cromfs-driver-static: $(OBJS)
+	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS) -lpthread -lrt
+	- strip -R.comment $@
+	- upx --best $@
 
+#dummy_thread.o: dummy_thread.c
+#	$(CC) -o $@ $^ -fomit-frame-pointer -c
+	
 util/mkcromfs: FORCE
 	make -C util mkcromfs
 
