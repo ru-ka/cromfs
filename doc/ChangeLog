@@ -4,8 +4,16 @@ cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.2.3	2006-08-31 Joel Yliluoma <bisqwit@iki.fi>
+- Added -x and -X (--exclude and --exclude-from) in mkcromfs
+  and unmkcromfs (thanks to Jeff Strunk for suggesting this)
+
+1.2.2	2006-08-23 Joel Yliluoma <bisqwit@iki.fi>
+- Added a static cromfs-driver (cromfs-driver-static) for bootdisks
+
 1.2.1	2006-08-09 Joel Yliluoma <bisqwit@iki.fi>
 - Added -q, -qq, -qqq in mkcromfs
+  (thanks to Gilson Laurent for suggesting this)
 - Fixed the weird permissions of mountpoints
 - Disabled GCC option -ftree-vectorize by default,
   because GCC-4 is not widespread enough yet.

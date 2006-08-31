@@ -27,6 +27,7 @@
 #include "fblock.hh"
 #include "crc32.h"
 #include "util.hh"
+#include "fnmatch.hh"
 
 /* Settings */
 #include "mkcromfs_sets.hh"
@@ -39,6 +40,12 @@ long FSIZE = 2097152;
 long BSIZE = 65536;
 //uint_fast32_t MaxSearchLength = FSIZE;
 
+static MatchingFileListType exclude_files;
+
+static bool MatchFile(const std::string& entname)
+{
+    return !MatchFileFrom(entname, exclude_files, false);
+}
 
 static bool DisplayBlockSelections = true;
 static bool DisplayFiles = true;
@@ -283,8 +290,11 @@ private:
             }
 #endif
             const std::string& entname = entries[a];
-            struct stat st;
             const std::string pathname = path + "/" + entname;
+            
+            if(!MatchFile(pathname)) continue;
+
+            struct stat st;
             
             if(DisplayFiles)
             {
@@ -1053,10 +1063,12 @@ int main(int argc, char** argv)
                             1, 0,'a'},
             {"bruteforcelimit",
                             1, 0,'c'},
+            {"exclude",     1, 0,'x'},
+            {"exclude-from",1, 0,'X'},
             {"quiet",       0, 0,'q'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:q", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:qx:X:", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -1113,6 +1125,10 @@ int main(int argc, char** argv)
                     "     overlapping content when deciding which fblock to append to.\n"
                     "     The default value, 0, means to do straight-forward selection\n"
                     "     based on the free space in the fblock.\n"
+                    " --exclude, -x <pattern>\n"
+                    "     Exclude files matching <pattern> from the archive\n"
+                    " --exclude-from, -X <file>\n"
+                    "     Exclude files matchig the patterns in <file>\n"
                     " --quiet, -q\n"
                     "     -q supresses the detailed information outputting while compressing.\n"
                     "     -qq supresses also the listing of the filenames.\n"
@@ -1209,6 +1225,16 @@ int main(int argc, char** argv)
                 else if(DisplayEndProcess) DisplayEndProcess = false;
                 else
                     std::fprintf(stderr, "mkcromfs: -qqqq not known, -qqq is the maximum.\n");
+                break;
+            }
+            case 'x':
+            {
+                AddFilePattern(exclude_files, optarg);
+                break;
+            }
+            case 'X':
+            {
+                AddFilePatternsFrom(exclude_files, optarg);
                 break;
             }
         }

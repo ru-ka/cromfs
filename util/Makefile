@@ -1,4 +1,4 @@
-VERSION=1.2.2
+VERSION=1.2.3
 
 include Makefile.sets
 
@@ -23,9 +23,9 @@ OBJS_LZMA += lzma/C/Common/CRC.o
 OBJS_LZMA += lzma.o
 
 OBJS_MK += $(OBJS_LZMA)
-OBJS_MK += mkcromfs.o crc32.o fblock.o memmem.o util.o
+OBJS_MK += mkcromfs.o crc32.o fblock.o memmem.o util.o fnmatch.o
 
-OBJS_UN += unmkcromfs.o ../cromfs.o util.o
+OBJS_UN += unmkcromfs.o ../cromfs.o util.o fnmatch.o
 
 OBJS_CV += $(OBJS_LZMA)
 OBJS_CV += cvcromfs.o util.o

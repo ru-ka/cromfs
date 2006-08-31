@@ -11,39 +11,21 @@
 #include <utime.h>
 
 #include <getopt.h>
-#include <fnmatch.h>
+
+#include "fnmatch.hh"
 
 #include <map>
 #include <set>
 
 static bool listing_mode  = false;
 static bool use_sparse    = true;
-static std::vector<std::string> extract_files;
+static MatchingFileListType extract_files;
+static MatchingFileListType exclude_files;
 
 static bool MatchFile(const std::string& entname)
 {
-    if(extract_files.empty()) return true;
-    
-    for(unsigned a=0; a<extract_files.size(); ++a)
-    {
-        if(fnmatch(
-            extract_files[a].c_str(),
-            entname.c_str(),
-            0 
-#if 0
-            | FNM_PATHNAME
-            /* disabled. It is nice if *Zelda* also matches subdir/Zelda. */
-#endif
-#ifdef FNM_LEADING_DIR
-            | FNM_LEADING_DIR
-            /* GNU extension which does exactly what I want --Bisqwit
-             * With this, one can enter pathnames to the commandline and
-             * those will too be extracted, without need to append / and *
-             */
-#endif
-          ) == 0) return true;
-    }
-    return false;
+    return MatchFileFrom(entname, extract_files, true)
+        && !MatchFileFrom(entname, exclude_files, false);
 }
 
 static const std::string DumpTime(uint_fast32_t time)
@@ -596,9 +578,11 @@ int main(int argc, char** argv)
             {"version",     0, 0,'V'},
             {"list",        0, 0,'l'},
             {"nosparse",    0, 0,'s'},
+            {"exclude",     1, 0,'x'},
+            {"exclude-from",1, 0,'X'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVls", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVlsx:X:", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -619,6 +603,10 @@ int main(int argc, char** argv)
                     " --version, -V      Displays version information\n"
                     " --list, -l         List contents without extracting files\n"
                     " --nosparse, -s     Do not leave holes in the files\n"
+                    " --exclude, -x <pattern>\n"
+                    "                    Exclude files matching <pattern> from the archive\n"
+                    " --exclude-from, -X <file>\n"
+                    "                    Exclude files matchig the patterns in <file>\n"
                     "\n");
                 return 0;
             }
@@ -630,6 +618,16 @@ int main(int argc, char** argv)
             case 's':
             {
                 use_sparse = false;
+                break;
+            }
+            case 'x':
+            {
+                AddFilePattern(exclude_files, optarg);
+                break;
+            }
+            case 'X':
+            {
+                AddFilePatternsFrom(exclude_files, optarg);
                 break;
             }
         }
@@ -652,7 +650,7 @@ int main(int argc, char** argv)
     
     while(optind < argc)
     {
-        extract_files.push_back(argv[optind++]);
+        AddFilePattern(extract_files, argv[optind++]);
     }
     
     if(!listing_mode)
@@ -680,5 +678,18 @@ int main(int argc, char** argv)
         errno=e;
         perror("cromfs");
         return -1;
+    }
+    
+    UnmatchedPatternListType unmatched = GetUnmatchedList(extract_files);
+    if(!unmatched.empty())
+    {
+        for(UnmatchedPatternListType::const_iterator
+            i = unmatched.begin();
+            i != unmatched.end();
+            ++i)
+        {
+            fprintf(stderr, "%s: Unmatched pattern\n",
+                i->c_str());
+        }
     }
 }
