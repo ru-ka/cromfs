@@ -26,6 +26,14 @@ public:
         InitSkip();
     }
     
+    explicit BoyerMooreNeedle(const std::string& n)
+        : needle( (const unsigned char*) n.data()), nlen(n.size()), skip(nlen, nlen)
+    {
+        /* Preprocess the needle */
+        InitOcc();
+        InitSkip();
+    }
+    
     explicit BoyerMooreNeedle(const unsigned char* n, uint_fast32_t nl)
         : needle(n), nlen(nl), skip(nlen, nlen)
     {
@@ -43,6 +51,10 @@ public:
     uint_fast32_t SearchIn(const std::vector<unsigned char>& haystack) const
     {
         return SearchIn(&haystack[0], haystack.size());
+    }
+    uint_fast32_t SearchIn(const std::string& haystack, unsigned beginpos=0) const
+    {
+        return SearchIn((const unsigned char*)&haystack[beginpos], haystack.size()-beginpos)+beginpos;
     }
     uint_fast32_t SearchIn(const unsigned char* haystack, const uint_fast32_t hlen) const
     {
@@ -86,7 +98,7 @@ private:
          * and have since edited it in trying to seek clarity. -Bisqwit
          */
         
-        int_fast32_t suff[nlen];
+        std::vector<int_fast32_t> suff(nlen);
         
         suff[nlen-1] = nlen;
         

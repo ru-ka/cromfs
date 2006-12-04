@@ -23,9 +23,9 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.2.3.
-<div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br></td>
-<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#download">Downloading</a><br></td>
+  This is the documentation of cromfs-1.2.4.
+<div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br></td>
+<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
 
 <img src="http://bisqwit.iki.fi/src/cromfs-boxart.png" align="left" alt="cromfs" />
@@ -549,6 +549,9 @@ To control the memory usage, use these tips:
  <li>Find the CACHE_MAX_SIZE settings in cromfs.cc and edit them. This will
      require recompiling the source. (In future, this should be made a command
      line option for cromfs-driver.)</li>
+ <li>In mkcromfs, adjust the block size (--bsize). The RAM usage of mkcromfs
+     is directly proportional to the number of blocks (and the filesystem size),
+     so smaller blocks require more memory and larger require less.
 </ul>
 To control the filesystem speed, use these tips:
 <ul>
@@ -571,7 +574,7 @@ by starting the cromfs-driver from a ramdisk (initrd), and then
 pivot_rooting into the mounted filesystem (but not before the
 filesystem has been initialized; there is a delay of a few seconds).
  <p>
-Requirements to use cromfs in the root filesystem:
+Theoretical requirements to use cromfs in the root filesystem:
 <ul>
  <li>Cromfs-driver should probably be statically linked.</li>
  <li>An initrd, that contains the cromfs-driver program</li>
@@ -582,7 +585,70 @@ Requirements to use cromfs in the root filesystem:
  </li>
 </ul>
 
-</div><H2 id="copying" class="level2"><a name="copying"></a>9. Copying</H2><div class="level2" id="divcopying">
+</div><H2 id="otheruse" class="level2"><a name="otheruse"></a>9. Other applications of cromfs</H2><div class="level2" id="divotheruse">
+
+The compression algorithm in cromfs can be used to determine how similar
+some files are to each others.
+ <p>
+This is an example output of the following command:
+ <pre>$ unmkcromfs --simgraph fs.cromfs '*.qh'</pre>
+from a sample filesystem:
+
+<pre>&lt;?xml version="1.0" encoding="UTF-8"?>
+&lt;simgraph>
+ &lt;volume>
+  &lt;total_size>64016101&lt;/total_size>
+  &lt;num_inodes>7&lt;/num_inodes>
+  &lt;num_files>307&lt;/num_files>
+ &lt;/volume>
+ &lt;inodes>
+  &lt;inode id="5595">&lt;file>45/qb5/ir/basewc.qh&lt;/file>&lt;/inode>
+  &lt;inode id="5775">&lt;file>45/qb5/ir/edit.qh&lt;/file>&lt;/inode>
+  &lt;inode id="5990">&lt;file>45/qb5/ir/help.qh&lt;/file>&lt;/inode>
+  &lt;inode id="6220">&lt;file>45/qb5/ir/oemwc.qh&lt;/file>&lt;/inode>
+  &lt;inode id="6426">&lt;file>45/qb5/ir/qbasic.qh&lt;/file>&lt;/inode>
+  &lt;inode id="18833">&lt;file>c6ers/newcmds/toolib/doc/contents.qh&lt;/file>&lt;/inode>
+  &lt;inode id="19457">&lt;file>c6ers/newcmds/toolib/doc/index.qh&lt;/file>&lt;/inode>
+ &lt;/inodes>
+ &lt;matches>
+  &lt;match inode1="5595" inode2="5990">&lt;bytes>396082&lt;/bytes>&lt;ratio>0.5565442944&lt;/ratio>&lt;/match>
+  &lt;match inode1="5595" inode2="6220">&lt;bytes>456491&lt;/bytes>&lt;ratio>0.6414264256&lt;/ratio>&lt;/match>
+  &lt;match inode1="5990" inode2="6220">&lt;bytes>480031&lt;/bytes>&lt;ratio>0.6732618693&lt;/ratio>&lt;/match>
+ &lt;/matches>
+&lt;/simgraph></pre>
+
+It reads a cromfs volume generated earlier, and outputs statistics of it.
+Such statistics can be useful in refining further compression, or just
+finding useful information regarding the redundancy of the data set.
+ <p>
+It follows this DTD:
+<pre> &lt;!ENTITY % INTEGER "#PCDATA">
+ &lt;!ENTITY % REAL "#PCDATA">
+ &lt;!ENTITY % int "CDATA">
+ &lt;!ELEMENT simgraph (volume, inodes, matches)>
+ &lt;!ELEMENT volume (total_size, num_inodes, num_files)>
+ &lt;!ELEMENT total_size (%INTEGER;)>
+ &lt;!ELEMENT num_inodes (%INTEGER;)>
+ &lt;!ELEMENT num_files (%INTEGER;)>
+ &lt;!ELEMENT inodes (inode*)>
+ &lt;!ELEMENT inode (file+)>
+ &lt;!ATTLIST inode id %int; #REQUIRED>
+ &lt;!ELEMENT file (#PCDATA)>
+ &lt;!ELEMENT matches (match*)>
+ &lt;!ELEMENT match (bytes, ratio)>
+ &lt;!ATTLIST match inode1 %int; #REQUIRED>
+ &lt;!ATTLIST match inode2 %int; #REQUIRED>
+ &lt;!ELEMENT bytes (%INTEGER;)>
+ &lt;!ELEMENT ratio (%REAL;)></pre>
+
+Once you have generated the file system, running the <tt>--simgraph</tt> query is
+relatively a cheap operation (but still O(n^2) for the number of files);
+it involves analyzing the structures created by mkcromfs, and does not
+require any search on the actual file contents. However, it can only report as
+fine-grained similarity information as were the options in the generation of
+the filesystem (level of compression).
+
+</div><H2 id="copying" class="level2"><a name="copying"></a>10. Copying</H2><div class="level2" id="divcopying">
 
 cromfs has been written by Joel Yliluoma, a.k.a.
 <a href="http://iki.fi/bisqwit/">Bisqwit</a>,<br />
@@ -593,14 +659,14 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml17><b id=eml3 class=nonmail>nc/wf6zc</b><span id=eml4 class=ismail>Joel</span><span id=eml5 class=nonmail><b>f1vh0@sL@e</b></span><span id=eml6 class=ismail> Yli</span><b id=eml7 class=nonmail>@.@e</b><span id=eml8 class=ismail>luom</span><span id=eml9 class=nonmail><b>9ntJGmbit</b></span><span id=eml10 class=ismail>a &lt;bi</span><b id=eml11 class=nonmail>u6l</b><span id=eml12 class=ismail>sqwi</span><span id=eml13 class=nonmail><b>b.fxg</b></span><span id=eml14 class=ismail>t@ik</span><b id=eml15 class=nonmail>e</b><span id=eml16 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=3;i<17;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml16><b id=eml2 class=nonmail>H</b><span id=eml3 class=ismail>Joel</span><span id=eml4 class=nonmail><b>1l@r</b></span><span id=eml5 class=ismail> Yli</span><b id=eml6 class=nonmail>gCgx2r0</b><span id=eml7 class=ismail>luom</span><span id=eml8 class=nonmail><b>buuepx@0ec</b></span><span id=eml9 class=ismail>a &lt;bi</span><b id=eml10 class=nonmail>0wz</b><span id=eml11 class=ismail>sqwi</span><span id=eml12 class=nonmail><b>6.rxkm</b></span><span id=eml13 class=ismail>t@ik</span><b id=eml14 class=nonmail>eh</b><span id=eml15 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=2;i<16;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p>
 The author also wishes to hear if you use cromfs, and for what you
 use it and what you think of it.
 
-</div><H2 id="requ" class="level2"><a name="requ"></a>10. Requirements</H2><div class="level2" id="divrequ">
+</div><H2 id="requ" class="level2"><a name="requ"></a>11. Requirements</H2><div class="level2" id="divrequ">
 
 <ul>
  <li>GNU make and gcc-c++ are required to recompile the source code.</li>
@@ -612,14 +678,14 @@ use it and what you think of it.
 </ul>
 
 
-</div><H2 id="download" class="level2"><a name="download"></a>11. Downloading</H2><div class="level2" id="divdownload">
+</div><H2 id="download" class="level2"><a name="download"></a>12. Downloading</H2><div class="level2" id="divdownload">
    The official home page of cromfs
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Wed, 09 Aug 2006 14:49:12 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Mon, 04 Dec 2006 18:45:45 +0200)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Thu, 31 Aug 2006 20:28:04 +0300</small>
+  at Mon, 04 Dec 2006 18:45:46 +0200</small>
  </p>
 </body>
 </html>

@@ -32,6 +32,7 @@
 /* Settings */
 #include "mkcromfs_sets.hh"
 bool DecompressWhenLookup = false;
+bool FollowSymlinks = false;
 unsigned RandomCompressPeriod = 20;
 uint_fast32_t MinimumFreeSpace = 16;
 uint_fast32_t AutoIndexPeriod = 256;
@@ -301,7 +302,7 @@ private:
                 std::printf("%s ...\n", pathname.c_str());
             }
             
-            if(lstat(pathname.c_str(), &st) < 0)
+            if( (FollowSymlinks ? stat : lstat) (pathname.c_str(), &st) < 0)
             {
                 std::perror(pathname.c_str());
                 continue;
@@ -1063,6 +1064,7 @@ int main(int argc, char** argv)
                             1, 0,'a'},
             {"bruteforcelimit",
                             1, 0,'c'},
+            {"followsymlinks", 0,0,'l'},
             {"exclude",     1, 0,'x'},
             {"exclude-from",1, 0,'X'},
             {"quiet",       0, 0,'q'},
@@ -1128,7 +1130,9 @@ int main(int argc, char** argv)
                     " --exclude, -x <pattern>\n"
                     "     Exclude files matching <pattern> from the archive\n"
                     " --exclude-from, -X <file>\n"
-                    "     Exclude files matchig the patterns in <file>\n"
+                    "     Exclude files matching the patterns in <file>\n"
+                    " --followsymlinks, -l\n"
+                    "     Follow symlinks instead of storing them (same the referred contents)\n"
                     " --quiet, -q\n"
                     "     -q supresses the detailed information outputting while compressing.\n"
                     "     -qq supresses also the listing of the filenames.\n"

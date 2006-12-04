@@ -179,3 +179,14 @@ const std::vector<unsigned char> LZMADeCompress
     result.resize(out_done);
     return result;
 }
+
+#if 0
+#include <stdio.h>
+int main(void)
+{
+    char Buf[2048*2048];
+    int s = fread(Buf,1,sizeof(Buf),stdin);
+    std::vector<unsigned char> result = LZMADeCompress(std::vector<unsigned char>(Buf,Buf+s));
+    fwrite(&result[0],1,result.size(),stdout);
+}
+#endif

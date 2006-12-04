@@ -537,6 +537,9 @@ To control the memory usage, use these tips:
  <li>Find the CACHE_MAX_SIZE settings in cromfs.cc and edit them. This will
      require recompiling the source. (In future, this should be made a command
      line option for cromfs-driver.)</li>
+ <li>In mkcromfs, adjust the block size (--bsize). The RAM usage of mkcromfs
+     is directly proportional to the number of blocks (and the filesystem size),
+     so smaller blocks require more memory and larger require less.
 </ul>
 To control the filesystem speed, use these tips:
 <ul>
@@ -559,7 +562,7 @@ by starting the cromfs-driver from a ramdisk (initrd), and then
 pivot_rooting into the mounted filesystem (but not before the
 filesystem has been initialized; there is a delay of a few seconds).
  <p>
-Requirements to use cromfs in the root filesystem:
+Theoretical requirements to use cromfs in the root filesystem:
 <ul>
  <li>Cromfs-driver should probably be statically linked.</li>
  <li>An initrd, that contains the cromfs-driver program</li>
@@ -569,6 +572,69 @@ Requirements to use cromfs in the root filesystem:
       before accessing the filesystem</li></ul>
  </li>
 </ul>
+
+", 'otheruse:1. Other applications of cromfs' => "
+
+The compression algorithm in cromfs can be used to determine how similar
+some files are to each others.
+ <p>
+This is an example output of the following command:
+ <pre>$ unmkcromfs --simgraph fs.cromfs '*.qh'</pre>
+from a sample filesystem:
+
+<pre>&lt;?xml version=\"1.0\" encoding=\"UTF-8\"?>
+&lt;simgraph>
+ &lt;volume>
+  &lt;total_size>64016101&lt;/total_size>
+  &lt;num_inodes>7&lt;/num_inodes>
+  &lt;num_files>307&lt;/num_files>
+ &lt;/volume>
+ &lt;inodes>
+  &lt;inode id=\"5595\">&lt;file>45/qb5/ir/basewc.qh&lt;/file>&lt;/inode>
+  &lt;inode id=\"5775\">&lt;file>45/qb5/ir/edit.qh&lt;/file>&lt;/inode>
+  &lt;inode id=\"5990\">&lt;file>45/qb5/ir/help.qh&lt;/file>&lt;/inode>
+  &lt;inode id=\"6220\">&lt;file>45/qb5/ir/oemwc.qh&lt;/file>&lt;/inode>
+  &lt;inode id=\"6426\">&lt;file>45/qb5/ir/qbasic.qh&lt;/file>&lt;/inode>
+  &lt;inode id=\"18833\">&lt;file>c6ers/newcmds/toolib/doc/contents.qh&lt;/file>&lt;/inode>
+  &lt;inode id=\"19457\">&lt;file>c6ers/newcmds/toolib/doc/index.qh&lt;/file>&lt;/inode>
+ &lt;/inodes>
+ &lt;matches>
+  &lt;match inode1=\"5595\" inode2=\"5990\">&lt;bytes>396082&lt;/bytes>&lt;ratio>0.5565442944&lt;/ratio>&lt;/match>
+  &lt;match inode1=\"5595\" inode2=\"6220\">&lt;bytes>456491&lt;/bytes>&lt;ratio>0.6414264256&lt;/ratio>&lt;/match>
+  &lt;match inode1=\"5990\" inode2=\"6220\">&lt;bytes>480031&lt;/bytes>&lt;ratio>0.6732618693&lt;/ratio>&lt;/match>
+ &lt;/matches>
+&lt;/simgraph></pre>
+
+It reads a cromfs volume generated earlier, and outputs statistics of it.
+Such statistics can be useful in refining further compression, or just
+finding useful information regarding the redundancy of the data set.
+ <p>
+It follows this DTD:
+<pre> &lt;!ENTITY % INTEGER \"#PCDATA\">
+ &lt;!ENTITY % REAL \"#PCDATA\">
+ &lt;!ENTITY % int \"CDATA\">
+ &lt;!ELEMENT simgraph (volume, inodes, matches)>
+ &lt;!ELEMENT volume (total_size, num_inodes, num_files)>
+ &lt;!ELEMENT total_size (%INTEGER;)>
+ &lt;!ELEMENT num_inodes (%INTEGER;)>
+ &lt;!ELEMENT num_files (%INTEGER;)>
+ &lt;!ELEMENT inodes (inode*)>
+ &lt;!ELEMENT inode (file+)>
+ &lt;!ATTLIST inode id %int; #REQUIRED>
+ &lt;!ELEMENT file (#PCDATA)>
+ &lt;!ELEMENT matches (match*)>
+ &lt;!ELEMENT match (bytes, ratio)>
+ &lt;!ATTLIST match inode1 %int; #REQUIRED>
+ &lt;!ATTLIST match inode2 %int; #REQUIRED>
+ &lt;!ELEMENT bytes (%INTEGER;)>
+ &lt;!ELEMENT ratio (%REAL;)></pre>
+
+Once you have generated the file system, running the <tt>--simgraph</tt> query is
+relatively a cheap operation (but still O(n^2) for the number of files);
+it involves analyzing the structures created by mkcromfs, and does not
+require any search on the actual file contents. However, it can only report as
+fine-grained similarity information as were the options in the generation of
+the filesystem (level of compression).
 
 ", 'copying:1. Copying' => "
 

@@ -13,11 +13,13 @@
 #include <getopt.h>
 
 #include "fnmatch.hh"
+#include "rangeset.hh"
 
 #include <map>
 #include <set>
 
 static bool listing_mode  = false;
+static bool simgraph_mode = false;
 static bool use_sparse    = true;
 static MatchingFileListType extract_files;
 static MatchingFileListType exclude_files;
@@ -99,10 +101,33 @@ private:
     FileOutputter(const FileOutputter&);
 };
 
+struct cromfs_block_index
+{
+private:
+    uint_fast64_t value;
+public:
+    cromfs_block_index() : value(0) {}
+    cromfs_block_index(uint_fast64_t v) : value(v) { }
+    cromfs_block_index(const cromfs_block_storage& blk)
+        : value(((uint_fast64_t)blk.fblocknum << 32) | blk.startoffs) { }
+
+    cromfs_block_index
+        operator+ (uint_fast64_t v) const { return value+v; }
+
+    bool operator==(const cromfs_block_index& b) const { return value==b.value; }
+    bool operator!=(const cromfs_block_index& b) const { return value!=b.value; }
+    bool operator< (const cromfs_block_index& b) const { return value< b.value; }
+
+    operator uint_fast64_t () const { return value; }
+    
+    cromfs_block_index
+        operator- (cromfs_block_index v) const { return value - v; }
+};
+
 class cromfs_decoder: public cromfs
 {
 private:
-    std::multimap<cromfs_fblocknum_t, std::string> fblock_users;
+    std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t> fblock_users;
     std::multimap<cromfs_inodenum_t, std::string> inode_files;
     cromfs_dirinfo dir;
 
@@ -116,13 +141,102 @@ public:
         inode_files.clear();
     }
     
-    void extract(const std::string& targetdir)
+    void do_simgraph()
+    {
+        cleanup();
+
+        std::printf("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        std::printf("<simgraph>\n");
+        std::printf(" <volume>\n");
+        std::printf("  <total_size>%llu</total_size>\n", (unsigned long long)sblock.bytes_of_files);
+        ScanDirectories();
+        
+        std::printf("  <num_inodes>%lu</num_inodes>\n", (unsigned long)inode_files.size());
+        std::printf("  <num_files>%lu</num_files>\n", (unsigned long)dir.size());
+
+        std::printf(" </volume>\n");
+        std::printf(" <inodes>\n");
+        
+        std::vector<cromfs_inodenum_t> inodelist;
+        
+        cromfs_inodenum_t prev=0; bool first=true;
+        for(std::multimap<cromfs_inodenum_t, std::string>::const_iterator
+            i = inode_files.begin();
+            i != inode_files.end();
+            ++i)
+        {
+            if(first || prev != i->first)
+            {
+                if(!first)  std::printf("</inode>\n");
+                first=false;
+                prev = i->first;
+                std::printf("  <inode id=\"%llu\">", (unsigned long long)prev);
+                inodelist.push_back(prev);
+            }
+            std::printf("<file>%s</file>",
+                FileNameToXML(i->second).c_str());
+        }
+        if(!first) std::printf("</inode>\n");
+        std::printf(" </inodes>\n");
+        
+        std::printf(" <matches>\n");
+        for(unsigned a=0; a<inodelist.size(); ++a)
+        {
+            const cromfs_inodenum_t ino_a = inodelist[a];
+            const rangeset<cromfs_block_index> range_a = create_rangeset(ino_a);
+            const uint_fast64_t size_a = read_inode(ino_a).bytesize;
+            
+            for(unsigned b=a+1; b<inodelist.size(); ++b)
+            {
+                const cromfs_inodenum_t ino_b = inodelist[b];
+                const rangeset<cromfs_block_index> range_b = create_rangeset(ino_b);
+                const uint_fast64_t size_b = read_inode(ino_b).bytesize;
+                
+                rangeset<cromfs_block_index> intersect
+                    = range_a.intersect(range_b);
+                
+                if(intersect.empty()) continue;
+                
+                uint_fast64_t intersecting_size = 0;
+                for(rangeset<cromfs_block_index>::const_iterator
+                    i = intersect.begin();
+                    i != intersect.end();
+                    ++i)
+                {
+                    intersecting_size += i->upper - i->lower;
+                }
+                
+                std::printf("  <match inode1=\"%llu\" inode2=\"%llu\">",
+                    (unsigned long long)ino_a,
+                    (unsigned long long)ino_b);
+
+                /*
+                std::printf("<!-- asize %llu, bsize %llu -->\n",
+                    size_a, size_b);*/
+                
+                std::printf("<bytes>%llu</bytes><ratio>%.10f",
+                    (unsigned long long)intersecting_size,
+                    intersecting_size / (double)std::min(size_a, size_b)
+                           );
+                std::printf("</ratio></match>\n");
+            }
+        }
+        
+        std::printf(" </matches>\n");
+        std::printf("</simgraph>\n");
+    }
+    
+    void do_listing()
+    {
+        cleanup();
+        ScanDirectories();
+    }
+    
+    void do_extract(const std::string& targetdir)
     {
         cleanup();
         
         ScanDirectories();
-        
-        if(listing_mode) return;
         
         /*
          * This is written as one huge function, because there is a lot
@@ -227,7 +341,7 @@ public:
              */
             unsigned nfiles = 0;
 
-            for(std::multimap<cromfs_fblocknum_t, std::string>::iterator
+            for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::iterator
                 i = fblock_users.find(fblockno);
                 i != fblock_users.end() && i->first == fblockno;
                 ++i) ++nfiles;
@@ -263,13 +377,20 @@ public:
             uint_fast64_t wrote_size = 0;
 
             /* Write into each file that requires data from this fblock */
-            for(std::multimap<cromfs_fblocknum_t, std::string>::iterator
+            for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::iterator
                 i = fblock_users.find(fblockno);
                 i != fblock_users.end() && i->first == fblockno;
                 ++i)
             {
-                const cromfs_inodenum_t inonum = dir[i->second];
-                const std::string target = targetdir + "/" + i->second;
+                const cromfs_inodenum_t inonum = i->second;
+                const std::string& filename = inode_files.find(inonum)->second;
+                /* ^ Find the first name. It doesn't matter which,
+                 *   since if the files were hardlinked, any of them
+                 *   can be written into affecting all simultaneously.
+                 */
+                
+                //const cromfs_inodenum_t inonum = dir[i->second];
+                const std::string target = targetdir + "/" + filename;
                 const cromfs_inode_internal ino = read_inode_and_blocks(inonum);
                 
                 // std::printf("%s <- fblock %u...\n", i->second.c_str(), (unsigned)fblockno);
@@ -296,7 +417,7 @@ public:
                     if(ino.blocklist[a] >= blktab.size())
                     {
                         std::fprintf(stderr, "inode %u (used by %s) is corrupt (block #%u indicates block %llu, but block table has only %llu)\n",
-                            (unsigned)inonum, i->second.c_str(),
+                            (unsigned)inonum, filename.c_str(),
                             a,
                             (unsigned long long)ino.blocklist[a],
                             (unsigned long long)blktab.size()
@@ -471,19 +592,20 @@ public:
 private:
     void ScanDirectories()
     {
-        std::printf("Scanning directories...\n");
+        if(!simgraph_mode)
+            std::printf("Scanning directories...\n");
 
         if(listing_mode)
         {
             printf("mode #fblocks uid/gid    size        datetime       name\n");
         }
 
-        merge_dir_recursive(1, "");
+        scan_dir_recursive(1, "");
     }
     
 private:
-    void merge_dir_recursive(cromfs_inodenum_t root_ino,
-                             const std::string& parent)
+    void scan_dir_recursive(cromfs_inodenum_t root_ino,
+                            const std::string& parent)
     {
         cromfs_dirinfo& target = dir;
         
@@ -514,9 +636,10 @@ private:
                 }
             }
             
+            bool namematch = MatchFile(entname);
             if(!S_ISDIR(ino.mode))
             {
-                if(!MatchFile(entname)) continue;
+                if(!namematch) continue;
             }
             
             bool is_duplicate_inode = inode_files.find(i->second) != inode_files.end();
@@ -528,11 +651,14 @@ private:
                 std::fprintf(stderr, "Corrupt filesystem: two or more directories have the same inode number\n");
             }
             
-            inode_files.insert(std::make_pair(i->second, entname));
+            if(namematch || !simgraph_mode)
+            {
+                inode_files.insert(std::make_pair(i->second, entname));
+            }
             
             if(S_ISDIR(ino.mode))
             {
-                merge_dir_recursive(i->second, entname + "/");
+                scan_dir_recursive(i->second, entname + "/");
             }
             else if(S_ISLNK(ino.mode) /* only symlinks and regular files have content */
                  || S_ISREG(ino.mode)) // to limit extraction to certain type
@@ -547,7 +673,7 @@ private:
                     for(std::set<cromfs_fblocknum_t>::iterator
                         j = fblist.begin(); j != fblist.end(); ++j)
                     {
-                        fblock_users.insert(std::make_pair(*j, entname));
+                        fblock_users.insert(std::make_pair(*j, i->second));
                     }
                 }
             }
@@ -562,12 +688,59 @@ private:
             }
         }
     }
+    
+    rangeset<cromfs_block_index>
+    create_rangeset(cromfs_inodenum_t inonum)
+    {
+        rangeset<cromfs_block_index> result;
+        cromfs_inode_internal ino = read_inode_and_blocks(inonum);
+        for(unsigned a=0; a<ino.blocklist.size(); ++a)
+        {
+            const cromfs_block_storage& blk = blktab[ino.blocklist[a]];
+
+            /* Count how much. */
+            uint_fast64_t block_size = sblock.uncompressed_block_size;
+            /* the last block may be smaller than the block size */
+            if(a+1 == ino.blocklist.size() && (ino.bytesize % block_size) > 0)
+            {
+                block_size = ino.bytesize % block_size;
+            }
+
+            cromfs_block_index b(blk);
+            result.set(b, b + block_size);
+        }
+        return result;
+    }
+    
+    const std::string FileNameToXML(const std::string& name)
+    {
+        std::string result;
+        for(unsigned a=0; a<name.size(); ++a)
+        {
+            unsigned char ch = name[a];
+            if(ch == '<') { result += "&lt;"; continue; }
+            if(ch == '&') { result += "&amp;"; continue; }
+            if(ch < ' ' || ch >= 0x7E
+            || (ch==' ' && (a==0 || a+1 == name.size()))
+              )
+            {
+                char Buf[16];
+                sprintf(Buf, "&#%u;", ch);
+                result += Buf;
+            }
+            else
+                result += ch;
+        }
+        return result;
+    }
 };
 
 int main(int argc, char** argv)
 {
     std::string fsfile;
     std::string outpath;
+    
+    bool should_create_output = true;
     
     for(;;)
     {
@@ -580,6 +753,7 @@ int main(int argc, char** argv)
             {"nosparse",    0, 0,'s'},
             {"exclude",     1, 0,'x'},
             {"exclude-from",1, 0,'X'},
+            {"simgraph",    0, 0,10001},
             {0,0,0,0}
         };
         int c = getopt_long(argc, argv, "hVlsx:X:", long_options, &option_index);
@@ -607,12 +781,15 @@ int main(int argc, char** argv)
                     "                    Exclude files matching <pattern> from the archive\n"
                     " --exclude-from, -X <file>\n"
                     "                    Exclude files matchig the patterns in <file>\n"
+                    " --simgraph         Create a similarity graph of the contents of\n"
+                    "                    the file system without extracting files\n"
                     "\n");
                 return 0;
             }
             case 'l':
             {
-                listing_mode = true;
+                listing_mode  = true;
+                should_create_output = false;
                 break;
             }
             case 's':
@@ -630,6 +807,12 @@ int main(int argc, char** argv)
                 AddFilePatternsFrom(exclude_files, optarg);
                 break;
             }
+            case 10001: // simgraph
+            {
+                simgraph_mode = true;
+                should_create_output = false;
+                break;
+            }
         }
     }
 
@@ -641,10 +824,9 @@ int main(int argc, char** argv)
     }
     fsfile  = argv[optind++];
     
-    if(!listing_mode)
+    if(should_create_output)
     {
         if(argc < optind+1) goto ArgError;
-    
         outpath = argv[optind++];
     }
     
@@ -653,7 +835,7 @@ int main(int argc, char** argv)
         AddFilePattern(extract_files, argv[optind++]);
     }
     
-    if(!listing_mode)
+    if(should_create_output)
     {
         if(mkdir(outpath.c_str(), 0700) < 0)
         {
@@ -671,7 +853,13 @@ int main(int argc, char** argv)
     try
     {
         cromfs_decoder cromfs(fd);
-        cromfs.extract(outpath.c_str());
+        
+        if(listing_mode)
+            cromfs.do_listing();
+        else if(simgraph_mode)
+            cromfs.do_simgraph();
+        else
+            cromfs.do_extract(outpath.c_str());
     }
     catch(cromfs_exception e)
     {
