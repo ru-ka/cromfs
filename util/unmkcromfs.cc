@@ -4,6 +4,11 @@
 #include "../cromfs.hh"
 #include "util.hh"
 
+#ifdef USE_HASHMAP
+# include <ext/hash_set>
+# include "../hash.hh"
+#endif
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -14,6 +19,7 @@
 
 #include "fnmatch.hh"
 #include "rangeset.hh"
+#include "rangemultimap.hh"
 
 #include <map>
 #include <set>
@@ -180,21 +186,78 @@ public:
         std::printf(" </inodes>\n");
         
         std::printf(" <matches>\n");
+        std::fflush(stdout);
+
+
+#ifdef USE_HASHMAP
+        typedef __gnu_cxx::hash_set<cromfs_inodenum_t> handled_inodes_t;
+#else
+        typedef std::set<cromfs_inodenum_t> handled_inodes_t;
+#endif
+
+        /* Create a map of which inodes cover what sections of the filesystem */
+        rangemultimap<cromfs_block_index, cromfs_inodenum_t> range_map;
         for(unsigned a=0; a<inodelist.size(); ++a)
         {
             const cromfs_inodenum_t ino_a = inodelist[a];
             const rangeset<cromfs_block_index> range_a = create_rangeset(ino_a);
+            for(rangeset<cromfs_block_index>::const_iterator
+                i = range_a.begin(); i != range_a.end(); ++i)
+            {
+                range_map.set(i->lower, i->upper, ino_a);
+            }
+        }
+
+        handled_inodes_t handled_inodes;
+
+        for(unsigned a=0; a<inodelist.size(); ++a)
+        {
+            const cromfs_inodenum_t ino_a = inodelist[a];
+            if(handled_inodes.find(ino_a) != handled_inodes.end()) continue;
             const uint_fast64_t size_a = read_inode(ino_a).bytesize;
             
-            for(unsigned b=a+1; b<inodelist.size(); ++b)
+            std::fprintf(stderr, "\r%u/%u", a,(unsigned)inodelist.size());
+            
+            if(!size_a)
             {
-                const cromfs_inodenum_t ino_b = inodelist[b];
-                const rangeset<cromfs_block_index> range_b = create_rangeset(ino_b);
+                /* Not a good idea to test zero-size files... */
+                continue;
+            }
+            
+            const rangeset<cromfs_block_index>& range_a = range_map.get_rangelist(ino_a);
+            
+            handled_inodes_t candidates;
+            
+            /* Get the list of all inodes that coincide
+             * with the ranges occupied by this inode
+             */
+            for(rangeset<cromfs_block_index>::const_iterator
+                i = range_a.begin(); i != range_a.end(); ++i)
+            {
+                fprintf(stderr, "s"); fflush(stderr);
+                std::list<cromfs_inodenum_t> inolist = r.get_valuelist(i->lower, i->upper);
+                candidates.insert(inolist.begin(), inolist.end());
+            }
+            
+            handled_inodes.insert(ino_a);
+
+            handled_inodes_t handled_pairs;
+            for(handled_inodes_t::const_iterator
+                j = candidates.begin();
+                j != candidates.end();
+                ++j)
+            {
+                const cromfs_inodenum_t ino_b = *j;
+                /* Ignore those that have already been tested */
+                if(handled_inodes.find(ino_b) != handled_inodes.end()) continue;
+                if(handled_pairs.find(ino_b)  != handled_pairs.end()) continue;
+                handled_pairs.insert(ino_b);
+                
                 const uint_fast64_t size_b = read_inode(ino_b).bytesize;
+                if(!size_b) { handled_inodes.insert(ino_b); continue; }
                 
-                rangeset<cromfs_block_index> intersect
-                    = range_a.intersect(range_b);
-                
+                const rangeset<cromfs_block_index>& range_b = range_map.get_rangelist(ino_b);
+                rangeset<cromfs_block_index> intersect = range_a.intersect(range_b);
                 if(intersect.empty()) continue;
                 
                 uint_fast64_t intersecting_size = 0;
@@ -220,6 +283,7 @@ public:
                            );
                 std::printf("</ratio></match>\n");
             }
+            std::fflush(stdout);
         }
         
         std::printf(" </matches>\n");

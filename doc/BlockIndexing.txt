@@ -2,7 +2,7 @@ cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-How mkcromfs remembers how which blocks it has encoded.
+How mkcromfs remembers which blocks it has encoded.
 
 --------------------------------
 

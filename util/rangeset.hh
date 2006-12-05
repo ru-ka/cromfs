@@ -58,6 +58,9 @@ public:
     /* Erase a single value */
     void erase(const Key& lo) { data.erase(lo, lo+1); }
     
+    void erase_before(const Key& lo) { data.erase_before(lo); }
+    void erase_after(const Key& up) { data.erase_after(up); }
+    
     /* Modify the given range to have the given value */
     void set(const Key& lo, const Key& up) { data.set(lo, up, true); }
     

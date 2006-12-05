@@ -1,4 +1,4 @@
-VERSION=1.2.4
+VERSION=1.2.4.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -40,6 +40,7 @@ ARCHFILES=\
 	\
 	util/range.hh util/range.tcc \
 	util/rangeset.hh util/rangeset.tcc \
+	util/rangemultimap.hh util/rangemultimap.tcc \
 	\
 	util/lzma/ORIGIN \
 	util/lzma/LGPL.txt \

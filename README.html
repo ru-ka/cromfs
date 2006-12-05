@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.2.4.
+  This is the documentation of cromfs-1.2.4.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#copying">Copying</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -591,7 +591,7 @@ The compression algorithm in cromfs can be used to determine how similar
 some files are to each others.
  <p>
 This is an example output of the following command:
- <pre>$ unmkcromfs --simgraph fs.cromfs '*.qh'</pre>
+ <pre>$ unmkcromfs --simgraph fs.cromfs '*.qh' &gt; result.xml</pre>
 from a sample filesystem:
 
 <pre>&lt;?xml version="1.0" encoding="UTF-8"?>
@@ -659,8 +659,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml16><b id=eml2 class=nonmail>H</b><span id=eml3 class=ismail>Joel</span><span id=eml4 class=nonmail><b>1l@r</b></span><span id=eml5 class=ismail> Yli</span><b id=eml6 class=nonmail>gCgx2r0</b><span id=eml7 class=ismail>luom</span><span id=eml8 class=nonmail><b>buuepx@0ec</b></span><span id=eml9 class=ismail>a &lt;bi</span><b id=eml10 class=nonmail>0wz</b><span id=eml11 class=ismail>sqwi</span><span id=eml12 class=nonmail><b>6.rxkm</b></span><span id=eml13 class=ismail>t@ik</span><b id=eml14 class=nonmail>eh</b><span id=eml15 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=2;i<16;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml26><b id=eml12 class=nonmail>sz0eJye</b><span id=eml13 class=ismail>Joel</span><span id=eml14 class=nonmail><b>gij</b></span><span id=eml15 class=ismail> Yli</span><b id=eml16 class=nonmail>87gb/d</b><span id=eml17 class=ismail>luom</span><span id=eml18 class=nonmail><b>@4</b></span><span id=eml19 class=ismail>a &lt;bi</span><b id=eml20 class=nonmail>gv@yfs/Oh</b><span id=eml21 class=ismail>sqwi</span><span id=eml22 class=nonmail><b>bbeztob@</b></span><span id=eml23 class=ismail>t@ik</span><b id=eml24 class=nonmail>z@.se</b><span id=eml25 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=12;i<26;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p>
 The author also wishes to hear if you use cromfs, and for what you
@@ -683,9 +683,9 @@ use it and what you think of it.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Mon, 04 Dec 2006 18:45:45 +0200)<br>
+       <tt>progdesc.php</tt> (last updated: Tue, 05 Dec 2006 13:57:21 +0200)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Mon, 04 Dec 2006 18:45:46 +0200</small>
+  at Tue, 05 Dec 2006 14:34:59 +0200</small>
  </p>
 </body>
 </html>

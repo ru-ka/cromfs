@@ -579,7 +579,7 @@ The compression algorithm in cromfs can be used to determine how similar
 some files are to each others.
  <p>
 This is an example output of the following command:
- <pre>$ unmkcromfs --simgraph fs.cromfs '*.qh'</pre>
+ <pre>$ unmkcromfs --simgraph fs.cromfs '*.qh' &gt; result.xml</pre>
 from a sample filesystem:
 
 <pre>&lt;?xml version=\"1.0\" encoding=\"UTF-8\"?>

@@ -4,6 +4,13 @@ cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.2.4.1	2006-12-05 Joel Yliluoma <bisqwit@iki.fi>
+- Added -l (--followsymlinks) in mkcromfs
+- Made --simgraph in unmkcromfs a lot faster
+
+1.2.4	2006-12-04 Joel Yliluoma <bisqwit@iki.fi>
+- Added --simgraph in unmkcromfs
+
 1.2.3	2006-08-31 Joel Yliluoma <bisqwit@iki.fi>
 - Added -x and -X (--exclude and --exclude-from) in mkcromfs
   and unmkcromfs (thanks to Jeff Strunk for suggesting this)

@@ -1070,7 +1070,7 @@ int main(int argc, char** argv)
             {"quiet",       0, 0,'q'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:qx:X:", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:qx:X:l", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -1172,6 +1172,11 @@ int main(int argc, char** argv)
             case 'e':
             {
                 DecompressWhenLookup = true;
+                break;
+            }
+            case 'l':
+            {
+                FollowSymlinks = true;
                 break;
             }
             case 'r':
