@@ -29,8 +29,8 @@ struct rangetype
     bool contains(const Key& v) const { return lower <= v && upper > v; }
     
     rangetype<Key> intersect(const rangetype& b) const;
-    rangetype<Key> union_(const rangetype& b) const;
-    /* Difference can produce two ranges. */
+    
+    /* Union and difference can produce two ranges. Thus not implemented... */
 
     unsigned length() const { return upper - lower; }
     bool empty() const { return !length(); }

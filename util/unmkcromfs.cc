@@ -235,7 +235,8 @@ public:
                 i = range_a.begin(); i != range_a.end(); ++i)
             {
                 fprintf(stderr, "s"); fflush(stderr);
-                std::list<cromfs_inodenum_t> inolist = r.get_valuelist(i->lower, i->upper);
+                std::list<cromfs_inodenum_t> inolist =
+                    range_map.get_valuelist(i->lower, i->upper);
                 candidates.insert(inolist.begin(), inolist.end());
             }
             

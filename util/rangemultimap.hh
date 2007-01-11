@@ -48,6 +48,8 @@ public:
     // default copy cons. and assign-op. are fine
     
     const rangeset<Key>& get_rangelist(const Value& v) const { return data.find(v)->second; }
+    
+    /* Get the list of values existing in this map */
     std::list<Value> get_valuelist() const
     {
         std::list<Value> result;
@@ -55,7 +57,11 @@ public:
             result.push_back(i->first);
         return result;
     }
+    
+    /* Get a slice of this map from given range */
     rangemultimap<Key, Value> get_slice(const Key& lo, const Key& up) const;
+    
+    /* This is a short for get_slice(lo, up).get_valuelist() */
     std::list<Value> get_valuelist(const Key& lo, const Key& up) const;
 };
 

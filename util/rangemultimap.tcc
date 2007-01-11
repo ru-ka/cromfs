@@ -32,6 +32,6 @@ rangemultimap<Key,Value>::get_valuelist(const Key& lo, const Key& up) const
     std::list<Value> result;
     for(typename Cont::const_iterator i = data.begin(); i != data.end(); ++i)
         if(!i->second.intersect(tmp).empty())
-            result.insert(i->first);
+            result.push_back(i->first);
     return result;
 }

@@ -58,11 +58,13 @@ int main(int argc, char *argv[])
     {
         goto out;
     }
-    fd = fuse_mount(mountpoint, &args);
+
+    fd = fuse_mount_compat25(mountpoint, &args);
     if(fd == -1)
     {
         goto out;
     }
+    fprintf(stderr, "fuse_mount gives fd %d\n", fd);
 
     int err = -1;
     struct fuse_session *se
@@ -86,12 +88,12 @@ int main(int argc, char *argv[])
         fuse_session_destroy(se);
     }
     close(fd);
-#if FUSE_VERSION >= 26
+ #if FUSE_VERSION >= 26
     fuse_unmount(mountpoint, fd);
-#else
+ #else
     fuse_unmount(mountpoint);
-#endif
-    
+ #endif
+
     cromfs_uncreate(userdata);
     
 out:

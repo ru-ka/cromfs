@@ -188,14 +188,3 @@ rangetype<Key> rangetype<Key>::intersect(const rangetype<Key>& b) const
     if(result.upper < result.lower) result.upper = result.lower;
     return result;
 }
-
-template<typename Key>
-rangetype<Key> rangetype<Key>::union_(const rangetype<Key>& b) const
-{
-    rangetype<Key> result;
-    result.lower = std::min(lower, b.lower);
-    result.upper = std::max(upper, b.upper);
-    return result;
-}
-
-
