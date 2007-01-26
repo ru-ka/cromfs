@@ -4,6 +4,12 @@ cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.2.4.3	2007-01-26 Joel Yliluoma <bisqwit@iki.fi>
+- Fixed another compilation problem
+
+1.2.4.2	2007-01-11 Joel Yliluoma <bisqwit@iki.fi>
+- Fixed a compilation problem in unmkcromfs
+
 1.2.4.1	2006-12-05 Joel Yliluoma <bisqwit@iki.fi>
 - Added -l (--followsymlinks) in mkcromfs
 - Made --simgraph in unmkcromfs a lot faster

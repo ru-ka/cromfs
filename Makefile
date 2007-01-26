@@ -1,4 +1,4 @@
-VERSION=1.2.4.2
+VERSION=1.2.4.3
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -24,6 +24,8 @@ ARCHFILES=\
 	dummy_thread.c \
 	\
 	util/Makefile.sets util/Makefile util/depfun.mak \
+	\
+	hash.hh \
 	\
 	util/datasource.hh \
 	util/lzma.cc util/lzma.hh \
