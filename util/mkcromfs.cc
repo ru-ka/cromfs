@@ -1082,7 +1082,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "mkcromfs v"VERSION" - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "mkcromfs v"VERSION" - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Usage: mkcromfs [<options>] <input_path> <target_image>\n"
                     " --help, -h         This help\n"

@@ -1,5 +1,5 @@
 /*
-cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL
 
 main.c: The main module. This provides the bindings for the cromfs
@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
-    fd = fuse_mount_compat25(mountpoint, &args);
+    fd = fuse_mount/*_compat25*/(mountpoint, &args);
     if(fd == -1)
     {
         goto out;

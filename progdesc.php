@@ -72,10 +72,10 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
 <ul>
  <li>Filesystem is write-once, read-only. It is not possible to append
   to a previously-created filesystem, nor it is to mount it read-write.</li>
- <li>Max filesize: 2^64 bytes (16777216 TB), but 256 TB with default settings.</li>
- <li>Max number of files in a directory: 2^30 (smaller if filenames are longer, but still more than 100000 in almost all cases)</li>
- <li>Max number of inodes (all files, dirs etc combined): 2^60, but depends on file sizes</li>
- <li>Max filesystem size: 2^64 bytes (16777216 TB)</li>
+ <li>Max filesize: 2<sup>64</sup> bytes (16777216 TB), but 256 TB with default settings.</li>
+ <li>Max number of files in a directory: 2<sup>30</sup> (smaller if filenames are longer, but still more than 100000 in almost all cases)</li>
+ <li>Max number of inodes (all files, dirs etc combined): 2<sup>60</sup>, but depends on file sizes</li>
+ <li>Max filesystem size: 2<sup>64</sup> bytes (16777216 TB)</li>
  <li>There are no \".\" and \"..\" entries in directories.</li>
  <li>cromfs and mkcromfs are slower than their peers.</li>
  <li>The cromfs-driver has a large memory footprint. It is not
@@ -132,16 +132,16 @@ and by no means a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Maximum file size</th>
-   <td class=hmm>16 EB (2^44 MB) (theoretical; actual limit depends on settings)</td>
-   <td class=bad>16 MB (2^4 MB)</td>
-   <td class=good>16 EB (2^44 MB)<br /> (4 GB before v3.0)</td>
+   <td class=hmm>16 EB (2<sup>44</sup> MB) (theoretical; actual limit depends on settings)</td>
+   <td class=bad>16 MB (2<sup>4</sup> MB)</td>
+   <td class=good>16 EB (2<sup>44</sup> MB)<br /> (4 GB before v3.0)</td>
    <td class=good>Depends on slave filesystem</td>
   </tr>
  <tr align=left>
   <th>Maximum filesystem size</th>
-   <td class=good>16 EB (2^44 MB)</td>
+   <td class=good>16 EB (2<sup>44</sup> MB)</td>
    <td class=bad>272 MB</td>
-   <td class=good>16 EB (2^44 MB)<br /> (4 GB before v3.0)</td>
+   <td class=good>16 EB (2<sup>44</sup> MB)<br /> (4 GB before v3.0)</td>
    <td>Unknown</td>
   </tr>
  <tr align=left>
@@ -415,8 +415,12 @@ the memory usage would be around 10.2&nbsp;MB.
   <ul>
    <li>Remember that for fuse to work, the kernel must also contain the fuse support.
     Do \"modprobe fuse\", and check if you have \"/dev/fuse\" and check if it works.
-    <ul><li>If an attempt to read from \"/dev/fuse\" (as root) gives \"no such device\",
-    it does not work. If it gives \"operation not permitted\", it might work.</li></ul></li>
+    <ul>
+    <li>If \"/dev/fuse\" does not exist after loading the \"fuse\" module,
+       create it manually (as root): <pre># cd /dev<br># mknod fuse c 10 229</pre></li>
+    <li>If an attempt to read from \"/dev/fuse\" (as root) gives \"no such device\",
+    it does not work. If it gives \"operation not permitted\", it might work.</li>
+     </ul></li>
   </ul></li>
  <li>Build \"cromfs-driver\", \"util/mkcromfs\", \"util/cvcromfs\" and \"util/unmkcromfs\", i.e. command \"make\":
   <pre>\$ make</pre>
@@ -456,7 +460,9 @@ To improve the compression, try these tips:
      Note: The value does not need to be a power of two.
   </li>
  <li>Adjust the fblock size (--fsize) in mkcromfs. Larger values
-     cause almost always better compression.
+     cause almost always better compression. However, large values
+     also increase memory consumption when the filesystem is mounted,
+     so keep it sane. If uncertain, use the default (2<sup>21</sup> bytes).
     <br />
      Note: The value does not need to be a power of two.
   </li>
@@ -501,8 +507,8 @@ autoindexratio = amount_of_RAM * blocksize / (32 * total_size_of_files * estimat
      without increasing the memory or CPU usage of cromfs-driver.
      Using it is recommended, unless you want mkcromfs to be fast.<br />
      Although there are no upper limits on the recommended values of -c,
-     it is not meaningful to make it larger than the fblock count on the
-     filesystem being created.
+     it is not meaningful to make it larger than the resulting fblock
+     count on the filesystem being created.
   </li>
 </ul>
 To improve the filesystem generation speed, try these tips:
@@ -630,13 +636,13 @@ It follows this DTD:
  &lt;!ELEMENT ratio (%REAL;)></pre>
 
 Once you have generated the file system, running the <tt>--simgraph</tt> query is
-relatively a cheap operation (but still O(n^2) for the number of files);
+relatively a cheap operation (but still O(n<sup>2</sup>) for the number of files);
 it involves analyzing the structures created by mkcromfs, and does not
 require any search on the actual file contents. However, it can only report as
 fine-grained similarity information as were the options in the generation of
 the filesystem (level of compression).
 
-", 'copying:1. Copying' => "
+", 'copying:1. Copying and contributing' => "
 
 cromfs has been written by Joel Yliluoma, a.k.a.
 <a href=\"http://iki.fi/bisqwit/\">Bisqwit</a>,<br />
@@ -651,6 +657,37 @@ author
  <p>
 The author also wishes to hear if you use cromfs, and for what you
 use it and what you think of it.
+
+", 'wishlish:1.1. Contribution wishes' => "
+
+The author wishes for the following things to be done
+to this package.
+<ul>
+ <li>Topic: Mature enough to be included in distributions.
+  <ul>
+   <li>Manual pages of each utility (hopefully somehow autogenerated
+    so that they won't be useless when new options are added)</li>
+   <li>A configure script or something related, to
+    make it cope better with different Fuse API versions
+    and different compiler versions</li>
+   <li>Install and uninstall rules in Makefile</li>
+  </ul></li>
+ <li>Topic: Increasing useability
+  <ul>
+   <li>Changing cromfs-driver so the timing between launch and the
+    filesystem being accessible is deterministic from something
+    more sane than waiting for \"ready\" to be output in stderr</li>
+   <li>A proof of concept example of utilizing cromfs
+    in a root filesystem (with initramfs)</li>
+  </ul></li>
+ <li>Topic: Documentation
+  <ul>
+   <li>Better fake box art</li>
+   <li>Graphical illustration on the filesystem structure
+    (fs consists of fblocks, and files are split in blocks
+     which are actually indexes to various fblocks)</li>
+ </ul></li>
+</ul>
 
 ", 'requ:1. Requirements' => "
 

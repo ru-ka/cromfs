@@ -68,7 +68,7 @@ STRUCT: BLOCK
 	0000	u32	FBLOCK number (0=first FBLOCK, 1=second FBLOCK, etc)
 	0004	u32	starting offset within the _uncompressed data_ for this data
 	(Note: different BLOCKs may utilize the same data from same FBLOCK.
-	 They regions which they use may overlap partially or completely.
+	 The regions which they use may overlap partially or completely.
 	 They do not need to be aligned.)
 	(This record refers to at most BSIZE bytes of data, but may actually
 	 refer to less data if this is the last block of the file.)

@@ -1,5 +1,5 @@
 /*
-cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL
 
 cromfs-defs.hh: The structures used by the cromfs filesystem engine

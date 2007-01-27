@@ -1,4 +1,4 @@
-VERSION=1.2.4.3
+VERSION=1.2.4.4
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -124,6 +124,7 @@ cromfs-driver: $(OBJS)
 cromfs-driver-static: $(OBJS)
 	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS) -lpthread -lrt
 	- strip -R.comment $@
+	# Note: It does not matter if upx cannot run.
 	- upx --best $@
 
 #dummy_thread.o: dummy_thread.c

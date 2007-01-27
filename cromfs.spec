@@ -1,7 +1,7 @@
 Summary:	Compressed ROM filesystem for Linux in user-space
 Name:		cromfs
-Version:	1.2.0
-Release:	0.4
+Version:	1.2.4.4
+Release:	0.5
 License:	GPL
 Group:		Applications
 Source0:	http://bisqwit.iki.fi/src/arch/%{name}-%{version}.tar.bz2

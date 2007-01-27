@@ -1,4 +1,4 @@
-#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 25
 #include <fuse_lowlevel.h>
 
 #ifdef __cplusplus
