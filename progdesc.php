@@ -104,7 +104,7 @@ and by no means a scientific study, but here goes:
 .hmm   { background:#FFC }
 --></style>
 
-<p>Legend: <span class=good>Good</span>,
+<p/>Legend: <span class=good>Good</span>,
 <span class=bad>Bad</span>,
 <span class=hmm>Partial</span>
 
@@ -417,7 +417,7 @@ the memory usage would be around 10.2&nbsp;MB.
     Do \"modprobe fuse\", and check if you have \"/dev/fuse\" and check if it works.
     <ul>
     <li>If \"/dev/fuse\" does not exist after loading the \"fuse\" module,
-       create it manually (as root): <pre># cd /dev<br># mknod fuse c 10 229</pre></li>
+       create it manually (as root): <pre># cd /dev<br /># mknod fuse c 10 229</pre></li>
     <li>If an attempt to read from \"/dev/fuse\" (as root) gives \"no such device\",
     it does not work. If it gives \"operation not permitted\", it might work.</li>
      </ul></li>
@@ -448,6 +448,8 @@ the memory usage would be around 10.2&nbsp;MB.
 </ol>
 
 ", 'tips:1. Tips' => "
+
+", '1.1.1. To improve compression' => "
 
 To improve the compression, try these tips:
 <ul>
@@ -511,6 +513,9 @@ autoindexratio = amount_of_RAM * blocksize / (32 * total_size_of_files * estimat
      count on the filesystem being created.
   </li>
 </ul>
+
+", '1.1.1. To improve mkcromfs speed' => "
+
 To improve the filesystem generation speed, try these tips:
 <ul>
  <li>Use the --decompresslookups option (-e), if you have the
@@ -522,13 +527,16 @@ To improve the filesystem generation speed, try these tips:
      one of the temporary fblocks more often. It has no effect to
      the compression ratio of the resulting filesystem.
   </li>
- <li>Use the TEMP environment variable to control where the temp
+ <li><a name=\"tempdir\"></a>Use the TEMP environment variable to control where the temp
      files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0
      means that the candidate fblock will be selected straightforwardly.</li>
 </ul>
+
+", '1.1.1. To control the memory usage' => "
+
 To control the memory usage, use these tips:
 <ul>
  <li>Adjust the fblock size (--fsize). The memory used by cromfs-driver
@@ -547,6 +555,9 @@ To control the memory usage, use these tips:
      is directly proportional to the number of blocks (and the filesystem size),
      so smaller blocks require more memory and larger require less.
 </ul>
+
+", '1.1.1. To control the filesystem speed' => "
+
 To control the filesystem speed, use these tips:
 <ul>
  <li>The speed of the underlying storage affects.</li>
@@ -561,16 +572,152 @@ To control the filesystem speed, use these tips:
  <li>Use fast hardware&hellip;</li>
 </ul>
 
+", 'vocabulary:1. Understanding the concepts' => "
+
+", 'concept_inode:1.1.1. Inode' => "
+
+Every object in a filesystem (from user's side) is an \"inode\".
+This includes at least symlinks, directories, files, fifos and device entries.
+The inode contains the file attributes and its contents, but <em>not</em> its name.
+(The name is contained in a directory listing, along with the reference to the inode.)
+This is the traditional way in *nix systems.
+ <p/>
+When a file is \"hardlinked\" into multiple locations in the filesystem,
+the inode is not copied. The same single inode just is listed in multiple
+directories.<br />
+A symlink however, is an entirely new inode unrelated to
+the file it points to.
+ <p/>
+The file attributes and the file contents are stored separately.
+In cromfs, the inode contains an array of <a href=\"#concept_blocknumber\"
+>block numbers</a>, which are necessary in finding the actual contents of the file.
+
+", 'concept_block:1.1.1. Block' => "
+
+The contents of every file (denoted by the inode) are divided into \"blocks\".
+The size of this block is controlled by the --bsize commandline parameter.
+For example, if your file is 10000 bytes in size, and your bsize is 4000,
+the file contains three blocks: 4000 + 4000 + 2000 bytes.
+The inode contains thus three <a href=\"#concept_blocknumber\">block numbers</a>,
+which refer to entries in the block table.
+ <p/>
+Only regular files, symlinks and directories have \"contents\" that need
+storing. Device entries for example, do not have associated contents.<br />
+The contents of a directory is a list of file names and inode numbers.
+ <p/>
+Every time mkcromfs stores a new block, a new block number is generated
+to denote that particular block (this number is stored in the inode),
+and a new <a href=\"#concept_datalocator\">data locator</a> is stored
+to describe where the block is found (the locator is stored in the block table).
+ <p/>
+If mkcromfs reused a previously generated data locator,
+only the block number needs to be stored.
+
+", 'concept_fblock:1.1.1. Fblock' => "
+
+Fblock is a storage unit in a cromfs filesystem.
+It is the physical container of block data for multiple files.<br />
+When mkcromfs creates a new filesystem, it splits each file into blocks
+(see above), and for each of those blocks, it determines which fblock
+they go to. The maximum fblock size is mandated by the --fsize commandline
+parameter.
+ <p/>
+Each fblock is compressed separately, so a few big fblocks compresses better
+than many small fblocks.
+Cromfs automatically creates as many fblocks as is needed to store the
+contents of the entire filesystem being created.
+ <p/>
+A fblock is merely a storage.
+Regardless of the sizes of the blocks and fblocks, the fblock may
+contain any number of blocks, from 1 to upwards (no upper limit).
+It is beneficial for blocks to overlap, and this is an important source of the
+power of cromfs.
+
+", 'concept_blocknumber:1.1.1. Block number and block table' => "
+
+The filesystem contains a structure called \"blktab\", which
+is a list of <a href=\"#concept_datalocator\">data locators</a>.
+This list is indexed by a block number.<br />
+Each locator describes, where to find the particular
+<a href=\"#concept_block\">block</a> denoted by this block number.
+ <p/>
+At the end of the filesystem creation process, the blktab is compressed
+and becomes \"blkdata\" before being written into the filesystem.<br />
+(These names are only useful when referencing the
+<a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\">filesystem format
+documentation</a>; they are not found in the filesystem itself.
+
+", 'concept_datalocator:1.1.1. Data locator' => "
+
+A data locator tells cromfs, where to find the contents of this particular block.
+It is composed of an <a href=\"#concept_fblock\">fblock</a> number and an offset
+into that fblock.
+These locators are stored in the global
+<a href=\"#concept_blocknumber\">block table</a>, as explained above.
+ <p/>
+Multiple files may be sharing same data locators, and multiple data
+locators may be pointing to same, partially overlapping data.
+
+", 'concept_blockindex:1.1.1. Block indexing (mkcromfs only)' => "
+
+When mkcromfs stores blocks, it remembers where it stored them, so that
+if it later finds an identical block in another file (or the same file),
+it won't need to search fblocks again to find a best placement.<br />
+The index is a map of block hashes to data locators and block numbers.
+ <p/>
+The --autoindexratio setting can be used to extend this mechanism, that
+in addition to the blocks it has already encoded, it will memorize more
+locations in those fblocks &mdash; create \"just in case\" data locators
+for future use but not actually save them in the block table, unless
+they're utilized later.
+This helps compression when the number of fblocks searched (--bruteforcelimit)
+is low compared to the number of fblocks generated, at the cost of memory
+consumed by mkcromfs.
+
+", 'concept_random_compress:1.1.1. Random compress period (mkcromfs only)' => "
+
+When mkcromfs runs, it generates a temporary file for each fblock of the
+resulting filesystem. If your resulting filesystem is large, those fblocks
+will take even more of space, a lot anyway.<br />
+To save disk space, mkcromfs compresses those fblocks when they are not
+accessed. However, if it needs to access them again (to search the contents
+for a match), it will need to decompress them first.
+ <p/>
+This compressing+decompressing may consume lots of time. It does not help
+the size of the resulting filesystem; it only saves some temporary disk space.
+ <p/>
+If you are not concerned about temporary disk space, you should give
+the --randomcompressperiod option a large number (such as 10000) to
+prevent it from needlessly decompressing+compressing the fblocks
+over and over again. This will improve the speed of mkcromfs.
+ <p/>
+The --decompresslookups option is related. If you use the
+--randomcompressperiod option, you should also enable --decompresslookups.
+ <p/>
+By the way, the temporary files are written into wherever
+your <a href=\"#tempdir\">TEMP environment variable</a> points to.
+TMP is also recognized.
+
+", 'concept_faq:1.1.1. Where are the inodes stored then?' => "
+
+All the inodes of the filesystem are also stored in a file, together.
+That file is packed like any one other file, split into blocks and
+scattered into fblocks. That data locator list of that file, is stored
+in a special inode called \"inotab\", but it is not seen in any
+directory. The \"inotab\" has its own place in the cromfs file.
+
 ", 'bootfs:1. Using cromfs in bootdisks and tiny Linux distributions' => "
 
 Cromfs can be used in bootdisks and tiny Linux distributions only
 by starting the cromfs-driver from a ramdisk (initrd), and then
 pivot_rooting into the mounted filesystem (but not before the
 filesystem has been initialized; there is a delay of a few seconds).
- <p>
+ <p/>
 Theoretical requirements to use cromfs in the root filesystem:
 <ul>
- <li>Cromfs-driver should probably be statically linked.</li>
+ <li>Cromfs-driver should probably be statically linked
+  (the Makefile automatically builds a static version
+   since version 1.2.2).</li>
  <li>An initrd, that contains the cromfs-driver program</li>
  <li>Fuse driver in the kernel (it may be loaded from the initrd).</li>
  <li>Use of pivot_root to change the root into the mounted image
@@ -579,11 +726,13 @@ Theoretical requirements to use cromfs in the root filesystem:
  </li>
 </ul>
 
+<b>Do not use cromfs in machines that are low on RAM!</b>
+
 ", 'otheruse:1. Other applications of cromfs' => "
 
 The compression algorithm in cromfs can be used to determine how similar
 some files are to each others.
- <p>
+ <p/>
 This is an example output of the following command:
  <pre>$ unmkcromfs --simgraph fs.cromfs '*.qh' &gt; result.xml</pre>
 from a sample filesystem:
@@ -614,7 +763,7 @@ from a sample filesystem:
 It reads a cromfs volume generated earlier, and outputs statistics of it.
 Such statistics can be useful in refining further compression, or just
 finding useful information regarding the redundancy of the data set.
- <p>
+ <p/>
 It follows this DTD:
 <pre> &lt;!ENTITY % INTEGER \"#PCDATA\">
  &lt;!ENTITY % REAL \"#PCDATA\">
@@ -654,7 +803,7 @@ The LZMA code embedded within is licensed under LGPL.
 Patches and other related material can be submitted to the
 author
 ".GetEmail('by e-mail at:', 'Joel Yliluoma', 'bisqwi'. 't@iki.fi')."
- <p>
+ <p/>
 The author also wishes to hear if you use cromfs, and for what you
 use it and what you think of it.
 

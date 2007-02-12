@@ -1,12 +1,14 @@
 Cromfs changelog
 
-cromfs - Copyright (C) 1992,2006 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-1.2.4.4	2007-01-27 Joel Yliluoma <bisqwit@iki.fi>
+1.2.4.5	2007-02-12 Joel Yliluoma <bisqwit@iki.fi>
+- Documentation updates
+
 - Fixed yet another compilation problem, by reverting to fuse 2.5 API
-- Documnetation updates
+- Documentation updates
 
 1.2.4.3	2007-01-26 Joel Yliluoma <bisqwit@iki.fi>
 - Fixed another compilation problem
