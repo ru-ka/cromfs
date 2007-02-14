@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.2.4.5.
+  This is the documentation of cromfs-1.2.5.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#vocabulary">Understanding the concepts</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;11.1. <a href="#wishlish">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -33,7 +33,7 @@ Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
 for permanently archiving gigabytes of big files that have lots of redundancy.
  <p/>
 In terms of compression it is much similar to
-<a href="http://www.7-zip.com/">7-zip</a> files, except that fast random
+<a href="http://www.7-zip.com/">7-zip</a> files, except that random
 access is provided  for the whole archive contents; the user does not need
 to launch a program to decompress a single file, nor does he need to wait
 while the system decompresses 500 files from a 1000-file archive to get
@@ -47,6 +47,9 @@ and "random file access", then you will be happy with cromfs.
 The creation of cromfs was inspired
 from <a href="http://squashfs.sourceforge.net/">Squashfs</a>
 and <a href="http://sourceforge.net/projects/cramfs/">Cramfs</a>.
+ <p>
+The <a href="#download">downloading</a> section is at the bottom
+of this page.
 
 </div><H2 id="news" class="level2"><a name="news"></a>2. News</H2><div class="level2" id="divnews">
 
@@ -198,7 +201,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Endianess-safety</th>
-   <td class=bad>Works on little-endian only</td>
+   <td class=hmm>Theoretically safe (untested on bigendian)</td>
    <td class=hmm>Safe, but not exchangeable</td>
    <td class=hmm>Safe, but not exchangeable</td>
    <td class=hmm>Depends on slave filesystem</td>
@@ -647,8 +650,8 @@ power of cromfs.
 
 </div><H4 id="concept_blocknumber" class="level4"><a name="concept_blocknumber"></a>8.0.4. Block number and block table</H4><div class="level4" id="divconcept_blocknumber">
 
-The filesystem contains a structure called "blktab", which
-is a list of <a href="#concept_datalocator">data locators</a>.
+The filesystem contains a structure called "blktab" (block table),
+which is a list of <a href="#concept_datalocator">data locators</a>.
 This list is indexed by a block number.<br />
 Each locator describes, where to find the particular
 <a href="#concept_block">block</a> denoted by this block number.
@@ -684,7 +687,8 @@ for future use but not actually save them in the block table, unless
 they're utilized later.
 This helps compression when the number of fblocks searched (--bruteforcelimit)
 is low compared to the number of fblocks generated, at the cost of memory
-consumed by mkcromfs.
+consumed by mkcromfs, and has also potential to make mkcromfs faster
+(but also slower).
 
 </div><H4 id="concept_random_compress" class="level4"><a name="concept_random_compress"></a>8.0.7. Random compress period (mkcromfs only)</H4><div class="level4" id="divconcept_random_compress">
 
@@ -814,8 +818,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml36><b id=eml22 class=nonmail>zzy</b><span id=eml23 class=ismail>Joel</span><span id=eml24 class=nonmail><b>ev</b></span><span id=eml25 class=ismail> Yli</span><b id=eml26 class=nonmail>52cn2lEo6e</b><span id=eml27 class=ismail>luom</span><span id=eml28 class=nonmail><b>mEi.uNrhx</b></span><span id=eml29 class=ismail>a &lt;bi</span><b id=eml30 class=nonmail>j</b><span id=eml31 class=ismail>sqwi</span><span id=eml32 class=nonmail><b>BAb.eqx</b></span><span id=eml33 class=ismail>t@ik</span><b id=eml34 class=nonmail>2muc@au/uj</b><span id=eml35 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=22;i<36;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml33><b id=eml19 class=nonmail>eextMubmzj</b><span id=eml20 class=ismail>Joel</span><span id=eml21 class=nonmail><b>cn1g</b></span><span id=eml22 class=ismail> Yli</span><b id=eml23 class=nonmail>6zsmnsee@e</b><span id=eml24 class=ismail>luom</span><span id=eml25 class=nonmail><b>s</b></span><span id=eml26 class=ismail>a &lt;bi</span><b id=eml27 class=nonmail>l</b><span id=eml28 class=ismail>sqwi</span><span id=eml29 class=nonmail><b>dr6</b></span><span id=eml30 class=ismail>t@ik</span><b id=eml31 class=nonmail>wS1i@h@ue</b><span id=eml32 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=19;i<33;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -842,10 +846,10 @@ to this package.
     more sane than waiting for "ready" to be output in stderr</li>
    <li>A proof of concept example of utilizing cromfs
     in a root filesystem (with initramfs)</li>
+   <li>Add appending support (theoretically doable, just not very fast)</li>
   </ul></li>
  <li>Topic: Documentation
   <ul>
-   <li>Better fake box art</li>
    <li>Graphical illustration on the filesystem structure
     (fs consists of fblocks, and files are split in blocks
      which are actually indexes to various fblocks)</li>
@@ -869,9 +873,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Mon, 12 Feb 2007 15:53:32 +0200)<br>
+       <tt>progdesc.php</tt> (last updated: Wed, 14 Feb 2007 15:06:57 +0200)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Mon, 12 Feb 2007 16:00:30 +0200</small>
+  at Wed, 14 Feb 2007 15:32:19 +0200</small>
  </p>
 </body>
 </html>

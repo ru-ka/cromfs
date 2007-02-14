@@ -104,8 +104,7 @@ static const std::vector<unsigned char> LZMADeCompress
 {
     if(BufSize <= 5+8) return std::vector<unsigned char> ();
     
-    /* FIXME: not endianess-safe */
-    uint_least64_t out_sizemax = *(const uint_least64_t*)&buf[5];
+    uint_least64_t out_sizemax = R64(&buf[5]);
     
     std::vector<unsigned char> result(out_sizemax);
     
@@ -317,6 +316,8 @@ static void ExtractInodeHeader(cromfs_inode_internal& inode, const unsigned char
         { inode.links = 1; inode.rdev = rdev_links; }
     else
         { inode.links = rdev_links; inode.rdev = 0; }
+    
+    // if(S_ISDIR(inode.mode)) inode.links += 2; /* For . and .. */
 }
 
 cromfs_inode_internal cromfs::read_raw_inode_and_blocks(uint_fast64_t offset)
@@ -362,8 +363,8 @@ cromfs_inode_internal cromfs::read_raw_inode_and_blocks(uint_fast64_t offset)
                 throw EIO;
             }
 
-            /* FIXME: not endianess-safe */
-            memcpy(&inode.blocklist[0], &Buf[0x18], 4*nblocks);
+            for(unsigned n=0; n<nblocks; ++n)
+                inode.blocklist[n] = R32(&Buf[0x18 + 4*n]);
             
             break;
         }
@@ -383,8 +384,11 @@ cromfs_inode_internal cromfs::read_raw_inode_and_blocks(uint_fast64_t offset)
             uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
             inode.blocklist.resize(nblocks);
             
-            /* FIXME: not endianess-safe */
             if(pread64(fd, &inode.blocklist[0], 4 * nblocks, offset+0x18) == -1) throw errno;
+            
+            /* Fix endianess after raw read */
+            for(unsigned n=0; n<nblocks; ++n)
+                inode.blocklist[n] = R32(&inode.blocklist[n]);
         }
     }
     return inode;
@@ -425,10 +429,13 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
     
     result.blocklist.resize(nblocks);
     
-    /* FIXME: not endianess-safe */
     read_file_data(inotab, (inodenum-2) * UINT64_C(4) + 0x18,
                    (unsigned char*)&result.blocklist[0], 4 * nblocks,
                    "inode block table");
+
+    /* Fix endianess after raw read */
+    for(unsigned n=0; n<nblocks; ++n)
+        result.blocklist[n] = R32(&result.blocklist[n]);
     
     return result;
 }
@@ -660,17 +667,21 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
         {
             std::vector<uint_least32_t> addr_table(num_to_read);
             
-            /* FIXME: not endianess-safe */
-            
             /* Guess the first value to reduce I/O. */
             addr_table[0] = 4 + num_files*4;
             
             /* Read the rest of the names. */
             if(num_to_read > 1)
             {
-                read_file_data(inode, 4 + (dir_offset+1)*4,
-                               (unsigned char*)&addr_table[1], 4*(num_to_read-1),
-                               "dir offset list");
+                read_file_data(
+                    inode, 4 + (dir_offset+1)*4,
+                    (unsigned char*)&addr_table[1],
+                    4*(num_to_read-1),
+                    "dir offset list");
+
+                /* Fix endianess after raw read */
+                for(unsigned n=1; n<num_to_read; ++n)
+                    addr_table[n] = R32(&addr_table[n]);
             }
             
             for(unsigned a=0; a<addr_table.size(); ++a)

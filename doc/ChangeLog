@@ -4,9 +4,17 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.2.5	2007-02-14 Joel Yliluoma <bisqwit@iki.fi>
+- Tentatively fixed endianess problems (needs testing!)
+- Updated box art
+- Fixed a readdir problem that caused GNU find to not work properly
+  (because it relied on undocumented d_type field in readdir results).
+- Only cromfs-driver is affected; filesystems do not need to be reconstructed.
+
 1.2.4.5	2007-02-12 Joel Yliluoma <bisqwit@iki.fi>
 - Documentation updates
 
+1.2.4.4	2007-01-27 Joel Yliluoma <bisqwit@iki.fi>
 - Fixed yet another compilation problem, by reverting to fuse 2.5 API
 - Documentation updates
 

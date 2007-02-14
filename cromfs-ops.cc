@@ -42,6 +42,8 @@ the fuse_reply_err() function.
 
 #define READDIR_DEBUG   0
 
+#define LIGHTWEIGHT_READDIR 0
+
 static const double TIMEOUT_CONSTANT = 0x7FFFFFFF;
 
 static bool trace_ops = false;
@@ -284,8 +286,15 @@ extern "C" {
 #endif
                     
                 struct stat attr;
+            #if LIGHTWEIGHT_READDIR
                 attr.st_ino  = i->second;
                 attr.st_mode = S_IFREG;
+            #else
+                /* Apparently GNU find doesn't function without this. */
+                /* This is used to populate the d_type field in readdir results. */
+                const cromfs_inode_internal in = fs.read_inode(i->second);
+                stat_inode(attr, i->second, in);
+            #endif
                 
                 ++off;
                 

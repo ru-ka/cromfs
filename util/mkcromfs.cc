@@ -475,6 +475,7 @@ private:
         
         if(ignore_blocks) return;
         
+        /* Endianess safe. */
         for(unsigned a=0; a<inode.blocklist.size(); ++a)
             W32(&inodata[0x18+a*4], inode.blocklist[a]);
     }

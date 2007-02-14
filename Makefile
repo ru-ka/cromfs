@@ -1,4 +1,4 @@
-VERSION=1.2.4.5
+VERSION=1.2.5
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -14,6 +14,7 @@ ARCHFILES=\
 	doc/WriteAccess.txt \
 	doc/BlockIndexing.txt \
 	doc/boxart.png \
+	doc/boxart-src.zip \
 	cromfs.spec \
 	\
 	cromfs.cc cromfs.hh cromfs-defs.hh \
@@ -115,6 +116,12 @@ DEPFUN_INSTALL=ignore
 
 PROGS = cromfs-driver cromfs-driver-static util/mkcromfs util/unmkcromfs util/cvcromfs
 DOCS  = doc/FORMAT README.html doc/ChangeLog doc/*.txt
+
+all-strip: all FORCE
+	- strip cromfs-driver util/mkcromfs util/unmkcromfs util/cvcromfs
+	@echo
+	@echo Finished compiling. These were created:
+	@ls -al $(PROGS)
 
 all: $(PROGS)
 

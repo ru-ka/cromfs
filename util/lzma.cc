@@ -1,3 +1,5 @@
+#include "../cromfs-defs.hh" /* For R64 */
+
 #include "lzma/C/Common/MyInitGuid.h"
 #include "lzma/C/7zip/Compress/LZMA/LZMAEncoder.h"
 
@@ -7,7 +9,6 @@
 #include <algorithm>
 
 #include <stdint.h>
-
 
 static UInt32 SelectDictionarySizeFor(unsigned datasize)
 {
@@ -160,8 +161,7 @@ const std::vector<unsigned char> LZMADeCompress
 {
     if(buf.size() <= 5+8) return std::vector<unsigned char> ();
     
-    /* FIXME: not endianess-safe */
-    uint_least64_t out_sizemax = *(const uint_least64_t*)&buf[5];
+    uint_least64_t out_sizemax = R64(&buf[5]);
     
     std::vector<unsigned char> result(out_sizemax);
     

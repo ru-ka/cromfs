@@ -15,7 +15,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 
 #ifndef __STDC_CONSTANT_MACROS
-#define __STDC_CONSTANT_MACROS
+#define __STDC_CONSTANT_MACROS /* for UINT16_C etc */
 #endif
 
 #include <stdint.h>

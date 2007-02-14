@@ -21,7 +21,7 @@ Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
 for permanently archiving gigabytes of big files that have lots of redundancy.
  <p/>
 In terms of compression it is much similar to
-<a href=\"http://www.7-zip.com/\">7-zip</a> files, except that fast random
+<a href=\"http://www.7-zip.com/\">7-zip</a> files, except that random
 access is provided  for the whole archive contents; the user does not need
 to launch a program to decompress a single file, nor does he need to wait
 while the system decompresses 500 files from a 1000-file archive to get
@@ -35,6 +35,9 @@ and \"random file access\", then you will be happy with cromfs.
 The creation of cromfs was inspired
 from <a href=\"http://squashfs.sourceforge.net/\">Squashfs</a>
 and <a href=\"http://sourceforge.net/projects/cramfs/\">Cramfs</a>.
+ <p>
+The <a href=\"#download\">downloading</a> section is at the bottom
+of this page.
 
 ", 'news:1. News' => "
 
@@ -186,7 +189,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Endianess-safety</th>
-   <td class=bad>Works on little-endian only</td>
+   <td class=hmm>Theoretically safe (untested on bigendian)</td>
    <td class=hmm>Safe, but not exchangeable</td>
    <td class=hmm>Safe, but not exchangeable</td>
    <td class=hmm>Depends on slave filesystem</td>
@@ -635,8 +638,8 @@ power of cromfs.
 
 ", 'concept_blocknumber:1.1.1. Block number and block table' => "
 
-The filesystem contains a structure called \"blktab\", which
-is a list of <a href=\"#concept_datalocator\">data locators</a>.
+The filesystem contains a structure called \"blktab\" (block table),
+which is a list of <a href=\"#concept_datalocator\">data locators</a>.
 This list is indexed by a block number.<br />
 Each locator describes, where to find the particular
 <a href=\"#concept_block\">block</a> denoted by this block number.
@@ -672,7 +675,8 @@ for future use but not actually save them in the block table, unless
 they're utilized later.
 This helps compression when the number of fblocks searched (--bruteforcelimit)
 is low compared to the number of fblocks generated, at the cost of memory
-consumed by mkcromfs.
+consumed by mkcromfs, and has also potential to make mkcromfs faster
+(but also slower).
 
 ", 'concept_random_compress:1.1.1. Random compress period (mkcromfs only)' => "
 
@@ -828,10 +832,10 @@ to this package.
     more sane than waiting for \"ready\" to be output in stderr</li>
    <li>A proof of concept example of utilizing cromfs
     in a root filesystem (with initramfs)</li>
+   <li>Add appending support (theoretically doable, just not very fast)</li>
   </ul></li>
  <li>Topic: Documentation
   <ul>
-   <li>Better fake box art</li>
    <li>Graphical illustration on the filesystem structure
     (fs consists of fblocks, and files are split in blocks
      which are actually indexes to various fblocks)</li>
