@@ -23,9 +23,9 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.2.5.
-<div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#vocabulary">Understanding the concepts</a><br></td>
-<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;11.1. <a href="#wishlish">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#download">Downloading</a><br></td>
+  This is the documentation of cromfs-1.3.0.
+<div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;5.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;7.0.5. <a href="#h5">Using cromfs with automount</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#vocabulary">Understanding the concepts</a><br></td>
+<td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;9. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;11.1. <a href="#wishlish">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
 
 <img src="http://bisqwit.iki.fi/src/cromfs-boxart.png" align="left" alt="cromfs" />
@@ -103,10 +103,11 @@ See <a href="http://bisqwit.iki.fi/src/cromfs-format.txt"
    (This has no effect to compression efficiency.)</li>
 </ul>
 
-Development status: Beta. The Cromfs project has been created very recently
-and it hasn't been yet tested extensively. There is no warranty against data
+Development status: Beta. The Cromfs project has not yet
+been tested extensively. There is no warranty against data
 loss or anything else, so use at your own risk.<br />
-That being said, there are no known bugs.
+That being said, it has been in use by the author since the first
+version, and as of the latest release, there are no known bugs.
 
 </div><H2 id="compare" class="level2"><a name="compare"></a>5. Comparing to other filesystems</H2><div class="level2" id="divcompare">
 
@@ -238,7 +239,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Fragmentation<br />(good for compression, bad for access speed)</th>
-   <td class=hmm>Commonplace</th>
+   <td class=hmm>Aimed for</th>
    <td class=hmm>None</td>
    <td class=good>File tails only</td>
    <td class=hmm>Depends on slave filesystem</td>
@@ -251,7 +252,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Waste space (partially filled sectors)</th>
-   <td class=good>No</td>
+   <td class=good>No (unless readwrite support is asked, but even then it only makes a sparse file)</td>
    <td>Unknown</td>
    <td class=hmm>Mostly not</td>
    <td class=hmm>Depends on slave filesystem, usually yes</td>
@@ -448,7 +449,7 @@ the memory usage would be around 10.2&nbsp;MB.
    </li>
  <li>Mount the sample filesystem:
   <pre>$ mkdir sample
-$ ./cromfs-driver sample.cromfs sample &</pre>
+$ ./cromfs-driver sample.cromfs sample</pre>
    </li>
  <li>Observe the sample filesystem:
   <pre>$ cd sample
@@ -458,7 +459,6 @@ $ ls -al</pre>
  <li>Unmounting the filesystem:
   <pre>$ cd ..
 $ fusermount -u sample</pre>
-    or, type "fg" and press ctrl-c to terminate the driver.
    </li>
 </ol>
 
@@ -587,7 +587,23 @@ To control the filesystem speed, use these tips:
  <li>Use fast hardware&hellip;</li>
 </ul>
 
+</div><H4 id="h5" class="level4"><a name="h5"></a>7.0.5. Using cromfs with automount</H4><div class="level4" id="divh5">
+
+Since version 1.3.0, you can use cromfs in conjunction with the
+<a href="http://tldp.org/HOWTO/Automount-4.html"
+>automount</a> (autofs) feature present in Linux kernel. This allows
+you to mount cromfs volumes automatically on demand, and umount
+them when they are not used, conserving free memory.
+ <p>
+This line in your autofs file (such as auto.misc) will do the trick
+(assuming the path you want is "books", and your volume
+is located at "/home/myself/books.cromfs"):
+ <p>
+<pre>books -fstype=fuse,ro,allow_other    :/usr/local/bin/cromfs-driver\#/home/myself/books.cromfs</pre>
+
 </div><H2 id="vocabulary" class="level2"><a name="vocabulary"></a>8. Understanding the concepts</H2><div class="level2" id="divvocabulary">
+
+Skip over this section if you don't think yourself as technically inclined.
 
 </div><H4 id="concept_inode" class="level4"><a name="concept_inode"></a>8.0.1. Inode</H4><div class="level4" id="divconcept_inode">
 
@@ -818,8 +834,8 @@ The LZMA code embedded within is licensed under LGPL.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml33><b id=eml19 class=nonmail>eextMubmzj</b><span id=eml20 class=ismail>Joel</span><span id=eml21 class=nonmail><b>cn1g</b></span><span id=eml22 class=ismail> Yli</span><b id=eml23 class=nonmail>6zsmnsee@e</b><span id=eml24 class=ismail>luom</span><span id=eml25 class=nonmail><b>s</b></span><span id=eml26 class=ismail>a &lt;bi</span><b id=eml27 class=nonmail>l</b><span id=eml28 class=ismail>sqwi</span><span id=eml29 class=nonmail><b>dr6</b></span><span id=eml30 class=ismail>t@ik</span><b id=eml31 class=nonmail>wS1i@h@ue</b><span id=eml32 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=19;i<33;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml16><b id=eml2 class=nonmail>1wV</b><span id=eml3 class=ismail>Joel</span><span id=eml4 class=nonmail><b>cvS@fn907j</b></span><span id=eml5 class=ismail> Yli</span><b id=eml6 class=nonmail>.v@1</b><span id=eml7 class=ismail>luom</span><span id=eml8 class=nonmail><b>p5L7znux3w</b></span><span id=eml9 class=ismail>a &lt;bi</span><b id=eml10 class=nonmail>tzRqI1in/e</b><span id=eml11 class=ismail>sqwi</span><span id=eml12 class=nonmail><b>Tq1/2ziw</b></span><span id=eml13 class=ismail>t@ik</span><b id=eml14 class=nonmail>r@e2yeai</b><span id=eml15 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=2;i<16;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -867,15 +883,21 @@ to this package.
  </li>
 </ul>
 
+</div><H2 id="links" class="level2"><a name="links"></a>13. Links</H2><div class="level2" id="divlinks">
 
-</div><H2 id="download" class="level2"><a name="download"></a>13. Downloading</H2><div class="level2" id="divdownload">
+<ul>
+ <li><a href="http://www.nofuture.tv/diary/20070303.html"
+   >Review of cromfs in Days of Speed (in Japanese language)</a>
+</li></ul>
+
+</div><H2 id="download" class="level2"><a name="download"></a>14. Downloading</H2><div class="level2" id="divdownload">
    The official home page of cromfs
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Wed, 14 Feb 2007 15:06:57 +0200)<br>
+       <tt>progdesc.php</tt> (last updated: Sat, 30 Jun 2007 20:14:27 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Wed, 14 Feb 2007 15:32:19 +0200</small>
+  at Sat, 30 Jun 2007 20:17:00 +0300</small>
  </p>
 </body>
 </html>

@@ -4,6 +4,12 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.3.0	2007-06-30 Joel Yliluoma <bisqwit@iki.fi>
+- New format is under work (filesystem write-mounting)
+- cromfs-driver now goes background (fork) by default (use -f to go foreground)
+- Added -v (--verbose) in unmkcromfs (and tuned down verbosiness by default)
+- Documented how to use autofs with cromfs (thanks Petr Pudlak)
+
 1.2.5	2007-02-14 Joel Yliluoma <bisqwit@iki.fi>
 - Tentatively fixed endianess problems (needs testing!)
 - Updated box art

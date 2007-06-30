@@ -1,4 +1,4 @@
-VERSION=1.2.5
+VERSION=1.3.0
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -18,11 +18,14 @@ ARCHFILES=\
 	cromfs.spec \
 	\
 	cromfs.cc cromfs.hh cromfs-defs.hh \
+	cromfs-write.cc cromfs-write.hh \
 	cromfs-ops.cc cromfs-ops.hh \
 	main.c \
 	LzmaDecode.c LzmaDecode.h \
 	\
-	dummy_thread.c \
+	range.hh range.tcc \
+	rangeset.hh rangeset.tcc \
+	rangemultimap.hh rangemultimap.tcc \
 	\
 	util/Makefile.sets util/Makefile util/depfun.mak \
 	\
@@ -34,6 +37,7 @@ ARCHFILES=\
 	util/fblock.cc util/fblock.hh \
 	util/fnmatch.cc util/fnmatch.hh \
 	util/crc32.h util/crc32.cc \
+	util/assert++.hh util/assert++.cc \
 	util/memmem.h util/memmem.c \
 	util/boyermoore.hh \
 	util/mkcromfs.cc \
@@ -41,6 +45,7 @@ ARCHFILES=\
 	util/cvcromfs.cc \
 	util/mkcromfs_sets.hh \
 	\
+	util/autoptr \
 	util/range.hh util/range.tcc \
 	util/rangeset.hh util/rangeset.tcc \
 	util/rangemultimap.hh util/rangemultimap.tcc \
@@ -134,9 +139,6 @@ cromfs-driver-static: $(OBJS)
 	# Note: It does not matter if upx cannot run.
 	- upx --best $@
 
-#dummy_thread.o: dummy_thread.c
-#	$(CC) -o $@ $^ -fomit-frame-pointer -c
-	
 util/mkcromfs: FORCE
 	make -C util mkcromfs
 

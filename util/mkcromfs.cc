@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <set>
 #include <algorithm>
 
 #ifdef USE_HASHMAP
@@ -19,6 +20,10 @@
 #include <getopt.h>
 #include <errno.h>
 #include <sys/time.h>
+
+#include <signal.h>
+
+#include <sys/vfs.h> /* for statfs64 */
 
 #include "mkcromfs_sets.hh"
 
@@ -40,6 +45,12 @@ uint_fast32_t MaxFblockCountForBruteForce = 0;
 long FSIZE = 2097152;
 long BSIZE = 65536;
 //uint_fast32_t MaxSearchLength = FSIZE;
+
+
+double RootDirInflateFactor = 1;
+double InotabInflateFactor  = 1;
+double BlktabInflateFactor  = 1;
+
 
 static MatchingFileListType exclude_files;
 
@@ -66,15 +77,23 @@ struct mkcromfs_block : public cromfs_block_storage
     }
 } __attribute__((packed));
 
+typedef std::pair<dev_t,ino_t> hardlinkdata;
+
 class cromfs
 {
 private:
     uint_fast64_t amount_blockdata;
     uint_fast64_t amount_fblockdata;
+    uint_fast32_t storage_opts;
+    int ExitStatus;
 public:
-    cromfs()
+    cromfs(uint_fast32_t s_opts)
+      : amount_blockdata(0),
+        amount_fblockdata(0),
+        storage_opts(s_opts),
+        ExitStatus(0),
+        bytes_of_files(0)
     {
-        bytes_of_files = 0;
     }
     ~cromfs()
     {
@@ -83,6 +102,8 @@ public:
             fblocks[a].Delete();
         }
     }
+    
+    int GetExitStatus() const { return ExitStatus; }
     
     void WriteTo(int fd)
     {
@@ -103,7 +124,10 @@ public:
         }
         
         { datasource_vector inotab_source(inotab);
-          inotab_inode.mode = 0x12345678;
+          inotab_inode.mode = storage_opts;
+          fflush(stdout); fflush(stderr);
+          //fprintf(stderr, "Writing storage options %X\n", storage_opts);
+          fflush(stdout); fflush(stderr);
           inotab_inode.time = time(NULL);
           inotab_inode.links = 1;
           inotab_inode.bytesize = inotab.size();
@@ -143,35 +167,41 @@ public:
         {
             std::printf(" compressed into %s\n", ReportSize(raw_blktab.size()).c_str()); fflush(stdout);
         }
-        
-        unsigned char Superblock[0x38];
-        uint_fast64_t root_ino_addr   = sizeof(Superblock);
-        uint_fast64_t inotab_ino_addr = root_ino_addr   + raw_root_inode.size();
-        uint_fast64_t blktab_addr     = inotab_ino_addr + raw_inotab_inode.size();
-        uint_fast64_t fblktab_addr    = blktab_addr     + raw_blktab.size();
 
-        W64(Superblock+0x00, CROMFS_SIGNATURE);
-        W64(Superblock+0x08, blktab_addr);
-        W64(Superblock+0x10, fblktab_addr);
-        W64(Superblock+0x18, inotab_ino_addr);
-        W64(Superblock+0x20, root_ino_addr);
-        W32(Superblock+0x28, FSIZE);
-        W32(Superblock+0x2C, BSIZE);
-        W64(Superblock+0x30, bytes_of_files);
+        cromfs_superblock_internal sblock;
+        sblock.sig          = CROMFS_SIGNATURE;
+        sblock.rootdir_size = raw_root_inode.size();
+        sblock.inotab_size  = raw_inotab_inode.size();
+        sblock.blktab_size  = raw_blktab.size();
+        
+        sblock.rootdir_room = sblock.rootdir_size * RootDirInflateFactor;
+        sblock.inotab_room  = sblock.inotab_size  * InotabInflateFactor;
+        sblock.blktab_room  = sblock.blktab_size  * BlktabInflateFactor;
+        
+        sblock.compressed_block_size   = FSIZE;
+        sblock.uncompressed_block_size = BSIZE;
+        sblock.bytes_of_files          = bytes_of_files;
+        
+        sblock.SetOffsets();
+        
+        cromfs_superblock_internal::BufferType Superblock;
+        sblock.WriteToBuffer(Superblock);
         
         lseek64(fd, 0, SEEK_SET);
         
-        write(fd, Superblock, sizeof(Superblock));
-        write(fd, &raw_root_inode[0],   raw_root_inode.size());
-        write(fd, &raw_inotab_inode[0], raw_inotab_inode.size());
+        write(fd, Superblock, sblock.GetSize());
+        
+        //fprintf(stderr, "root goes at %llX\n", lseek64(fd,0,SEEK_CUR));
+        SparseWrite(fd, &raw_root_inode[0],   raw_root_inode.size(), sblock.rootdir_offs);
+        //fprintf(stderr, "inotab goes at %llX\n", lseek64(fd,0,SEEK_CUR));
+        SparseWrite(fd, &raw_inotab_inode[0], raw_inotab_inode.size(), sblock.inotab_offs);
 
-        lseek64(fd, blktab_addr, SEEK_SET);
-        write(fd, &raw_blktab[0],       raw_blktab.size());
+        SparseWrite(fd, &raw_blktab[0], raw_blktab.size(), sblock.blktab_offs);
         
         uint_fast64_t compressed_total = 0;
         uint_fast64_t uncompressed_total = 0;
         
-        lseek64(fd, fblktab_addr, SEEK_SET);
+        lseek64(fd, sblock.fblktab_offs, SEEK_SET);
             
         for(unsigned a=0; a<fblocks.size(); ++a)
         {
@@ -191,7 +221,30 @@ public:
             
             W64(Buf, fblock.size());
             write(fd, Buf, 4);
-            write(fd, &fblock[0], fblock.size());
+            
+            const uint_fast64_t pos = lseek64(fd, 0, SEEK_CUR);
+            SparseWrite(fd, &fblock[0], fblock.size(), pos);
+            
+            if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
+            {
+                if(fblock.size() > (size_t)FSIZE)
+                {
+                    std::printf("\n");
+                    std::fflush(stdout);
+                    std::fprintf(stderr,
+                        "Error: This filesystem cannot be sparse, because a compressed fblock\n"
+                        "       actually became larger than the decompressed one.\n"
+                        "       Sorry. Try the 'minfreespace' option if it helps.\n"
+                     );
+                    ExitStatus=1;
+                    return;
+                }
+                lseek64(fd, pos + FSIZE, SEEK_SET);
+            }
+            else
+            {
+                lseek64(fd, pos + fblock.size(), SEEK_SET);
+            }
             
             std::fflush(stdout);
             
@@ -204,6 +257,8 @@ public:
              */
             fblocks[a].Delete();
         }
+        
+        ftruncate64(fd, lseek64(fd, 0, SEEK_CUR));
         
         if(DisplayEndProcess)
         {
@@ -250,8 +305,6 @@ public:
         rootdir = inode;
     }
 private:
-    typedef std::pair<dev_t,ino_t> hardlinkdata;
-
     typedef std::map<hardlinkdata, cromfs_inodenum_t> hardlinkmap_t;
     hardlinkmap_t hardlink_map;
     
@@ -295,14 +348,14 @@ private:
             
             if(!MatchFile(pathname)) continue;
 
-            struct stat st;
+            struct stat64 st;
             
             if(DisplayFiles)
             {
                 std::printf("%s ...\n", pathname.c_str());
             }
             
-            if( (FollowSymlinks ? stat : lstat) (pathname.c_str(), &st) < 0)
+            if( (FollowSymlinks ? stat64 : lstat64) (pathname.c_str(), &st) < 0)
             {
                 std::perror(pathname.c_str());
                 continue;
@@ -1039,12 +1092,150 @@ static void TestCompression()
 }
 */
 
+class EstimateSpaceNeededFor
+{
+private:
+    std::set<hardlinkdata> hardlink_set;
+
+    bool check_hardlink_file(dev_t dev, ino_t ino)
+    {
+        hardlinkdata d(dev, ino);
+        std::set<hardlinkdata>::const_iterator i = hardlink_set.find(d);
+        if(i == hardlink_set.end()) { hardlink_set.insert(d); return false; }
+        return true;
+    }
+public:
+    uint_fast64_t operator() (const std::string& path)
+    {
+        uint_fast64_t result = 0;
+        
+        DIR* dir = opendir(path.c_str());
+        if(!dir) return 0;
+        std::vector<std::string> dirs;
+        while(dirent* ent = readdir(dir))
+        {
+            const std::string entname = ent->d_name;
+            if(entname == "." || entname == "..") continue;
+            const std::string pathname = path + "/" + entname;
+            if(!MatchFile(pathname)) continue;
+            struct stat64 st;
+            if( (FollowSymlinks ? stat64 : lstat64) (pathname.c_str(), &st) < 0) continue;
+            
+            /* Count the size of the directory entry */
+            result += 8 + entname.size() + 1;
+            
+            if(check_hardlink_file(st.st_dev, st.st_ino))
+            {
+                continue; // nothing more to do for this entry
+            }
+            
+            /* Count the size of the inode */
+            result += 0x18;
+            
+            if(S_ISDIR(st.st_mode)) { dirs.push_back(pathname); continue; }
+            
+            /* Count the size of the content */
+            uint_fast64_t file_size = st.st_size;
+            result += file_size;
+            uint_fast64_t num_blocks = (file_size + (BSIZE-1)) / BSIZE;
+            result += num_blocks * 8;
+            //fprintf(stderr, "After %s: %llu\n", pathname.c_str(), (unsigned long long)result);
+        }
+        closedir(dir);
+        
+        for(unsigned a=0; a<dirs.size(); ++a)
+            result += (*this) ( dirs[a] );
+        
+        return result;
+    }
+};
+
+static void CheckDecompressionSuitability(const std::string& rootpath)
+{
+    std::string TempDir = GetTempDir();
+    struct statfs64 stats;
+    if(statfs64(TempDir.c_str(), &stats) != 0)
+    {
+        perror(TempDir.c_str());
+        return; // not a severe error though
+    }
+    
+    uint_fast64_t space_have   = stats.f_bfree * stats.f_bsize;
+    
+    uint_fast64_t space_needed = EstimateSpaceNeededFor() (rootpath);
+    
+    if(space_needed >= space_have) goto NotEnabled;
+
+    std::printf(
+        "Good news! Your tempdir, [1m%s[0m, has [1m%s[0m free.\n"
+        "mkcromfs estimates that if the [1m-e -r100000[0m options were enabled,\n"
+        "it would require about [1m%s[0m of temporary disk space.\n"
+        "This would be likely much faster than the default method.\n"
+        "The default method requires less temporary space, but is slower.\n",
+        TempDir.c_str(),
+        ReportSize(space_have).c_str(),
+        ReportSize(space_needed).c_str());
+    
+    if(space_needed < space_have / 20)
+    {
+        std::printf(
+            "Actually, the ratio is so small that I'll just enable\n"
+            "the mode without even asking. You can suppress this behavior\n"
+            "by manually specifying one of the -e, -r or -q options.\n");
+        goto Enabled;
+    }
+    for(;;)
+    {
+        std::printf(
+            "Do you want to enable the 'decompresslookups' mode? (Y/N) ");
+        std::fflush(stdout);
+        char Buf[512];
+        if(!std::fgets(Buf, sizeof(Buf), stdin))
+        {
+            std::printf("\nEOF from stdin, assuming the answer is \"no\".\n");
+            goto NotEnabled;
+        }
+        if(Buf[0] == 'y' || Buf[0] == 'Y') goto Enabled;
+        if(Buf[0] == 'n' || Buf[0] == 'N') goto NotEnabled;
+        std::printf("Invalid input, please try again...\n");
+    }
+Enabled:
+    std::printf("Activating commandline options: -e -r100000%s\n",
+        MaxFblockCountForBruteForce ? "" : " -c2");
+    DecompressWhenLookup = true;
+    RandomCompressPeriod = 100000;
+    if(!MaxFblockCountForBruteForce) MaxFblockCountForBruteForce = 2;
+NotEnabled: ;
+}
+
+static cromfs* cleanup_cromfs_handle = 0;
+static void CleanupTempsExit(int signo)
+{
+    /* Note: This is not valid in the strictest sense of the C++ standard.
+     * A signal handler may only use language features present in the C language.
+     * However, in practise it works just fine and nobody complains.
+     */
+    std::printf("\nTermination signalled, cleaning up temporaries\n");
+    if(cleanup_cromfs_handle) cleanup_cromfs_handle->~cromfs();
+    signal(signo, SIG_DFL);
+    raise(signo); // reraise the signal
+}
+
 int main(int argc, char** argv)
 {
     std::string path  = ".";
     std::string outfn = "cromfs.bin";
     
     unsigned AutoIndexRatio = 16;
+
+    uint_fast32_t storage_opts = 0;
+    
+    bool MaybeSuggestDecompression = true;
+    
+    signal(SIGINT, CleanupTempsExit);
+    signal(SIGTERM, CleanupTempsExit);
+    signal(SIGHUP, CleanupTempsExit);
+    signal(SIGQUIT, CleanupTempsExit);
     
     for(;;)
     {
@@ -1069,9 +1260,10 @@ int main(int argc, char** argv)
             {"exclude",     1, 0,'x'},
             {"exclude-from",1, 0,'X'},
             {"quiet",       0, 0,'q'},
+            {"sparse",      1, 0,'p'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:qx:X:l", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVf:b:er:s:a:c:qx:X:lp:", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -1138,6 +1330,8 @@ int main(int argc, char** argv)
                     "     -q supresses the detailed information outputting while compressing.\n"
                     "     -qq supresses also the listing of the filenames.\n"
                     "     -qqq supresses also the summary and progress at the last phase.\n"
+                    " --sparse, -p <opts>\n"
+                    "     Commaseparated list of items to store sparsely. -pf = fblocks\n"
                     "\n");
                 return 0;
             }
@@ -1173,6 +1367,7 @@ int main(int argc, char** argv)
             case 'e':
             {
                 DecompressWhenLookup = true;
+                MaybeSuggestDecompression = false;
                 break;
             }
             case 'l':
@@ -1190,6 +1385,7 @@ int main(int argc, char** argv)
                     return -1;
                 }
                 RandomCompressPeriod = val;
+                MaybeSuggestDecompression = false;
                 break;
             }
             case 'a':
@@ -1235,6 +1431,7 @@ int main(int argc, char** argv)
                 else if(DisplayEndProcess) DisplayEndProcess = false;
                 else
                     std::fprintf(stderr, "mkcromfs: -qqqq not known, -qqq is the maximum.\n");
+                MaybeSuggestDecompression = false;
                 break;
             }
             case 'x':
@@ -1245,6 +1442,29 @@ int main(int argc, char** argv)
             case 'X':
             {
                 AddFilePatternsFrom(exclude_files, optarg);
+                break;
+            }
+            case 'p':
+            {
+                for(char* arg=optarg;;)
+                {
+                    while(*arg==' ')++arg;
+                    if(!*arg) break;
+                    char* comma = strchr(arg, ',');
+                    if(!comma) comma = strchr(arg, '\0');
+                    *comma = '\0';
+                    int len = strlen(arg);
+                    if(len <= 7 && !strncmp("fblocks",arg,len))
+                        storage_opts |= CROMFS_OPT_SPARSE_FBLOCKS;
+                    else
+                    {
+                        std::fprintf(stderr, "mkcromfs: Unknown option to -p (%s). See `mkcromfs --help'\n",
+                            arg);
+                        return -1;
+                    }
+                    if(!*comma) break;
+                    arg=comma+1;
+                }
                 break;
             }
         }
@@ -1307,8 +1527,15 @@ int main(int argc, char** argv)
         std::perror(outfn.c_str());
         return errno;
     }
+    ftruncate64(fd, 0);
 
-    cromfs fs;
+    if(MaybeSuggestDecompression)
+    {
+        CheckDecompressionSuitability(path.c_str());
+    }
+    
+    cromfs fs(storage_opts);
+    cleanup_cromfs_handle = &fs;
     fs.WalkRootDir(path.c_str());
     
     if(DisplayEndProcess)
@@ -1327,5 +1554,5 @@ int main(int argc, char** argv)
         std::printf("End\n");
     }
     
-    return 0;
+    return fs.GetExitStatus();
 }

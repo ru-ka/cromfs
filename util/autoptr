@@ -1,0 +1,138 @@
+#ifndef BqW_autoptr_h
+#define BqW_autoptr_h
+
+/* This is Bisqwit's generic autoptr template file.
+ * The same file is used in many different projects.
+ *
+ * This class, autoptr, implements a reference-counting
+ * pointer object.
+ *
+ * Usage example:
+ *   #include <iostream>
+ *   #include "autoptr"
+ *   
+ *   class thing: public ptrable
+ *   {
+ *   public:
+ *       thing() { std::cout << "thing sprouts\n"; }
+ *       ~thing() { std::cout << "thing dies\n"; }
+ *   };
+ *
+ *   int main()
+ *   {
+ *      autoptr<thing> p = new thing;
+ *      autoptr<thing> k = p;
+ *   }
+ * 
+ *   "thing" is automatically destroyed when
+ *   all autopointers referring to it have died.
+ *
+ *   Virtual and non-virtual classes are supported.
+ *
+ * autoptr.hh version 1.3.9
+ */
+
+/* Basic autopointer type. Can only point to ptrable-derived classes. */
+template <typename T>
+class autoptr
+{
+    inline void Forget() { if(p) { p->_ptr_lost_you(); if(p->_ptr_is_dead()) delete p; } }
+    inline void Have(T *const a) const { if(a) a->_ptr_got_you(); }
+    inline void Set(T *const a) { Have(a); Forget(); p = a; }
+    inline void Birth() { Have(p); }
+    T *p;
+public:
+    autoptr() : p(0) { }
+    autoptr(T *const a) : p(a) { Birth(); }
+    autoptr(const autoptr &a) : p(&*a) { Birth(); }
+    
+    // To enable boolean tests with this class: if(tmp) {...}
+    inline operator const bool() const { return p; }
+    inline const bool operator! () const { return !p; }
+    
+    // Act like if you were a pointer (for comparisons etc)
+    inline operator T* () const { return p; }
+    inline const bool operator< (const autoptr &a) const { return p < a.p; }
+    
+    // Dereferencing
+    inline T &operator* () const { return *p; }
+    inline T *operator-> () const { return p; }
+    
+    // Assigning
+    autoptr &operator= (T *const a) { Set(a); return *this; }
+    autoptr &operator= (const autoptr &a) { Set(&*a); return *this; }
+    void reset(T *const a) { Set(a); }
+    void reset(const autoptr &a) { Set(&*a); }
+    
+    ~autoptr() { Forget(); }
+private:
+    // This conversion shouldn't be available
+    //operator T*& ();
+};
+
+/* A pointer type where pointer comparison does actually a value
+ * comparison. Useful if you want to use pointers in a sorted container.
+ */
+template <typename T>
+class autoeqptr : public autoptr<T>
+{
+public:
+    autoeqptr() { }
+    autoeqptr(T *const a) : autoptr<T> (a) { }
+    
+    template<typename K> inline bool operator== (K s) const { return **this == *s; }
+    template<typename K> inline bool operator< (K s) const { return **this < *s; }
+    // enable these too if you see them necessary
+  /*
+    template<typename K> inline bool operator!= (K s) const { return **this != *s; }
+    template<typename K> inline bool operator> (K s) const { return **this > *s; }
+    template<typename K> inline bool operator<= (K s) const { return **this <= *s; }
+    template<typename K> inline bool operator=> (K s) const { return **this => *s; }
+  */
+};
+
+// autoptr must only use ptrable classes.
+class ptrable
+{
+    mutable unsigned long _ptr_ref_num;
+public:
+    /* These are not really public, but I don't know
+     * how to make them accessible to autoptr<> only.
+     */
+    inline void _ptr_got_you() const { ++_ptr_ref_num; }
+    inline void _ptr_lost_you() const { --_ptr_ref_num; }
+    /* ptr_lost_you may not do "delete this", because the destructor is not
+     * virtual. Deletion must be done by the caller (autoptr::Forget()), who
+     * knows what this class actually is and how to delete it.
+     */
+    inline const bool _ptr_is_dead() const { return !_ptr_ref_num; }
+public:
+    /* Birth with refnum 0, not 1.
+     * Refnum tells how many autoptr's are referring to this.
+     */
+    ptrable() : _ptr_ref_num(0) { }
+    
+    /* Copied element has no referrals, for the same reason. */
+    ptrable(const ptrable &) : _ptr_ref_num(0) { }
+    
+    /* ptrable does not need to contain a virtual destructor,
+     * because even though classes may be derived from ptrable,
+     * plain pointers to ptrable are never expected to be formed.
+     */
+    
+    /* Debugging purposes */
+    inline unsigned long get_autoptr_refnum() const { return _ptr_ref_num; }
+};
+
+template<typename T>
+class ptrable_autoptr: public autoptr<T>, public ptrable
+{
+public:
+    ptrable_autoptr() : autoptr<T>(), ptrable() { }
+    ptrable_autoptr(T *const a) : autoptr<T>(a), ptrable() { }
+    ptrable_autoptr(const ptrable_autoptr &a) : autoptr<T>(a), ptrable(a) { }
+
+    inline operator T* () const { return autoptr<T>::operator T* (); }
+};
+
+#endif

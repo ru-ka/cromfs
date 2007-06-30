@@ -1,3 +1,6 @@
+#ifndef bqtCromfsDefsHH
+#define bqtCromfsDefsHH
+
 /*
 cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL
@@ -11,8 +14,6 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 /* Disable this if you have hash-related compilation problems. */
 #define USE_HASHMAP
-
-
 
 #ifndef __STDC_CONSTANT_MACROS
 #define __STDC_CONSTANT_MACROS /* for UINT16_C etc */
@@ -28,58 +29,14 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #define CROMFS_SIGNATURE_01   UINT64_C(0x313053464d4f5243)
 #define CROMFS_SIGNATURE_02   UINT64_C(0x323053464d4f5243)
+#define CROMFS_SIGNATURE_03   UINT64_C(0x333053464d4f5243)
 
-#define CROMFS_SIGNATURE    CROMFS_SIGNATURE_02
+#define CROMFS_SIGNATURE    CROMFS_SIGNATURE_03
 
-/* Use "least" instead of "fast" for these types, because they
- * are included in structs and vectors that are directly copied
- * from/to the filesystem image.
- */
-typedef uint_least64_t cromfs_inodenum_t;
-typedef uint_least32_t cromfs_blocknum_t;
-typedef uint_least32_t cromfs_fblocknum_t;
-
-/* Use "fast" in internal types, "least" in storage types. */
-
-struct cromfs_inode_internal
+enum CROMFS_OPTS
 {
-    uint_fast32_t mode;
-    uint_fast32_t time;
-    uint_fast32_t links;
-    uint_fast32_t rdev;
-    uint_fast16_t uid;
-    uint_fast16_t gid;
-    uint_fast64_t bytesize;
-    std::vector<cromfs_blocknum_t> blocklist;
+    CROMFS_OPT_SPARSE_FBLOCKS = 0x00000001
 };
-struct cromfs_fblock_internal
-{
-    uint_fast64_t filepos;
-    uint_fast32_t length;
-};
-
-struct cromfs_block_storage
-{
-    uint_least32_t fblocknum __attribute__((packed));
-    uint_least32_t startoffs __attribute__((packed));
-} __attribute__((packed));
-
-struct cromfs_superblock_internal
-{
-    uint_fast64_t blktab_offs;
-    uint_fast64_t fblktab_offs;
-    uint_fast64_t inotab_offs;
-    uint_fast64_t rootdir_offs;
-    uint_fast64_t blktab_size;
-    uint_fast32_t compressed_block_size;
-    uint_fast64_t uncompressed_block_size; /* 64-bit to reduce the number of casts */
-    uint_fast64_t bytes_of_files;
-    uint_fast64_t sig;
-};
-
-typedef std::vector<unsigned char> cromfs_datablock;
-typedef std::vector<unsigned char> cromfs_cached_fblock;
-typedef std::map<std::string, cromfs_inodenum_t> cromfs_dirinfo;
 
 
 static inline uint_fast16_t R16(const void* p)
@@ -123,5 +80,148 @@ static void W64(void* p, uint_fast64_t value)
 }
 
 
-#define likely(x)       __builtin_expect(!!(x), 1)
-#define unlikely(x)     __builtin_expect(!!(x), 0)
+
+
+
+/* Use "least" instead of "fast" for these types, because they
+ * are included in structs and vectors that are directly copied
+ * from/to the filesystem image.
+ */
+typedef uint_least64_t cromfs_inodenum_t;
+typedef uint_least32_t cromfs_blocknum_t;
+typedef uint_least32_t cromfs_fblocknum_t;
+
+/* Use "fast" in internal types, "least" in storage types. */
+
+struct cromfs_inode_internal
+{
+    uint_fast32_t mode;
+    uint_fast32_t time;
+    uint_fast32_t links;
+    uint_fast32_t rdev;
+    uint_fast16_t uid;
+    uint_fast16_t gid;
+    uint_fast64_t bytesize;
+    std::vector<cromfs_blocknum_t> blocklist;
+};
+struct cromfs_fblock_internal
+{
+    uint_fast64_t filepos;
+    uint_fast32_t length;
+};
+
+struct cromfs_block_storage
+{
+    uint_least32_t fblocknum __attribute__((packed));
+    uint_least32_t startoffs __attribute__((packed));
+} __attribute__((packed));
+
+struct cromfs_superblock_internal
+{
+    uint_fast64_t blktab_offs,  blktab_size,  blktab_room;
+    uint_fast64_t fblktab_offs;
+    uint_fast64_t inotab_offs,  inotab_size,  inotab_room;
+    uint_fast64_t rootdir_offs, rootdir_size, rootdir_room;
+    uint_fast32_t compressed_block_size;
+    uint_fast64_t uncompressed_block_size; /* 64-bit to reduce the number of casts */
+    uint_fast64_t bytes_of_files;
+    uint_fast64_t sig;
+    
+    enum { MaxBufferSize = 0x50 };
+    typedef unsigned char BufferType[MaxBufferSize];
+    
+    void RecalcRoom()
+    {
+        rootdir_room = inotab_offs  - rootdir_offs;
+        inotab_room  = blktab_offs  - inotab_offs; 
+        blktab_room  = fblktab_offs - blktab_offs; 
+    }
+    
+    void SetOffsets(unsigned headersize)
+    {
+        rootdir_offs = headersize;
+        inotab_offs  = rootdir_offs + rootdir_room;
+        blktab_offs  = inotab_offs  + inotab_room; 
+        fblktab_offs = blktab_offs  + blktab_room;
+    }
+    void SetOffsets()
+    {
+        SetOffsets(
+          (rootdir_size != rootdir_room
+        || inotab_size != inotab_room
+        || blktab_size != blktab_room)
+              ? 0x50 : 0x38
+                   );
+    }
+    
+    void ReadFromBuffer(BufferType Superblock)
+    {
+        sig                     = R64(Superblock+0x0000);
+        blktab_offs             = R64(Superblock+0x0008);
+        fblktab_offs            = R64(Superblock+0x0010);
+        inotab_offs             = R64(Superblock+0x0018);
+        rootdir_offs            = R64(Superblock+0x0020);
+        compressed_block_size   = R32(Superblock+0x0028); /* aka. FSIZE */
+        uncompressed_block_size = R32(Superblock+0x002C); /* aka. BSIZE */
+        bytes_of_files          = R64(Superblock+0x0030);   
+        
+        RecalcRoom();
+
+        rootdir_size = rootdir_room;
+        inotab_size = inotab_room;  
+        blktab_size = blktab_room;  
+        
+        if(GetSize() >= 0x50)
+        {
+            rootdir_size = R64(Superblock+0x0038);
+            inotab_size  = R64(Superblock+0x0040);
+            blktab_size  = R64(Superblock+0x0048);
+        }
+    }
+    void WriteToBuffer(BufferType Superblock)
+    {
+        W64(Superblock+0x00, sig);
+        W64(Superblock+0x08, blktab_offs);
+        W64(Superblock+0x10, fblktab_offs);
+        W64(Superblock+0x18, inotab_offs);
+        W64(Superblock+0x20, rootdir_offs);
+        W32(Superblock+0x28, compressed_block_size);
+        W32(Superblock+0x2C, uncompressed_block_size);
+        W64(Superblock+0x30, bytes_of_files);
+        
+        if(rootdir_offs >= 0x50)
+        {
+            W64(Superblock+0x0038, rootdir_size);
+            W64(Superblock+0x0040, inotab_size);
+            W64(Superblock+0x0048, blktab_size);
+        }
+    }
+    
+    unsigned GetSize(bool sparse_mode) const
+    {
+        if(sig == CROMFS_SIGNATURE_01
+        || sig == CROMFS_SIGNATURE_02)
+        {
+            return 0x38;
+        }
+        return sparse_mode ? MaxBufferSize : 0x38;
+    }
+    unsigned GetSize() const
+    {
+        return GetSize(rootdir_offs >= 0x50);
+    }
+};
+
+typedef std::vector<unsigned char> cromfs_datablock;
+typedef std::vector<unsigned char> cromfs_cached_fblock;
+typedef std::map<std::string, cromfs_inodenum_t> cromfs_dirinfo;
+
+#ifdef __GNUC__
+# define likely(x)       __builtin_expect(!!(x), 1)
+# define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+# define likely(x)   (x)
+# define unlikely(x) (x)
+#endif
+
+#endif

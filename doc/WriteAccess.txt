@@ -99,3 +99,88 @@ a file is changed.
 It may only be practical in mkcromfs, but even there it needs
 to be planned _considerably_ well to prevent data corruption
 that may happen on power outage or disk error.
+
+---------------------------------------------
+PLANS
+
+    A write to a file involves the following (assume file size does not change):
+     
+     For each block that it covers:
+     
+     {
+
+       Read the block to buffer
+       
+       Deallocate block
+       
+       Update the buffer according to the changes
+       
+       Allocate a new block
+       
+       Write the new block into the chosen fblock
+          
+       If the data locator was updated:
+          
+       {
+          
+         If the block number changed (because the
+         same block was used by some other file):
+         
+         {
+         
+           If this file is INOTAB,
+           {
+             patch the INOTAB inode.
+           }
+           else
+           {
+             Perform recursively the change into the INOTAB file.
+           }
+         }
+          
+         Update BLKDATA.
+         
+       }
+     
+     }
+
+
+FORMAT redesigns TODO:
+
+    - Compressed fblocks must be resizeable.
+      * Already implemented in CROMFS03, through sparse files.
+      Sparseness avoids fragmentation while not costing disk space.
+      (Note: This requires a host filesystem to be useful.)
+
+    - Compressed BLKDATA must be resizeable.
+      (Otherwise, files cannot be changed when the
+       data locators are shared. And recompression
+       may change size requirements.)
+
+    - Compressed inotab must be resizeable.
+      (Recompression may change size requirements.)
+    
+    - Compressed root directory must be resizeable.
+      (Otherwise, root directory entries cannot be changed.)
+
+
+To make files resizeable:
+
+   Problem:
+     Change in file size incurs a change in the length of
+     the block list in the inode. There's no room growing
+     the list. To grow the list, the inode needs to be moved
+     into a different location within INOTAB.
+     However, since the inode number is actually an address
+     of the inode within INOTAB, changing the location also
+     changes the inode number. This would incur another write
+     into the directory entry, and possibly a whole bunch of
+     other writes.
+   For performance, it would be nice if inode numbers don't
+   need to change.
+   
+   To accomplish that, there are two options:
+     A) Fragment the inodes.
+     B) Maintain a separate table that maps the inode
+       numbers into INOTAB offsets.
+

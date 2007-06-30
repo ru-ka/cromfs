@@ -91,10 +91,11 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
    (This has no effect to compression efficiency.)</li>
 </ul>
 
-Development status: Beta. The Cromfs project has been created very recently
-and it hasn't been yet tested extensively. There is no warranty against data
+Development status: Beta. The Cromfs project has not yet
+been tested extensively. There is no warranty against data
 loss or anything else, so use at your own risk.<br />
-That being said, there are no known bugs.
+That being said, it has been in use by the author since the first
+version, and as of the latest release, there are no known bugs.
 
 ", 'compare:1. Comparing to other filesystems' => "
 
@@ -226,7 +227,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Fragmentation<br />(good for compression, bad for access speed)</th>
-   <td class=hmm>Commonplace</th>
+   <td class=hmm>Aimed for</th>
    <td class=hmm>None</td>
    <td class=good>File tails only</td>
    <td class=hmm>Depends on slave filesystem</td>
@@ -239,7 +240,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Waste space (partially filled sectors)</th>
-   <td class=good>No</td>
+   <td class=good>No (unless readwrite support is asked, but even then it only makes a sparse file)</td>
    <td>Unknown</td>
    <td class=hmm>Mostly not</td>
    <td class=hmm>Depends on slave filesystem, usually yes</td>
@@ -436,7 +437,7 @@ the memory usage would be around 10.2&nbsp;MB.
    </li>
  <li>Mount the sample filesystem:
   <pre>\$ mkdir sample
-\$ ./cromfs-driver sample.cromfs sample &</pre>
+\$ ./cromfs-driver sample.cromfs sample</pre>
    </li>
  <li>Observe the sample filesystem:
   <pre>\$ cd sample
@@ -446,7 +447,6 @@ the memory usage would be around 10.2&nbsp;MB.
  <li>Unmounting the filesystem:
   <pre>\$ cd ..
 \$ fusermount -u sample</pre>
-    or, type \"fg\" and press ctrl-c to terminate the driver.
    </li>
 </ol>
 
@@ -575,7 +575,23 @@ To control the filesystem speed, use these tips:
  <li>Use fast hardware&hellip;</li>
 </ul>
 
+", '1.1.1. Using cromfs with automount' => "
+
+Since version 1.3.0, you can use cromfs in conjunction with the
+<a href=\"http://tldp.org/HOWTO/Automount-4.html\"
+>automount</a> (autofs) feature present in Linux kernel. This allows
+you to mount cromfs volumes automatically on demand, and umount
+them when they are not used, conserving free memory.
+ <p>
+This line in your autofs file (such as auto.misc) will do the trick
+(assuming the path you want is \"books\", and your volume
+is located at \"/home/myself/books.cromfs\"):
+ <p>
+<pre>books -fstype=fuse,ro,allow_other    :/usr/local/bin/cromfs-driver\\#/home/myself/books.cromfs</pre>
+
 ", 'vocabulary:1. Understanding the concepts' => "
+
+Skip over this section if you don't think yourself as technically inclined.
 
 ", 'concept_inode:1.1.1. Inode' => "
 
@@ -853,6 +869,12 @@ to this package.
  </li>
 </ul>
 
+", 'links:1. Links' => "
+
+<ul>
+ <li><a href=\"http://www.nofuture.tv/diary/20070303.html\"
+   >Review of cromfs in Days of Speed (in Japanese language)</a>
+</li></ul>
 
 ");
 include '/WWW/progdesc.php';

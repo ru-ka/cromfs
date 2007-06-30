@@ -13,6 +13,53 @@
 
 #include <vector>
 
+double RootDirInflateFactor = 1;
+double InotabInflateFactor  = 1;
+double BlktabInflateFactor  = 1;
+
+struct BlockToucher
+{
+    virtual bool NeedsData() const { return false; }
+    virtual void Got(std::vector<unsigned char>& ) { }
+    
+    virtual ~BlockToucher() {}
+};
+struct InodeToucher: public BlockToucher
+{
+    struct Oper { uint_fast64_t offs; unsigned width; uint_fast64_t value; };
+    std::map<uint_fast64_t, Oper> Read, Write;
+    
+    virtual bool NeedsData() const { return !Read.empty() || !Write.empty(); }
+
+    void SetRead(uint_fast64_t offs, unsigned w)
+        { Oper o; o.offs=offs; o.width=w; o.value=0; Read[offs]=o; }
+    void SetWrite(uint_fast64_t offs, unsigned w, uint_fast64_t v)
+        { Oper o; o.offs=offs; o.width=w; o.value=v; Write[offs]=o; }
+    uint_fast64_t GetRead(uint_fast64_t offs)
+        { return Read[offs].value; }
+
+    virtual void Got(std::vector<unsigned char>& Buffer)
+    {
+        for(std::map<uint_fast64_t, Oper>::iterator
+            i = Read.begin(); i != Read.end(); ++i)
+            switch(i->second.width)
+            {
+                case 2: i->second.value = R16(&Buffer[i->first]); break;
+                case 4: i->second.value = R32(&Buffer[i->first]); break;
+                case 8: i->second.value = R64(&Buffer[i->first]); break;
+            }
+        for(std::map<uint_fast64_t, Oper>::const_iterator
+            i = Write.begin(); i != Write.end(); ++i)
+            switch(i->second.width)
+            {
+                case 2: W16(&Buffer[i->first], i->second.value); break;
+                case 4: W32(&Buffer[i->first], i->second.value); break;
+                case 8: W64(&Buffer[i->first], i->second.value); break;
+            }
+    }
+};
+
+static BlockToucher NotTouching;
 static uint_fast64_t ConvertBuffer
     (int infd, int outfd,
      uint_fast64_t in_offs,
@@ -20,7 +67,8 @@ static uint_fast64_t ConvertBuffer
      uint_fast64_t out_offs,
      bool was_compressed,
      bool want_compressed,
-     bool recompress)
+     bool recompress,
+     BlockToucher& touch_block = NotTouching)
 {
     std::vector<unsigned char> Buffer(in_size);
     pread64(infd, &Buffer[0], Buffer.size(), in_offs);
@@ -28,24 +76,32 @@ static uint_fast64_t ConvertBuffer
     std::printf("read %u, ", (unsigned)Buffer.size());
     std::fflush(stdout);
     
-    if(!was_compressed && want_compressed) Buffer = LZMACompress(Buffer);
-    if(was_compressed && !want_compressed) Buffer = LZMADeCompress(Buffer);
-    
-    if(was_compressed && want_compressed && recompress)
+    if(was_compressed && (!want_compressed || recompress || touch_block.NeedsData()))
     {
-        Buffer = LZMACompress(LZMADeCompress(Buffer));
+        Buffer = LZMADeCompress(Buffer);
+        was_compressed = false;
+    }
+    
+    touch_block.Got(Buffer);
+    
+    if(want_compressed && !was_compressed)
+    {
+        Buffer = LZMACompress(Buffer);
     }
     
     std::printf("written %u", (unsigned)Buffer.size());
     std::fflush(stdout);
     
-    pwrite64(outfd, &Buffer[0], Buffer.size(), out_offs);
+    SparseWrite(outfd, &Buffer[0], Buffer.size(), out_offs);
 
     return Buffer.size();
 }
 
 static bool Convert(const std::string& fsfile, const std::string& outfn,
-                    int Ver, bool recompress)
+                    int Ver,
+                    bool recompress,
+                    bool force,
+                    uint_least32_t storage_opts)
 {
     int outfd = -1;
     int infd = open(fsfile.c_str(), O_RDONLY | O_LARGEFILE);
@@ -59,28 +115,49 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
         return false; 
     }
     
+    if((storage_opts & CROMFS_OPT_SPARSE_FBLOCKS) && Ver < 3)
+    {
+        std::printf("Warning: Cannot make a sparse filesystem unless version is 3 or greater\n");
+        storage_opts &= ~CROMFS_OPT_SPARSE_FBLOCKS;
+    }
+    
     std::printf("Reading header...\n");
     
-    unsigned char Header[64]; /* max header size */
-    if(pread64(infd, Header, sizeof(Header), 0) == -1) goto InError;
+    cromfs_superblock_internal sblock;
+    cromfs_superblock_internal::BufferType Superblock;
+    if(pread64(infd, Superblock, sizeof(Superblock), 0) == -1) goto InError;
     
-    int OrigVer, HeaderSize = 0;
-    uint_fast64_t sig  = R64(Header+0x0000);
+    sblock.ReadFromBuffer(Superblock);
+    
+    bool HadCompression  = false;
+    bool WantCompression = Ver >= 2;
+    uint_least32_t old_storage_opts = 0;
+    
+    int OrigVer, SuperblockSize = 0;
+    const uint_fast64_t sig  = sblock.sig;
     switch(sig)
     {
         case CROMFS_SIGNATURE_01:
-            if(Ver == 1 && !recompress)
+            if(Ver == 1 && !recompress && !force)
             { SameVer:
                 std::printf("%s is already version %d\n", fsfile.c_str(), Ver);
                 goto ErrorExit;
             }
             OrigVer    = 1;
-            HeaderSize = 0x38;
+            SuperblockSize = 0x38;
+            HadCompression = false;
             break;
         case CROMFS_SIGNATURE_02:
-            if(Ver == 2 && !recompress) goto SameVer;
+            if(Ver == 2 && !recompress && !force) goto SameVer;
             OrigVer    = 2;
-            HeaderSize = 0x38;
+            SuperblockSize = 0x38;
+            HadCompression = true;
+            break;
+        case CROMFS_SIGNATURE_03:
+            if(Ver == 3 && !recompress && !force) goto SameVer;
+            OrigVer    = 3;
+            SuperblockSize = 0x38;
+            HadCompression = true;
             break;
         default:
         {
@@ -93,55 +170,68 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     
     outfd = open(outfn.c_str(), O_WRONLY | O_LARGEFILE | O_CREAT, 0644);
     if(outfd < 0) { perror(outfn.c_str()); goto ErrorExit; }
-
-    cromfs_superblock_internal sblock;
-    sblock.sig = sig;
-    sblock.blktab_offs             = R64(Header+0x0008);
-    sblock.fblktab_offs            = R64(Header+0x0010);
-    sblock.inotab_offs             = R64(Header+0x0018);
-    sblock.rootdir_offs            = R64(Header+0x0020);
-    sblock.compressed_block_size   = R32(Header+0x0028); /* aka. FSIZE */
-    sblock.uncompressed_block_size = R32(Header+0x002C); /* aka. BSIZE */
-    sblock.bytes_of_files          = R64(Header+0x0030);
+    ftruncate64(outfd, 0);
 
     switch(Ver)
     {
-        case 1: W64(Header+0x0000, CROMFS_SIGNATURE_01); break;
-        case 2: W64(Header+0x0000, CROMFS_SIGNATURE_02); break;
+        case 1: sblock.sig = CROMFS_SIGNATURE_01; break;
+        case 2: sblock.sig = CROMFS_SIGNATURE_02; break;
+        case 3: sblock.sig = CROMFS_SIGNATURE_03; break;
     }
     
-    uint_fast64_t write_offs = HeaderSize;
+    uint_fast64_t write_offs = sblock.GetSize(
+        RootDirInflateFactor > 1.0 ||
+        InotabInflateFactor > 1.0 ||
+        BlktabInflateFactor > 1.0
+    );
     
     std::printf("Converting the root directory inode...\n- ");
-    W64(Header+0x0020, write_offs);
-    uint_fast64_t rootdir_newsize =
+    //fprintf(stderr, "root goes at %llX\n", write_offs);
+    sblock.rootdir_size =
         ConvertBuffer(infd, outfd,
                      sblock.rootdir_offs,
-                     sblock.inotab_offs - sblock.rootdir_offs,
-                     write_offs, OrigVer==2,Ver==2, recompress);
-    write_offs += rootdir_newsize;
+                     sblock.rootdir_size,
+                     write_offs, HadCompression,WantCompression, recompress);
+    sblock.rootdir_offs = write_offs;
+    sblock.rootdir_room = sblock.rootdir_size * RootDirInflateFactor;
+    write_offs += sblock.rootdir_room;
+    
     std::printf("\n");
     std::fflush(stdout);
     
     std::printf("Converting the inotab inode...\n- ");
-    W64(Header+0x0018, write_offs);
-    uint_fast64_t inotab_newsize =
+    InodeToucher ReadWriteInotabAttrs;
+    ReadWriteInotabAttrs.SetRead(0, 4);
+    if(Ver >= 3)
+        ReadWriteInotabAttrs.SetWrite(0, 4, storage_opts);
+    
+    //fprintf(stderr, "inotab goes at %llX\n", write_offs);
+    sblock.inotab_size =
         ConvertBuffer(infd, outfd,
                      sblock.inotab_offs,
-                     sblock.blktab_offs - sblock.inotab_offs,
-                     write_offs, OrigVer==2,Ver==2, recompress);
-    write_offs += inotab_newsize;
+                     sblock.inotab_size,
+                     write_offs, HadCompression,WantCompression, recompress,
+                     ReadWriteInotabAttrs);
+    sblock.inotab_offs = write_offs;
+    sblock.inotab_room = sblock.inotab_size  * InotabInflateFactor;
+    write_offs += sblock.inotab_room;
+    
+    if(OrigVer >= 3)
+        old_storage_opts = ReadWriteInotabAttrs.GetRead(0);
+    
     std::printf("\n");
     std::fflush(stdout);
     
     std::printf("Converting the block table...\n- ");
-    W64(Header+0x0008, write_offs);
-    uint_fast64_t blktab_newsize =
+    sblock.blktab_size =
         ConvertBuffer(infd,outfd,
                       sblock.blktab_offs,
-                      sblock.fblktab_offs - sblock.blktab_offs,
+                      sblock.blktab_size,
                       write_offs, true,true, recompress);
-    write_offs += blktab_newsize;
+    sblock.blktab_offs = write_offs;
+    sblock.blktab_room = sblock.blktab_size  * BlktabInflateFactor;
+    write_offs += sblock.blktab_room;
+
     std::printf("\n");
     std::fflush(stdout);
     
@@ -149,28 +239,29 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
 
     std::printf("Converting fblocks... size difference so far: %lld bytes\n",
         (long long)size_diff);
-    W64(Header+0x0010, write_offs);
     
-    unsigned fblockno = 0;
-    uint_fast64_t startpos = sblock.fblktab_offs;
-    uint_fast64_t curpos = startpos;
-    uint_fast64_t endpos = lseek64(infd, 0, SEEK_END);
+    uint_fast64_t read_begin = sblock.fblktab_offs;
+    uint_fast64_t read_offs  = read_begin;
+    uint_fast64_t read_end   = lseek64(infd, 0, SEEK_END);
+
+    sblock.fblktab_offs = write_offs;
     
-    for(;;)
+    for(unsigned fblockno=0;;)
     {
-        if(curpos >= endpos) break;
+        if(read_offs >= read_end) break;
         
-        unsigned char Buf[4];
-        ssize_t r = pread64(infd, Buf, 4, curpos);
+        unsigned char Buf[17];
+        ssize_t r = pread64(infd, Buf, 17, read_offs);
         if(r == 0) break;
         if(r < 0) throw errno;
-        if(r < 4) throw EINVAL;
+        if(r < 17) throw EINVAL;
         
         cromfs_fblock_internal fblock;
-        fblock.filepos = curpos+4;
-        fblock.length  = R32(Buf);
+        fblock.filepos = read_offs+4;
+        fblock.length  = R32(Buf+0);
+        uint_fast64_t orig_size = R64(Buf+9);
         
-        double position = (curpos-startpos) * 100.0 / (endpos-startpos);
+        double position = (read_offs-read_begin) * 100.0 / (read_end-read_begin);
         
         std::printf("\r%75s\rfblock %u... (%s)... %.0f%% done: ",
             "", fblockno++, ReportSize(fblock.length).c_str(),
@@ -183,20 +274,53 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
                           fblock.length,
                           write_offs+4,
                           true,true, recompress);
+        
+        if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
+        {
+            if(new_size > sblock.compressed_block_size)
+            {
+                std::printf("\n");
+                std::fflush(stdout);
+                std::fprintf(stderr,
+                    "Error: This filesystem cannot be sparse, because there is a compressed\n"
+                    "       fblock that is actually larger than the decompressed one.\n"
+                    "       Sorry.\n"
+                 );
+                close(outfd);
+                close(infd);
+                return false;
+            }
+        }
+        
         W32(Buf, new_size);
         pwrite64(outfd, Buf, 4, write_offs);
-
-        write_offs += new_size+4;
-        curpos += 4 + (uint_fast64_t)fblock.length;
+        
+        if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
+            write_offs += 4 + sblock.compressed_block_size;
+        else
+            write_offs += 4 + new_size;
+        
+        if(old_storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
+            read_offs += 4 + sblock.compressed_block_size;
+        else
+            read_offs += 4 + (uint_fast64_t)fblock.length;
     }
     
     std::printf("\nWriting header...\n");
     
     // Last write the modified header
-    pwrite64(outfd, Header, HeaderSize, 0);
+    sblock.WriteToBuffer(Superblock);
+    pwrite64(outfd, Superblock, sblock.GetSize(), 0);
     ftruncate64(outfd, write_offs);
     
     std::printf("done.\n");
+    
+    struct stat64 st;
+    fstat64(outfd, &st);
+    
+    std::printf("Output file size: %lld bytes (actual disk space used: %lld bytes)\n",
+        write_offs,
+        st.st_blocks * 512);
     
     close(outfd);
     close(infd);
@@ -206,10 +330,13 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
 
 int main(int argc, char** argv)
 {
-    int SetVer = 2;
+    int SetVer = 3;
     std::string outfn;
     std::string fsfile;
     bool recompress = false;
+    bool force = false;
+    
+    uint_least32_t storage_opts = 0;
     
     for(;;)
     {
@@ -221,9 +348,11 @@ int main(int argc, char** argv)
             {"setver",      1, 0,'s'},
             {"output",      1, 0,'o'},
             {"recompress",  0, 0,'r'},
+            {"sparse",      1, 0,'p'},
+            {"force",       0, 0,'f'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVs:o:r", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVs:o:rp:f", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -239,13 +368,19 @@ int main(int argc, char** argv)
                     "\n"
                     "Converts cromfs images between different versions.\n"
                     "\n"
-                    "Usage: cvmkcromfs [<options>] <source_image> -o <target_image>\n"
+                    "Usage: cvcromfs [<options>] <source_image> -o <target_image>\n"
                     " --help, -h          This help\n"
                     " --version, -V       Displays version information\n"
                     " --setver, -s <ver>  Sets the target image to version <ver>\n"
-                    "                     Version can be 01 or 02.\n"
+                    "                     Version can be 01, 02 or 03.\n"
                     " --output, -o <file> Set target imagefilename (mandatory).\n"
                     " --recompress, -r    Recompress fblocks\n"
+                    " --force, -f         Force writing the target image even if\n"
+                    "                     the version matches and no -r was given\n"
+                    "                     (use when changing flags or when you want\n"
+                    "                     to reassure the file's sparseness\n"
+                    " --sparse, -p <opts> Commaseparated list of items to store sparsely\n"
+                    "                         -pf = fblocks\n"
                     "\n");
                 return 0;
             }
@@ -253,9 +388,9 @@ int main(int argc, char** argv)
             {
                 char* arg = optarg;
                 long val = strtol(arg, &arg, 10);
-                if(val != 1 && val != 2)
+                if(val != 1 && val != 2 && val != 3)
                 {
-                    std::fprintf(stderr, "mkcromfs: The version may be 1 or 2. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "cvcromfs: The version may be 1, 2 or 3. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 SetVer = val;
@@ -269,6 +404,34 @@ int main(int argc, char** argv)
             case 'r':
             {
                 recompress = true;
+                break;
+            }
+            case 'f':
+            {
+                force = true;
+                break;
+            }
+            case 'p':
+            {
+                for(char* arg=optarg;;)
+                {
+                    while(*arg==' ')++arg;
+                    if(!*arg) break;
+                    char* comma = strchr(arg, ',');
+                    if(!comma) comma = strchr(arg, '\0');
+                    *comma = '\0';
+                    int len = strlen(arg);
+                    if(len <= 7 && !strncmp("fblocks",arg,len))
+                        storage_opts |= CROMFS_OPT_SPARSE_FBLOCKS;
+                    else
+                    {
+                        std::fprintf(stderr, "cvcromfs: Unknown option to -p (%s). See `cvcromfs --help'\n",
+                            arg);
+                        return -1;
+                    }
+                    if(!*comma) break;
+                    arg=comma+1;
+                }
                 break;
             }
         }
@@ -288,5 +451,5 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    return Convert(fsfile, outfn, SetVer, recompress) ? 0 : -1;
+    return Convert(fsfile, outfn, SetVer, recompress, force, storage_opts) ? 0 : -1;
 }

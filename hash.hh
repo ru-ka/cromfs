@@ -10,6 +10,7 @@
 #if USE_HASH
 
 #include <string>
+#include <utility>
 
 #include <ext/hash_map>
 #include <ext/hash_set>
@@ -78,6 +79,15 @@ namespace __gnu_cxx
     {
         return (n * 33818641UL);
     }
+  };
+  
+  template<typename A,typename B> struct hash<std::pair<A,B> >
+  {
+     size_t operator() (const std::pair<A,B>& p) const
+     {
+         return hash<A>() (p.first)
+              ^ hash<B>() (p.second);
+     }
   };
 }
 

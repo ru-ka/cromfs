@@ -1,4 +1,4 @@
-VERSION=1.2.5
+VERSION=1.3.0
 
 include Makefile.sets
 
@@ -23,7 +23,7 @@ OBJS_LZMA += lzma/C/Common/CRC.o
 OBJS_LZMA += lzma.o
 
 OBJS_MK += $(OBJS_LZMA)
-OBJS_MK += mkcromfs.o crc32.o fblock.o memmem.o util.o fnmatch.o
+OBJS_MK += mkcromfs.o crc32.o fblock.o memmem.o util.o fnmatch.o assert++.o
 
 OBJS_UN += unmkcromfs.o ../cromfs.o util.o fnmatch.o
 
@@ -42,7 +42,7 @@ cvcromfs: $(OBJS_CV)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDLIBS)
 
 mkcromfs.o: fblock.hh lzma.hh datasource.hh crc32.h util.hh mkcromfs_sets.hh boyermoore.hh
-fblock.o: fblock.hh boyermoore.hh mkcromfs_sets.hh
+fblock.o: fblock.hh boyermoore.hh mkcromfs_sets.hh assert++.hh autoptr
 unmkcromfs.o: ../cromfs.hh util.hh
 cvmkcromfs.o: ../cromfs-defs.hh lzma.hh util.hh
 

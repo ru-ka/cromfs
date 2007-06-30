@@ -17,7 +17,6 @@ used to initialize the cromfs_oper struct.
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 static const struct fuse_lowlevel_ops cromfs_oper =
 {
@@ -39,24 +38,28 @@ static const struct fuse_lowlevel_ops cromfs_oper =
     .readdir = cromfs_readdir
 };
 
+static int foreground = 0;
+static int multithreaded = 0;
+
 int main(int argc, char *argv[])
 {
-    char *mountpoint;
-    int fd = open(argv[1], O_RDONLY); --argc; ++argv;
+    char *mountpoint = NULL;
+    int fd = open(argv[1], O_RDONLY);
+    if(fd >= 0) { --argc; ++argv; }
     
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     
+    if(fuse_parse_cmdline(&args, &mountpoint, &multithreaded, &foreground) == -1)
+    {
+        if(fd >= 0) close(fd);
+        goto out;
+    }
+
     void* userdata = cromfs_create(fd);
     if(!userdata)
     {
         fprintf(stderr, "cromfs_create failed. Usage: cromfs-driver <image> <directory>\n");
         return -1;
-    }
-    fd = -1;
-
-    if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) == -1)
-    {
-        goto out;
     }
 
     fd = fuse_mount/*_compat25*/(mountpoint, &args);
@@ -64,7 +67,10 @@ int main(int argc, char *argv[])
     {
         goto out;
     }
+
+#if 0
     fprintf(stderr, "fuse_mount gives fd %d\n", fd);
+#endif
 
     int err = -1;
     struct fuse_session *se
@@ -79,8 +85,10 @@ int main(int argc, char *argv[])
             {
                 fuse_session_add_chan(se, ch);
                 
-                fprintf(stderr, "ready\n");
-                
+                if(foreground)
+                    fprintf(stderr, "ready\n");
+                fuse_daemonize(foreground);
+
                 err = fuse_session_loop(se);
             }
             fuse_remove_signal_handlers(se);

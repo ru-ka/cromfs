@@ -197,16 +197,14 @@ public:
         */
     }
     
-    /* AppendInfo is a structure that holds both the input and output
-     * handled by LoadRawAndAppend(). It was created to avoid having
-     * to copy and resize std::vectors everywhere. It was supposed to
-     * use mmap() to minimize the file access.
+    /* AppendInfo describes how to append/overlap
+     * the input into the given fblock.
      */
     struct AppendInfo
     {
-        uint_fast32_t OldSize;
-        uint_fast32_t AppendBaseOffset;
-        uint_fast32_t AppendedSize;
+        uint_fast32_t OldSize;           /* Size before appending */
+        uint_fast32_t AppendBaseOffset;  /* Where to append */
+        uint_fast32_t AppendedSize;      /* Size after appending */
     public:
         AppendInfo() : OldSize(0), AppendedSize(0) { }
         void SetAppendPos(uint_fast32_t offs, uint_fast32_t datasize)

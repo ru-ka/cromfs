@@ -35,7 +35,7 @@ protected:
     void read_block(cromfs_blocknum_t ind, uint_fast32_t offset,
                     unsigned char* target, uint_fast32_t size);
     
-    cromfs_inode_internal read_raw_inode_and_blocks(uint_fast64_t offset);
+    cromfs_inode_internal read_raw_inode_and_blocks(uint_fast64_t offset, uint_fast64_t size);
     
     cromfs_cached_fblock& read_fblock(cromfs_fblocknum_t ind);
     cromfs_cached_fblock read_fblock_uncached(cromfs_fblocknum_t ind);
@@ -54,6 +54,8 @@ protected:
     
     std::vector<cromfs_fblock_internal> fblktab;
     std::vector<cromfs_block_storage> blktab;
+    
+    uint_fast32_t storage_opts;
     
 private:
     cromfs(cromfs&);

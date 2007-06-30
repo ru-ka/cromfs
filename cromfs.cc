@@ -136,43 +136,43 @@ uint_fast64_t cromfs::CalcSizeInBlocks(uint_fast64_t filesize) const
 
 void cromfs::reread_superblock()
 {
-    char Buf[64];
-    if(pread64(fd, Buf, sizeof(Buf), 0) == -1) throw errno;
+    cromfs_superblock_internal::BufferType Superblock;
+    if(pread64(fd, Superblock, sizeof(Superblock), 0) == -1) throw errno;
     
-    uint_fast64_t sig  = R64(Buf+0x0000);
+    sblock.ReadFromBuffer(Superblock);
+    
+    const uint_fast64_t sig  = sblock.sig;
     if(sig != CROMFS_SIGNATURE_01
-    && sig != CROMFS_SIGNATURE_02) throw EINVAL;
+    && sig != CROMFS_SIGNATURE_02
+    && sig != CROMFS_SIGNATURE_03
+    ) throw EINVAL;
     
     cache_fblocks.clear();
     
-    sblock.sig = sig;
-    sblock.blktab_offs             = R64(Buf+0x0008);
-    sblock.fblktab_offs            = R64(Buf+0x0010);
-    sblock.inotab_offs             = R64(Buf+0x0018);
-    sblock.rootdir_offs            = R64(Buf+0x0020);
-    sblock.compressed_block_size   = R32(Buf+0x0028); /* aka. FSIZE */
-    sblock.uncompressed_block_size = R32(Buf+0x002C); /* aka. BSIZE */
-    sblock.bytes_of_files          = R64(Buf+0x0030);
-    
-    sblock.blktab_size = sblock.fblktab_offs - sblock.blktab_offs;
-    
 #if SBLOCK_DEBUG
     fprintf(stderr,
-        "BlockTab at %llX\n"
-        "FBlkTab at %llX\n"
-        "inotab at %llX\n"
-        "rootdir at %llX\n"
+        "BlockTab at 0x%llX\n"
+        "FBlkTab at 0x%llX\n"
+        "inotab at 0x%llX (size 0x%llX)\n"
+        "rootdir at 0x%llX (size 0x%llX)\n"
         "FSIZE %u  BSIZE %u\n",
         sblock.blktab_offs,
         sblock.fblktab_offs,
-        sblock.inotab_offs,
-        sblock.rootdir_offs,
+        sblock.inotab_offs, sblock.inotab_size,
+        sblock.rootdir_offs, sblock.rootdir_size,
         (unsigned)CROMFS_FSIZE,
         (unsigned)CROMFS_BSIZE);
 #endif
     
-    inotab  = read_raw_inode_and_blocks(sblock.inotab_offs);
-    rootdir = read_raw_inode_and_blocks(sblock.rootdir_offs);
+    inotab  = read_raw_inode_and_blocks(sblock.inotab_offs,  sblock.inotab_size);
+    rootdir = read_raw_inode_and_blocks(sblock.rootdir_offs, sblock.rootdir_size);
+    
+    storage_opts = inotab.mode;
+    if(sblock.sig == CROMFS_SIGNATURE_01
+    || sblock.sig == CROMFS_SIGNATURE_02)
+    {
+        storage_opts = 0; // not supported in these versions
+    }
     
     rootdir.mode = S_IFDIR | 0555;
     rootdir.links = 2;
@@ -208,15 +208,16 @@ void cromfs::reread_fblktab()
     uint_fast64_t startpos = sblock.fblktab_offs;
     for(;;)
     {
-        unsigned char Buf[4];
-        ssize_t r = pread64(fd, Buf, 4, startpos);
+        unsigned char Buf[17];
+        ssize_t r = pread64(fd, Buf, 17, startpos);
         if(r == 0) break;
         if(r < 0) throw errno;
-        if(r < 4) throw EINVAL;
+        if(r < 17) throw EINVAL;
         
         cromfs_fblock_internal fblock;
         fblock.filepos = startpos+4;
         fblock.length  = R32(Buf);
+        uint_fast64_t orig_length = R64(Buf+9);
         
         if(fblock.length <= 13)
         {
@@ -230,7 +231,10 @@ void cromfs::reread_fblktab()
 #endif
         fblktab.push_back(fblock);
         
-        startpos += 4 + fblock.length;
+        if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
+            startpos += 4 + CROMFS_FSIZE;
+        else
+            startpos += 4 + fblock.length;
     }
 }
 
@@ -320,20 +324,21 @@ static void ExtractInodeHeader(cromfs_inode_internal& inode, const unsigned char
     // if(S_ISDIR(inode.mode)) inode.links += 2; /* For . and .. */
 }
 
-cromfs_inode_internal cromfs::read_raw_inode_and_blocks(uint_fast64_t offset)
+cromfs_inode_internal cromfs::read_raw_inode_and_blocks
+    (uint_fast64_t offset, uint_fast64_t size)
 {
     cromfs_inode_internal inode;
 
     switch(sblock.sig)
     {
         default:
+        case CROMFS_SIGNATURE_03:
         case CROMFS_SIGNATURE_02:
         {
-            uint_fast64_t size = 0;
             if(offset == sblock.rootdir_offs)
-                size = sblock.inotab_offs - offset;
+                { /* ok */ }
             else if(offset == sblock.inotab_offs)
-                size = sblock.blktab_offs - offset;
+                { /* ok */ }
             else
             {
                 // unknown inode
@@ -355,7 +360,9 @@ cromfs_inode_internal cromfs::read_raw_inode_and_blocks(uint_fast64_t offset)
             {
                 /* Invalid inode */
 #if INODE_DEBUG
-                fprintf(stderr, "Buf.size=%u, expected %u (%u blocks)\n",
+                fprintf(stderr, "Inode offs(0x%llX),size(%llu), buf.size=%u, expected %u (%u blocks)\n",
+                    (unsigned long long)offset,
+                    (unsigned long long)size,
                     (unsigned)Buf.size(),
                     (unsigned)(4*nblocks+0x18),
                     (unsigned)nblocks);
@@ -571,11 +578,12 @@ int_fast64_t cromfs::read_file_data(const cromfs_inode_internal& inode,
         
 #if READFILE_DEBUG
         fprintf(stderr,
-            "- File offset %llu (block %u(%u) @%u, consume %u bytes of %u) -> %p\n",
+            "- File offset %llu (block %u(%u) @%u, consume %llu bytes of %llu) -> %p\n",
                 offset, (unsigned)begin_block_index,
                         (unsigned)inode.blocklist[begin_block_index],
                 begin_block_offset, 
-                consume_bytes, size,
+                (unsigned long long)consume_bytes,
+                (unsigned long long)size,
                 target);
 #endif
 

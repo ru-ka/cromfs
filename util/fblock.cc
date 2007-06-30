@@ -4,6 +4,8 @@
 #include "boyermoore.hh"
 #include "mkcromfs_sets.hh"
 
+#include "assert++.hh"
+
 const char* GetTempDir()
 {
     const char* t;
@@ -38,7 +40,13 @@ int mkcromfs_fblock::compare_raw_portion(
     }
     if(my_offs + data_size > filesize) return -1;
     
+    /* Now the file is not compressed. */
+    
+    /* Try mmapping it (the entire file). */
     if(!mmapped) Remap();
+    
+    /* If mmapping immediately worked, the comparison
+     * can be delegated to std::memcmp. */
     if(mmapped)
     {
         return std::memcmp(mmapped + my_offs, &data[0], data_size);
@@ -66,9 +74,14 @@ int mkcromfs_fblock::compare_raw_portion(
         void* p = mmap(NULL, ignore+data_size, PROT_READ, MAP_SHARED, fd, prev_my_offs);
         if(p != (void*)-1)
         {
+            /* mmapping worked. close fd, since we only need the mmap now. */
             close(fd);
+            
+            /* Delegate comparison to std::memcmp */
             const unsigned char* pp = (const unsigned char*)p;
             result = std::memcmp(&data[0], pp + ignore, data_size);
+            
+            /* And unmap the temporary mapping */
             munmap(p, ignore+data_size);
         }
         else
@@ -92,78 +105,114 @@ int mkcromfs_fblock::compare_raw_portion(
 void mkcromfs_fblock::get(std::vector<unsigned char>* raw,
                           std::vector<unsigned char>* compressed)
 {
-    if(!is_compressed && !mmapped) Remap();
-    if(!is_compressed && mmapped)
+    /* Is our data currently non-compressed? */
+    if(!is_compressed)
     {
-        if(raw) raw->assign(mmapped, mmapped+filesize);
-        if(compressed)
-            *compressed = LZMACompress(
-                raw ? *raw
-                    : std::vector<unsigned char> (mmapped, mmapped+filesize) );
-        return;
+        /* Ok. Ensure it's mmapped (mmapping is handy) */
+        if(!mmapped) Remap();
+        /* If mmapping worked, we're almost done. */
+        if(mmapped)
+        {
+            /* If the caller wants raw, just copy it. */
+            if(raw) raw->assign(mmapped, mmapped+filesize);
+            
+            /* If the caller wants compressed... */
+            if(compressed)
+                *compressed = LZMACompress(
+                    raw ? *raw /* If we already copied the raw data, use that */
+                          /* Otherwise, create a vector for LZMACompress to use */
+                        : std::vector<unsigned char> (mmapped, mmapped+filesize)
+                                          );
+            return;
+        }
+        /* mmapping didn't work. Fortunately we have got a plan B. */
     }
     
+    /* The data could not be mmapped. So we have to read a copy from the file. */
     int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
     if(fd < 0)
     {
+        /* If the file could not be opened, return dummy vectors. */
         static const std::vector<unsigned char> dummy;
         if(raw)        *raw = dummy;
         if(compressed) *compressed = dummy;
         return;
     }
     
+    /* Read the file contents */
     std::vector<unsigned char> result( filesize );
-    
     read(fd, &result[0], result.size());
     close(fd);
     
+    /* Is the file data compressed? */
     if(is_compressed)
     {
+        /* If the caller wants compressed, just copy it. */
         if(compressed) *compressed = result;
+        /* If the caller wants raw, give a decompressed copy. File remains compressed. */
         if(raw)        *raw = LZMADeCompress(result);
     }
     else
     {
+        /* If the caller wants compressed, compress it */
         if(compressed)
         {
             *compressed = LZMACompress(result);
+            /* Since we already compressed it, save the compressed data into the file */
             put_compressed(*compressed);
         }
+        /* If the caller wants raw, just copy it. (It wasn't compressed.) */
         if(raw)        *raw = result;
     }
 }
 
 void mkcromfs_fblock::put_appended_raw(
     const mkcromfs_fblock::AppendInfo& append,
-    const unsigned char* data, const uint_fast32_t datasize)
+    const unsigned char* data,
+    const uint_fast32_t datasize)
 {
     Unmap();
-
+    
     const uint32_t cap = append.AppendBaseOffset + datasize;
     if(cap <= append.OldSize)
     {
-        if(!is_compressed && append.OldSize != filesize)
-        {
-            throw "discrepancy";
-        }
+        assertvar(is_compressed),
+        assertvar(append.OldSize);
+        assertvar(filesize);
+        assert(is_compressed || append.OldSize == filesize);
+        assertflush();
+
         /* File does not need to be changed */
         return;
     }
-
-    if(cap != append.AppendedSize)
-    {
-        throw "discrepancy";
-    }
+    
+    assertvar(cap);
+    assertvar(append.AppendedSize);
+    assert(cap == append.AppendedSize);
+    assertflush();
     
     if(is_compressed)
     {
+        /* We cannot append into compressed data. Must decompress it first. */
+        
         std::vector<unsigned char> buf = get_raw();
         int fd = open(getfn().c_str(), O_RDWR | O_CREAT | O_LARGEFILE, 0644);
         if(fd < 0) { std::perror(getfn().c_str()); return; }
 
         is_compressed = false;
+        
+        assertvar(buf.size());
+        assertvar(append.AppendBaseOffset);
+        assert(buf.size() >= append.AppendBaseOffset);
+        assertflush();
+
         if(!buf.empty()) write(fd, &buf[0], append.AppendBaseOffset);
         if(datasize > 0) write(fd, &data[0], datasize);
+        
+        /* Note: We need not worry about what comes after datasize.
+         * If the block was fully submerged in the existing data,
+         * we don't reach this far (already checked above).
+         */
         
         filesize = cap;
         
@@ -193,6 +242,10 @@ void mkcromfs_fblock::put_appended_raw(
     close(fd);
 }
 
+/* Search the current fblock data for an occurance of the needle.
+ * Returns an "AppendInfo" that describes how to append the needle
+ * into the fblock, if it matched.
+ */
 mkcromfs_fblock::AppendInfo
 mkcromfs_fblock::AnalyzeAppend(
     const BoyerMooreNeedle& needle,

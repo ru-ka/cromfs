@@ -1,6 +1,14 @@
 /*** CRC32 calculation (CRC::update) ***/
 #include "crc32.h"
 
+#ifdef __GNUC__
+# define likely(x)       __builtin_expect(!!(x), 1)
+# define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+# define likely(x)   (x)
+# define unlikely(x) (x)
+#endif
+
 namespace
 {
     static class CRC
@@ -13,7 +21,8 @@ namespace
             for(unsigned i=0; i<256; ++i)
             {
                 uint_fast32_t crc = i;
-                for(unsigned j=8; j-->0; ) { bool c=crc&1; crc>>=1; if(c)crc^=poly; }
+                for(unsigned j=8; j-->0; )
+                    crc = (crc >> 1) ^ ( (crc&1) ? poly : 0 );
                 crctable[i] = crc;
             }
         }
@@ -41,8 +50,35 @@ crc32_t crc32_calc(const unsigned char* buf, unsigned long size)
     while(size-- > 0) value = CRC32.update(value, buf[pos++]);
 #endif
 
-#if 1
+#if 0
     for(unsigned long p=0; p<size; ++p) value = CRC32.update(value, buf[p]);
+#endif
+
+#if 1
+    unsigned unaligned_length = (4 - (unsigned long)(buf)) & 3;
+    if(size < unaligned_length) unaligned_length = size;
+    switch(unaligned_length)
+    {
+        case 3: value = CRC32.update(value, *buf++);
+        case 2: value = CRC32.update(value, *buf++);
+        case 1: value = CRC32.update(value, *buf++);
+                size -= unaligned_length;
+        case 0: break;
+    }
+    for(; size >= 4; size -= 4, buf += 4)
+    {
+        value = CRC32.update(value, buf[0]);
+        value = CRC32.update(value, buf[1]);
+        value = CRC32.update(value, buf[2]);
+        value = CRC32.update(value, buf[3]);
+    }
+    switch(size)
+    {
+        case 3: value = CRC32.update(value, *buf++);
+        case 2: value = CRC32.update(value, *buf++);
+        case 1: value = CRC32.update(value, *buf++);
+        case 0: break;
+    }
 #endif
 
 #if 0 /* duff's device -- no gains observed over the simple loop above */
