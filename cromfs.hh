@@ -23,7 +23,11 @@ public:
     const cromfs_inode_internal read_inode_and_blocks(cromfs_inodenum_t inonum);
     
     const cromfs_dirinfo read_dir(cromfs_inodenum_t inonum,
-                                  uint_fast32_t dir_offset, uint_fast32_t dir_count);
+                                  uint_fast32_t dir_offset,
+                                  uint_fast32_t dir_count);
+
+    const cromfs_inodenum_t dir_lookup(cromfs_inodenum_t inonum,
+                                       const std::string& name);
 
     void forget_blktab();
 
@@ -35,7 +39,9 @@ protected:
     void read_block(cromfs_blocknum_t ind, uint_fast32_t offset,
                     unsigned char* target, uint_fast32_t size);
     
-    cromfs_inode_internal read_raw_inode_and_blocks(uint_fast64_t offset, uint_fast64_t size);
+    cromfs_inode_internal read_special_inode
+        (uint_fast64_t offset, uint_fast64_t size,
+         bool ignore_blocks);
     
     cromfs_cached_fblock& read_fblock(cromfs_fblocknum_t ind);
     cromfs_cached_fblock read_fblock_uncached(cromfs_fblocknum_t ind);

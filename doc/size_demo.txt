@@ -1,0 +1,21 @@
+[1;32msys:[1;34m~$[0;37m du -Lh spc.cromfs
+[1;33m96M[0;37m     spc.cromfs
+
+[1;32msys:[1;34m~$[0;37m du -h --max-depth=0 spc
+0       spc
+
+[1;32msys:[1;34m~$[0;37m ./cromfs-driver spc.cromfs spc
+
+[1;32msys:[1;34m~$[0;37m df -Th spc
+Filesystem    Type    Size  Used Avail Use% Mounted on
+spc.cromfs    fuse    [1;33m1.5G  1.5G     0 100%[0;37m /home/bisqwit/spc
+
+[1;32msys:[1;34m~$[0;37m find spc -noleaf|wc -l
+[1;33m25557[0;37m
+
+[1;32msys:[1;34m~$[0;37m du -h --max-depth=0 spc
+[1;33m1.5G[0;37m    spc
+
+[1;32msys:[1;34m~$[0;37m fusermount -u spc
+
+[1;32msys:[1;34m~$[0;37m

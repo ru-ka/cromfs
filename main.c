@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     void* userdata = cromfs_create(fd);
     if(!userdata)
     {
-        fprintf(stderr, "cromfs_create failed. Usage: cromfs-driver <image> <directory>\n");
+        fprintf(stderr, "cromfs_create failed. Usage: cromfs-driver <image> [<options>] <directory>\n");
         return -1;
     }
 

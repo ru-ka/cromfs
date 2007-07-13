@@ -1,3 +1,4 @@
+extern int LZMA_HeavyCompress;
 extern bool DecompressWhenLookup;
 extern unsigned RandomCompressPeriod;
 extern uint_fast32_t MinimumFreeSpace;

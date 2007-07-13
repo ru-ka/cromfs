@@ -13,6 +13,7 @@
 
 #include <vector>
 
+int LZMA_HeavyCompress = 0;
 double RootDirInflateFactor = 1;
 double InotabInflateFactor  = 1;
 double BlktabInflateFactor  = 1;
@@ -58,6 +59,57 @@ struct InodeToucher: public BlockToucher
             }
     }
 };
+struct StorageOptToucher: public BlockToucher
+{
+    uint_fast32_t old_opts; bool read_old;
+    uint_fast32_t new_opts; bool write_new;
+    
+    virtual bool NeedsData() const { return read_old || write_new; }
+    virtual void Got(std::vector<unsigned char>& Buffer)
+    {
+        if(read_old) old_opts = R32(&Buffer[0]);
+        
+        if(old_opts & CROMFS_OPT_24BIT_BLOCKNUMS) new_opts |= CROMFS_OPT_24BIT_BLOCKNUMS;
+        if(old_opts & CROMFS_OPT_16BIT_BLOCKNUMS) new_opts |= CROMFS_OPT_16BIT_BLOCKNUMS;
+        
+        if(write_new) W32(&Buffer[0], new_opts);
+    }
+};
+struct BlkTabConverter: public BlockToucher
+{
+    uint_fast32_t fsize;
+    bool HadPacked;
+    bool WantPacked;
+    
+    virtual bool NeedsData() const { return HadPacked != WantPacked; }
+    
+    virtual void Got(std::vector<unsigned char>& Buffer)
+    {
+        if(HadPacked != WantPacked)
+        {
+            unsigned NumBlocks = Buffer.size() / (HadPacked ? 4 : 8);
+            std::vector<cromfs_block_storage> blktab( NumBlocks);
+            for(unsigned a=0; a<NumBlocks; ++a)
+                if(HadPacked)
+                    blktab[a].fblocknum = R32(&Buffer[a*4]) / fsize,
+                    blktab[a].startoffs = R32(&Buffer[a*4]) % fsize;
+                else
+                    blktab[a].fblocknum = R32(&Buffer[a*8+0]),
+                    blktab[a].startoffs = R32(&Buffer[a*8+4]);
+        
+            Buffer.resize(NumBlocks * (WantPacked ? 4 : 8));
+            for(unsigned a=0; a<NumBlocks; ++a)
+                if(WantPacked)
+                    W32(&Buffer[a*4],
+                        blktab[a].fblocknum * fsize
+                      + blktab[a].startoffs);
+                else
+                    W32(&Buffer[a*8+0], blktab[a].fblocknum),
+                    W32(&Buffer[a*8+4], blktab[a].startoffs);
+        }
+    }
+};
+
 
 static BlockToucher NotTouching;
 static uint_fast64_t ConvertBuffer
@@ -86,7 +138,12 @@ static uint_fast64_t ConvertBuffer
     
     if(want_compressed && !was_compressed)
     {
-        Buffer = LZMACompress(Buffer);
+        if(LZMA_HeavyCompress==2)
+            Buffer = LZMACompressHeavy(Buffer, "data");
+        else if(LZMA_HeavyCompress)
+            Buffer = LZMACompressAuto(Buffer, "data");
+        else
+            Buffer = LZMACompress(Buffer);
     }
     
     std::printf("written %u", (unsigned)Buffer.size());
@@ -119,6 +176,11 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     {
         std::printf("Warning: Cannot make a sparse filesystem unless version is 3 or greater\n");
         storage_opts &= ~CROMFS_OPT_SPARSE_FBLOCKS;
+    }
+    if((storage_opts & CROMFS_OPT_PACKED_BLOCKS) && Ver < 3)
+    {
+        std::printf("Warning: Cannot make packed blocks unless version is 3 or greater\n");
+        storage_opts &= ~CROMFS_OPT_PACKED_BLOCKS;
     }
     
     std::printf("Reading header...\n");
@@ -200,34 +262,56 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     std::fflush(stdout);
     
     std::printf("Converting the inotab inode...\n- ");
-    InodeToucher ReadWriteInotabAttrs;
-    ReadWriteInotabAttrs.SetRead(0, 4);
-    if(Ver >= 3)
-        ReadWriteInotabAttrs.SetWrite(0, 4, storage_opts);
+    
+    StorageOptToucher ReadWriteInotabAttrs;
+    
+    ReadWriteInotabAttrs.old_opts  = 0x000000000;
+    ReadWriteInotabAttrs.new_opts  = storage_opts;
+    ReadWriteInotabAttrs.read_old  = OrigVer >= 3;
+    ReadWriteInotabAttrs.write_new = Ver >= 3;
     
     //fprintf(stderr, "inotab goes at %llX\n", write_offs);
     sblock.inotab_size =
         ConvertBuffer(infd, outfd,
                      sblock.inotab_offs,
                      sblock.inotab_size,
-                     write_offs, HadCompression,WantCompression, recompress,
+                     write_offs,
+                     HadCompression,WantCompression,
+                     recompress,
                      ReadWriteInotabAttrs);
     sblock.inotab_offs = write_offs;
     sblock.inotab_room = sblock.inotab_size  * InotabInflateFactor;
     write_offs += sblock.inotab_room;
     
-    if(OrigVer >= 3)
-        old_storage_opts = ReadWriteInotabAttrs.GetRead(0);
+    old_storage_opts = ReadWriteInotabAttrs.old_opts;
+    storage_opts     = ReadWriteInotabAttrs.new_opts;
+    
+    if((storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS)
+    && Ver < 3)
+    {
+        std::fprintf(stderr, "Error: CROMFS%02u cannot use 24-bit block numbers\n", Ver);
+    }
+    if((storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS)
+    && Ver < 3)
+    {
+        std::fprintf(stderr, "Error: CROMFS%02u cannot use 16-bit block numbers\n", Ver);
+    }
     
     std::printf("\n");
     std::fflush(stdout);
     
     std::printf("Converting the block table...\n- ");
+    BlkTabConverter ConvertBlkTab;
+    ConvertBlkTab.HadPacked = old_storage_opts & CROMFS_OPT_PACKED_BLOCKS;
+    ConvertBlkTab.WantPacked = storage_opts & CROMFS_OPT_PACKED_BLOCKS;
+    ConvertBlkTab.fsize = sblock.compressed_block_size;
+    
     sblock.blktab_size =
         ConvertBuffer(infd,outfd,
                       sblock.blktab_offs,
                       sblock.blktab_size,
-                      write_offs, true,true, recompress);
+                      write_offs, true,true, recompress,
+                      ConvertBlkTab);
     sblock.blktab_offs = write_offs;
     sblock.blktab_room = sblock.blktab_size  * BlktabInflateFactor;
     write_offs += sblock.blktab_room;
@@ -319,8 +403,8 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     fstat64(outfd, &st);
     
     std::printf("Output file size: %lld bytes (actual disk space used: %lld bytes)\n",
-        write_offs,
-        st.st_blocks * 512);
+        (long long)write_offs,
+        (long long)(st.st_blocks * 512));
     
     close(outfd);
     close(infd);
@@ -348,11 +432,15 @@ int main(int argc, char** argv)
             {"setver",      1, 0,'s'},
             {"output",      1, 0,'o'},
             {"recompress",  0, 0,'r'},
-            {"sparse",      1, 0,'p'},
+            {"sparse",      1, 0,'S'},
             {"force",       0, 0,'f'},
+            {"packedblocks",0, 0,'k'},
+            {"verbose",     0, 0,'v'},
+            {"lzmafastbytes",           1,0,4001},
+            {"lzmabits",                1,0,4002},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVs:o:rp:f", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVs:o:rS:fk", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -371,6 +459,9 @@ int main(int argc, char** argv)
                     "Usage: cvcromfs [<options>] <source_image> -o <target_image>\n"
                     " --help, -h          This help\n"
                     " --version, -V       Displays version information\n"
+                    " --verbose, -v\n     \n"
+                    "     -v makes auto/full LZMA compression a bit more verbose\n"
+                    "     -vv makes auto/full LZMA compression a lot more verbose\n"
                     " --setver, -s <ver>  Sets the target image to version <ver>\n"
                     "                     Version can be 01, 02 or 03.\n"
                     " --output, -o <file> Set target imagefilename (mandatory).\n"
@@ -379,8 +470,29 @@ int main(int argc, char** argv)
                     "                     the version matches and no -r was given\n"
                     "                     (use when changing flags or when you want\n"
                     "                     to reassure the file's sparseness\n"
-                    " --sparse, -p <opts> Commaseparated list of items to store sparsely\n"
-                    "                         -pf = fblocks\n"
+#if 0
+                    " --sparse, -S <opts> Commaseparated list of items to store sparsely\n"
+                    "                         -Sf = fblocks\n"
+#endif
+                    " --packedblocks, -k\n"
+                    "     Tells cvcromfs to store blocks in 4 bytes instead of 8 bytes.\n"
+                    "     Do not use this option if your cromfs volume packs more than\n"
+                    "     4 gigabytes of unique data. Otherwise, use it to save some space.\n"
+                    "     This option is available for filesystem version 03 only.\n"
+                    " --lzmafastbytes <value>\n"
+                    "     Specifies the number of \"fast bytes\" in LZMA compression\n"
+                    "     algorithm. Valid values are 5..273. Default is 273.\n"
+                    " --lzmabits <pb>,<lp>,<lc>\n"
+                    "     Sets the values for PosStateBits, LiteralPosStateBits\n"
+                    "     and LiteralContextBits in LZMA properties.\n"
+                    "      pb: Default value 0, allowed values 0..4\n"
+                    "      lp: Default value 0, allowed values 0..4\n"
+                    "      lc: Default value 1, allowed values 0..8\n"
+                    "     Further documentation on these values is available in LZMA SDK.\n"
+                    "     See file util/lzma/lzma.txt in the cromfs source distribution.\n"
+                    "     Alternatively, you can choose \"--lzmabits full\", which will\n"
+                    "     try every possible option. Beware it will consume lots of time.\n"
+                    "     \"--lzmabits auto\" is a lighter alternative to \"--lzmabits full\".\n"
                     "\n");
                 return 0;
             }
@@ -394,6 +506,11 @@ int main(int argc, char** argv)
                     return -1;
                 }
                 SetVer = val;
+                break;
+            }
+            case 'v':
+            {
+                ++LZMA_verbose;
                 break;
             }
             case 'o':
@@ -411,7 +528,7 @@ int main(int argc, char** argv)
                 force = true;
                 break;
             }
-            case 'p':
+            case 'S':
             {
                 for(char* arg=optarg;;)
                 {
@@ -431,6 +548,61 @@ int main(int argc, char** argv)
                     }
                     if(!*comma) break;
                     arg=comma+1;
+                }
+                break;
+            }
+            case 'k':
+            {
+                storage_opts |= CROMFS_OPT_PACKED_BLOCKS;
+                break;
+            }
+            case 4001: // lzmafastbytes
+            {
+                char* arg = optarg;
+                long size = strtol(arg, &arg, 10);
+                if(size < 5 || size > 273)
+                {
+                    std::fprintf(stderr, "cvcromfs: The number of \"fast bytes\" for LZMA may be 5..273. You gave %ld%s.\n", size,arg);
+                    return -1;
+                }
+                LZMA_NumFastBytes = size;
+                break;
+            }
+            case 4002: // lzmabits
+            {
+                unsigned arg_index = 0;
+                for(char* arg=optarg;;)
+                {
+                    if(!arg_index && !strcmp(arg, "auto")) { LZMA_HeavyCompress=1; break; }
+                    if(!arg_index && !strcmp(arg, "full")) { LZMA_HeavyCompress=2; break; }
+                    while(*arg==' ')++arg;
+                    if(!*arg) break;
+                    char* comma = strchr(arg, ',');
+                    if(!comma) comma = strchr(arg, '\0');
+                    *comma = '\0';
+                    long value = strtol(arg, &arg, 10);
+                    long max=4;
+                    switch(arg_index)
+                    {
+                        case 0: // pb
+                            LZMA_PosStateBits = value;
+                            break;
+                        case 1: // lp
+                            LZMA_LiteralPosStateBits = value;
+                            break;
+                        case 2: // lc
+                            LZMA_LiteralContextBits = value;
+                            max=8;
+                            break;
+                    }
+                    if(value < 0 || value > max || arg_index > 2)
+                    {
+                        std::fprintf(stderr, "cvcromfs: Invalid value(s) for --lzmabits. See `cvcrmfs --help'\n");
+                        return -1;
+                    }
+                    if(!*comma) break;
+                    arg=comma+1;
+                    ++arg_index;
                 }
                 break;
             }

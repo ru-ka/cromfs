@@ -4,7 +4,10 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-VERSION 02
+VERSION 03
+	Used in 1.3.0
+	However, this version will still change.
+	Backward compatibility will be maintained.
 
 --------------------------------
 Note: Inode 1 is assumed to be the root directory by the kernel.
@@ -12,6 +15,7 @@ Note: Inode 1 is assumed to be the root directory by the kernel.
 Types:
 	u64 = unsigned 64-bit little-endian integer
 	u32 = unsigned 32-bit little-endian integer
+	u24 = unsigned 24-bit little-endian integer
 	u16 = unsigned 16-bit little-endian integer
 	char = unsigned 8-bit byte
 	smth[] = zero or more instances of smth (a contiguous array)
@@ -21,33 +25,48 @@ OVERALL STRUCTURE
 
 OBJECT: SUPERBLOCK
 	Offset	Type	Meaning
-	0000	u64	CROMFS SIGNATURE "CROMFS02"
+	0000	u64	CROMFS SIGNATURE "CROMFS03"
 	0008	u64	Location of BLKDATA within the filesystem
 	0010	u64	Location of FBLKTAB within the filesystem (must be last)
 	0018	u64	Location of the Inotab inode within the filesystem
 	0020	u64	Location of the Root directory within the filesystem
-	0028	u32	FSIZE Maximum size of uncompressed FBLOCK (default: 2M)
-	002C	u32	BSIZE Size of uncompressed blocks (default: 64k)
+	0028	u32	FSIZE Maximum size of uncompressed FBLOCK
+	002C	u32	BSIZE Size of uncompressed blocks
 	0030	u64	Bytes of file data on disk (only there for statvfs)
-	....	INODE	Root directory
-	....	INODE	Inotab (only the "list of blocks" is used)
+	0038    u64     Size of Rootdir inode in bytes (only in CROMFS03 when growth is enabled)
+	0040    u64     Size of Inotab inode in bytes (only in CROMFS03 when growth is enabled)
+	0048    u64     Size of BLKDATA in bytes (only in CROMFS03 when growth is enabled)
+	....	INODE	ROOTDIR (root directory)
+	....	INODE	INOTAB (only the "list of blocks" is used)
 	....	BLKDATA	LZMA-compressed array of BLOCK entries.
 	....	FBLOCK[] FBLKTAB = compressed storage
 
-In CROMFS02, root directory and inotab are stored compressed.
-In CROMFS01, they are stored uncompressed.
-This is the only difference between those versions.
+Since CROMFS03, padding is allowed between elements, using sparse files.
+Since CROMFS02, ROOTDIR and INOTAB are stored compressed. (Before: uncompressed)
 
-Note:
-- Inotab must be placed immediately after the root directory.
-- BLKDATA must be placed immediately after inotab.
-- FBLKTAB must be placed immediately after BLKDATA.
-- There must be no content after FBLKTAB.
-  If you require padding, put it before the root directory.
+If the "size" fields are not present in the header, the order
+of ROOTDIR, INOTAB, BLKDATA and FBLKTAB must be exactly as
+indicated with no padding in between.
+In any case, FBLKTAB must be the last item in the filesystem.
+
+In CROMFS03, the INOTAB inode contains flag bits in the inode's "mode" field:
+      byte 3   byte 2   byte 1   byte 0
+      00000000 00000000 00000k23 0000000f
+      f:
+      	1 = fblocks are stored sparsely (padded to FSIZE)
+      	0 = fblocks are stored tightly (no padding)
+      23:
+        00 = blocknums in inodes are 32-bit
+        01 = blocknums in inodes are 24-bit
+        10 = blocknums in inodes are 16-bit
+        11 = undefined
+      k:
+        1 = BLOCKs are packed
+        0 = BLOCks are not packed
 
 ---------------------------
 
-STRUCT: FBLOCK
+STRUCT: FBLOCK (size: 13 + n)
 	0000	u32	length of compressed data
 	0004	char[]	LZMA-compressed data, length indicated in above field
 	0009	u64	length of uncompressed data (this field is part of the LZMA stream)
@@ -57,14 +76,14 @@ STRUCT: FBLOCK
 	 uncompressed FBLOCKs. Previously it indicated the maximum size of compressed
 	 FBLOCKs.)
 
-STRUCT: BLKDATA (LZMA-compressed)
+STRUCT: BLKDATA (LZMA-compressed) (size: 8*n)
 	0000	BLOCK[]  BLKTAB = all blocks of the filesystem (indexed by block number)
 	(Note: To handle BLKDATA effeciently, it must be decompressed entirely
 	into the RAM when the block lists are needed. This typically might consume
 	several megabytes of RAM. However, cromfs-driver deallocates the
 	data periodically when the filesystem has been idle for some time.)
 
-STRUCT: BLOCK
+STRUCT: BLOCK (size: 8) (when BLOCKs are not packed)
 	0000	u32	FBLOCK number (0=first FBLOCK, 1=second FBLOCK, etc)
 	0004	u32	starting offset within the _uncompressed data_ for this data
 	(Note: different BLOCKs may utilize the same data from same FBLOCK.
@@ -73,39 +92,62 @@ STRUCT: BLOCK
 	(This record refers to at most BSIZE bytes of data, but may actually
 	 refer to less data if this is the last block of the file.)
 
-STRUCT: INODE
+STRUCT: BLOCK (size: 4) (when BLOCKs are packed)
+	0000	u32	datavalue
+	datavalue is decoded into FBLOCK number and starting offset as follows:
+		offset    = datavalue MOD FSIZE
+		fblocknum = datavalue /   FSIZE
+	For meanings, see the "not packed" explanation above.
+
+STRUCT: INODE (size: 24 + b*n) where b = block number size in bytes
+                               size is rounded up to 4-byte boundary.
 	0000	u32	mode
 	0004	u32	mtime
 	0008	u32	rdev, if a device, hardlink count otherwise
 	000C	u16	uid
 	000E	u16	gid
 	0010	u64	size in bytes
-	0018	u32[]	(data locators;indexes to BLKTAB, 0=first BLOCK,1=second BLOCK,...)
+	
+	when block numbers are 32-bit:
+	0018	u32[]	(data locators: indexes to BLKTAB, 0=first BLOCK,1=second BLOCK,...)
+
+	when block numbers are 24-bit:
+	0018	u24[]	(data locators: indexes to BLKTAB, 0=first BLOCK,1=second BLOCK,...)
+
+	when block numbers are 16-bit:
+	0018	u16[]	(data locators: indexes to BLKTAB, 0=first BLOCK,1=second BLOCK,...)
+
 	(Note: Location of uid&gid and rdev have been changed in version 1.1.2)
 
-STRUCT: ENTRY
+STRUCT: ENTRY (size: 9 + n)
 	0000	u64	inode number
 	0008	char[]	file name, nul-terminated
 
 ALL FILES ARE COMPRESSED (the content is spread across different FBLOCKs)
 
-FILE CONTENT WHEN: INOTAB
+FILE CONTENT WHEN: INOTAB (size: n)
 	0000	INODE[] all inodes of the filesystem (note: INODE is variable-length).
 	                the beginning of each inode is at offset ((inodenumber-2) * 4)
-	                inodenumber 1 is the root directory (not stored in INOTAB),
+	                inodenumber 1 is the ROOTDIR (not stored in INOTAB),
 	                and inodenumber 0 is error.
 
-FILE CONTENT WHEN: DIRECTORY
+FILE CONTENT WHEN: DIRECTORY (size: 4 + (4+entrysize) * n)
 	0000	u32	number of files in directory
 	0004	u32[]	index into each file entry (from directory entry beginning)
 	0004	ENTRY[]	each file entry (variable length)
 	(Note: The files in a directory are sorted in an asciibetical order.
-	This enables fast implementation of lookup() using a binary search.)
+	 This enables an implementation of lookup() using a binary search,
+	 minimizing the amount of data accessed (and thus yielding fast access
+	 in case of heavy fragmentation).
+	)
+	(Note 2: Currently the algorithm in read_dir() assumes that the directory
+	 entry pointers are in numeric order. If that does not hold, it will fail.
+	)
 
-FILE CONTENT WHEN: SYMLINK
+FILE CONTENT WHEN: SYMLINK (size: n)
 	0000	char[]	link text, not nul-terminated
 
-FILE CONTENT WHEN: REGULAR FILES
+FILE CONTENT WHEN: REGULAR FILES (size: n)
 	0000	content	file content
 
 For other types of files, file has no content (size=0, blocktab=empty)

@@ -4,6 +4,33 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.4.0	2007-07-13 Joel Yliluoma <bisqwit@iki.fi>
+- Removed filename length limit
+- Rewrote most of mkcromfs. A new algorithm of organizing the blocks of
+  files before locating them in fblocks ("blockifying") should improve
+  compression. This does not change the actual format of the filesystem.
+- Added several blockify-related optimization options in mkcromfs.
+  (--blockifybufferlength, --blockifybufferincrement,
+  and --blockifyoptimizemethod).
+- Speed improvements in cromfs-driver:
+  - Optimized read_file_data() and read_dir() in case of heavily fragmented
+    filesystems. It will, however, incur a slight performance penalty for
+    non-fragmented filesystems.
+  - Added an implementation of dir_lookup(), significantly improving the
+    performance of lookups especially on heavily fragmented filesystems.
+- Added -3 (--24bitblocknums), -2 (--16bitblocknums) and -k (--packedblocks)
+  options in mkcromfs (extension to cromfs file format).
+  Each of these options have some potential for improving the compression.
+  Even if LZMA negates it, at least it reduces memory traffic during
+  cromfs-driver operation, so it is recommended to use those where possible.
+- Fixed a few endianess problems.
+- Added --lzmafastbytes option in mkcromfs and cvcromfs, making the number of
+  LZMA "fast bytes" configurable. Also raised the default from 64 to 273 (maximum).
+- Added --lzmabits option in mkcromfs and cvcromfs for LZMA compression finetuning.
+- Added possibility to alter the order in which different types of files
+  are compressed. (Options --blockifyorder and --dirparseorder in mkcromfs.)
+- Upgraded LZMA SDK from version 4.43 to 4.49 beta.
+
 1.3.0	2007-06-30 Joel Yliluoma <bisqwit@iki.fi>
 - New format is under work (filesystem write-mounting)
 - cromfs-driver now goes background (fork) by default (use -f to go foreground)
@@ -195,7 +222,7 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 - Broken mkcromfs release
 - Added statistics reporting in mkcromfs at end
 
-1.0.2
+1.0.2 Joel Yliluoma <bisqwit@iki.fi>
 - Added support for block devices and character devices
 - Documentation updates
 - Added commandline options in mkcromfs: --bsize, --fsize
@@ -210,10 +237,10 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 - mkcromfs now can stand running multiple instances at same time
 - Changed the LZMA dictionary size selection method (heavier settings now)
 
-1.0.1
+1.0.1 Joel Yliluoma <bisqwit@iki.fi>
 - Changed the LZMA implementation slightly more straight-forward
 - Changed filesystem format: BLKTAB is now compressed within BLKDATA
 - A slight speed optimization (later to become the "decompresslookups" option)
 
-1.0.0
+1.0.0 Joel Yliluoma <bisqwit@iki.fi>
 - Initial release

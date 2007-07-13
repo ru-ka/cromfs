@@ -35,14 +35,27 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 enum CROMFS_OPTS
 {
-    CROMFS_OPT_SPARSE_FBLOCKS = 0x00000001
+    CROMFS_OPT_SPARSE_FBLOCKS  = 0x00000001,
+    CROMFS_OPT_24BIT_BLOCKNUMS = 0x00000100,
+    CROMFS_OPT_16BIT_BLOCKNUMS = 0x00000200,
+    CROMFS_OPT_PACKED_BLOCKS   = 0x00000400
 };
 
 
+static inline uint_fast16_t R8(const void* p)
+{
+    const unsigned char* data = (const unsigned char*)p;
+    return data[0];
+}
 static inline uint_fast16_t R16(const void* p)
 {
     const unsigned char* data = (const unsigned char*)p;
-    return (data[0] << 0)  | (data[1] << UINT16_C(8));
+    return R8(data)  | (R8(data+1) << UINT16_C(8));
+}
+static inline uint_fast32_t R24(const void* p)
+{
+    const unsigned char* data = (const unsigned char*)p;
+    return R16(data) | (R8(data+2) << UINT32_C(16));
 }
 static inline uint_fast32_t R32(const void* p)
 {
@@ -60,11 +73,35 @@ static inline uint_fast64_t R64(const void* p)
 
 #undef L
 
+static inline uint_fast64_t Rn(const void* p, unsigned bytes)
+{
+    switch(bytes)
+    {
+        case 1: return R8(p);
+        case 2: return R16(p);
+        case 3: return R24(p);
+        case 4: return R32(p);
+        case 8: return R64(p);
+    }
+    return 0;
+}
+
+static void W8(void* p, uint_fast8_t value)
+{
+    unsigned char* data = (unsigned char*)p;
+    data[0] = value;
+}
 static void W16(void* p, uint_fast16_t value)
 {
     unsigned char* data = (unsigned char*)p;
-    data[0] = (value>>0) & 0xFF;
-    data[1] = (value>>8) & 0xFF;
+    W8(data+0, value   );
+    W8(data+1, value>>8);
+}
+static void W24(void* p, uint_fast32_t value)
+{
+    unsigned char* data = (unsigned char*)p;
+    W16(data+0, value);
+    W8(data+2,  value >> UINT32_C(16));
 }
 static void W32(void* p, uint_fast32_t value)
 {
@@ -79,9 +116,17 @@ static void W64(void* p, uint_fast64_t value)
     W32(data+4, (value >> UINT64_C(32)));
 }
 
-
-
-
+static inline void Wn(void* p, uint_fast64_t value, unsigned bytes)
+{
+    switch(bytes)
+    {
+        case 1: W8(p, value); break;
+        case 2: W16(p, value); break;
+        case 3: W24(p, value); break;
+        case 4: W32(p, value); break;
+        case 8: W64(p, value); break;
+    }
+}
 
 /* Use "least" instead of "fast" for these types, because they
  * are included in structs and vectors that are directly copied

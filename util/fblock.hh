@@ -12,11 +12,51 @@
 #include <fcntl.h>
 
 #include "boyermoore.hh"
+#include "append.hh"
 #include "lzma.hh"
 
 const char* GetTempDir();
 
-class mkcromfs_fblock
+struct DataReadBuffer
+{
+    const unsigned char* Buffer;
+private:
+    enum { None, Allocated } State;
+public:
+    DataReadBuffer() : Buffer(NULL), State(None) { }
+    
+    void AssignRefFrom(const unsigned char* d, unsigned)
+    {
+        Buffer = d; State = None;
+    }
+    void AssignCopyFrom(const unsigned char* d, unsigned size)
+    {
+        unsigned char* p = new unsigned char[size];
+        std::memcpy(p, d, size);
+        State = Allocated;
+        Buffer = p;
+    }
+    void LoadFrom(int fd, uint_fast32_t size)
+    {
+        unsigned char* pp = new unsigned char[size];
+        int res = pread(fd, pp, size, 0);
+        Buffer = pp;
+        State = Allocated;
+    }
+    ~DataReadBuffer()
+    {
+        switch(State)
+        {
+            case Allocated: delete[] Buffer; break;
+            case None: ;
+        }
+    }
+private:
+    void operator=(const DataReadBuffer&);
+    DataReadBuffer(const DataReadBuffer&);
+};
+
+class fblock_storage
 {
 private:
     int fblock_disk_id;
@@ -24,7 +64,7 @@ private:
     uint_fast32_t filesize;
     unsigned char* mmapped;
 public:
-    mkcromfs_fblock()
+    fblock_storage()
     {
         static int disk_id = 0;
         fblock_disk_id = disk_id++;
@@ -72,85 +112,6 @@ public:
         return compressed;
     }
     
-    int compare_raw_portion(const unsigned char* data,
-                            uint_fast32_t data_size,
-                            uint_fast32_t my_offs);
-    
-    int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs)
-    {
-        return compare_raw_portion(&data[0], data.size(), offs);
-    }
-    
-#if 0
-    int compare_raw_portion_another
-       (mkcromfs_fblock& another,
-        uint_fast32_t data_size,
-        uint_fast32_t my_offs,
-        uint_fast32_t other_offs)
-    {
-        if(is_compressed)
-        {
-            std::vector<unsigned char> raw = get_raw();
-            if(DecompressWhenLookup) put_raw(raw);
-            if(my_offs + data_size > raw.size()) return -1;
-            return another.compare_raw_portion(&raw[my_offs], data_size, other_offs);
-        }
-        
-        if(my_offs + data_size > filesize) return -1;
-        
-        if(!mmapped) Remap();
-        if(mmapped)
-        {
-            return another.compare_raw_portion
-                (mmapped + my_offs, data_size, other_offs);
-        }
-        
-        /* mmap only works when the starting offset is aligned
-         * on a page boundary. Therefore, we force it to align.
-         */
-        uint_fast32_t prev_my_offs = my_offs & ~4095; /* 4095 is assumed to be page size-1 */
-        /* Because of aligning, calculate the amount of bytes
-         * that were mmapped but are not part of the comparison.
-         */
-        uint_fast32_t ignore = my_offs - prev_my_offs;
-        
-        int result = -1;
-        int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
-        if(fd >= 0)
-        {
-            /* Try to use mmap. This way, only the portion of file
-             * that actually needs to be compared, will be accessed.
-             * If we are comparing an 1M block and memcmp detects a
-             * difference within the first 3 bytes, only about 4 kB
-             * of the file will be read. This is really fast.
-             */
-            void* p = mmap(NULL, ignore+data_size, PROT_READ, MAP_SHARED, fd, prev_my_offs);
-            if(p != (void*)-1)
-            {
-                close(fd);
-                const unsigned char* pp = (const unsigned char*)p;
-                result = another.compare_raw_portion(pp+ignore, data_size, other_offs);
-                munmap(p, ignore+data_size);
-            }
-            else
-            {
-                /* If mmap didn't like our idea, try to use pread
-                 * instead. pread is llseek+read combined. This should
-                 * work if anything is going to work at all.
-                 */
-                std::vector<unsigned char> tmpbuf(data_size);
-                ssize_t r = pread(fd, &tmpbuf[0], data_size, my_offs);
-                close(fd);
-                if(r != (ssize_t)data_size)
-                    result = -1;
-                else
-                    result = another.compare_raw_portion(&tmpbuf[0], data_size, other_offs);
-            }
-        }
-        return result;
-    }
-#endif
-    
     void put_raw(const std::vector<unsigned char>& raw)
     {
         Unmap();
@@ -186,8 +147,8 @@ public:
          * in compressed or uncompressed format. We choose
          * compressed, because recompression would take a
          * lot of time, but decompression is fast.
+         * It would be waste to discard the compression already done.
          */
-        
         put_compressed(compressed);
         /*
         if(is_compressed)
@@ -197,27 +158,6 @@ public:
         */
     }
     
-    /* AppendInfo describes how to append/overlap
-     * the input into the given fblock.
-     */
-    struct AppendInfo
-    {
-        uint_fast32_t OldSize;           /* Size before appending */
-        uint_fast32_t AppendBaseOffset;  /* Where to append */
-        uint_fast32_t AppendedSize;      /* Size after appending */
-    public:
-        AppendInfo() : OldSize(0), AppendedSize(0) { }
-        void SetAppendPos(uint_fast32_t offs, uint_fast32_t datasize)
-        {
-            AppendBaseOffset = offs;
-            AppendedSize     = std::max(OldSize, offs + datasize);
-        }
-    };
-    
-    /* Load file contents, analyze how to append/overlap but don't do it */
-    AppendInfo AnalyzeAppend(const BoyerMooreNeedle& needle,
-                             uint_fast32_t minimum_pos = 0);
-
     void put_appended_raw(const AppendInfo& append, const std::vector<unsigned char>& data)
     {
         put_appended_raw(append, &data[0], data.size());
@@ -231,9 +171,24 @@ public:
         const AppendInfo& append,
         const unsigned char* data, const uint_fast32_t datasize);
     
+    int compare_raw_portion(const unsigned char* data,
+                            uint_fast32_t data_size,
+                            uint_fast32_t my_offs);
+    
+    int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs)
+    {
+        return compare_raw_portion(&data[0], data.size(), offs);
+    }
+
+    const AppendInfo AnalyzeAppend(
+        const BoyerMooreNeedle& needle,
+        uint_fast32_t minimum_pos = 0);
+
 private:
     void get(std::vector<unsigned char>* raw,
              std::vector<unsigned char>* compressed);
+
+    void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size);
 
 public:
     void Unmap()
@@ -252,10 +207,86 @@ public:
             close(fd);
         }
     }
+    uint_fast32_t size()
+    {
+        if(is_compressed) return get_raw().size();
+        return filesize;
+    }
+    
 private:
     void RemapFd(int fd)
     {
         void* p = mmap(NULL, filesize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
         if(p != (void*)-1) mmapped = (unsigned char*)p;
     }
+
+public:
+    typedef uint_fast32_t undo_t;
+    undo_t create_backup() const
+    {
+        fblock_storage& t = const_cast<fblock_storage&> (*this);
+        return t.size();
+    }
+    void restore_backup(undo_t b)
+    {
+        if(!is_compressed)
+        {
+            /* should be rather simple */
+            Unmap();
+            ::truncate(getfn().c_str(), filesize = b);
+            return;
+        }
+        std::vector<unsigned char> data = get_raw();
+        data.erase(data.begin() + b, data.end());
+        put_raw(data);
+    }
+};
+
+class mkcromfs_fblock
+{
+private:
+    mutable fblock_storage storage;
+
+public:
+    /* Load file contents, analyze how to append/overlap but don't do it */
+    const AppendInfo AnalyzeAppend(
+        const BoyerMooreNeedle& needle,
+        uint_fast32_t minimum_pos = 0) const
+    {
+        return storage.AnalyzeAppend(needle, minimum_pos);
+    }
+
+    int compare_raw_portion(const unsigned char* data,
+                            uint_fast32_t data_size,
+                            uint_fast32_t my_offs) const
+    {
+        return storage.compare_raw_portion(data, data_size, my_offs);
+    }
+    
+    int compare_raw_portion(const std::vector<unsigned char>& data, uint_fast32_t offs) const
+    {
+        return storage.compare_raw_portion(data, offs);
+    }
+    
+    bool is_uncompressed() const { return storage.is_uncompressed(); }
+    void Unmap() { storage.Unmap(); }
+    void Remap() { storage.Remap(); }
+    void Delete() { storage.Delete(); }
+    const std::vector<unsigned char> get_raw() const { return storage.get_raw(); }
+    const std::vector<unsigned char> get_compressed() const { return storage.get_compressed(); }
+    void put_raw(const std::vector<unsigned char>& raw)
+        { storage.put_raw(raw); }
+    void put_compressed(const std::vector<unsigned char>& compressed)
+        { storage.put_compressed(compressed); }
+    void put_appended_raw(const AppendInfo& append, const BoyerMooreNeedle& data)
+        { storage.put_appended_raw(append, data); }
+    void get(std::vector<unsigned char>& raw,
+             std::vector<unsigned char>& compressed) const
+        { storage.get(raw, compressed); }
+
+    typedef fblock_storage::undo_t undo_t;
+    undo_t create_backup() const { return storage.create_backup(); }
+    void restore_backup(undo_t b) { storage.restore_backup(b); }
+    
+    uint_fast32_t size() const { return storage.size(); }
 };

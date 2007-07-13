@@ -6,6 +6,16 @@
 
 #include "assert++.hh"
 
+static const std::vector<unsigned char>
+    DoLZMACompress(const std::vector<unsigned char>& data)
+{
+    if(LZMA_HeavyCompress == 2)
+        return LZMACompressHeavy(data, "fblock");
+    else if(LZMA_HeavyCompress)
+        return LZMACompressAuto(data, "fblock");
+    return LZMACompress(data);
+}    
+
 const char* GetTempDir()
 {
     const char* t;
@@ -14,7 +24,7 @@ const char* GetTempDir()
     return "/tmp";
 }
 
-int mkcromfs_fblock::compare_raw_portion(
+int fblock_storage::compare_raw_portion(
     const unsigned char* data,
     uint_fast32_t data_size,
     uint_fast32_t my_offs)
@@ -25,6 +35,18 @@ int mkcromfs_fblock::compare_raw_portion(
      * We must check for that case, and reject if it is so.
      */
 
+#if 0
+    /* This is neat and all, but has a shortcoming:
+     * If data is uncompressed and mmap fails, InitDataReadBuffer will
+     * pread() the entire file. But we only need to pread() the part
+     * that we'll compare.
+     */
+    DataReadBuffer Buffer;
+    uint_fast32_t oldsize;
+    InitDataReadBuffer(Buffer, oldsize);
+    if(oldsize < my_offs + data_size) return -1;
+    return std::memcmp(&Buffer.Buffer[my_offs], &data[0], data_size);
+#else
     if(is_compressed)
     {
         /* If the file is compressed, we must decompress it
@@ -51,6 +73,10 @@ int mkcromfs_fblock::compare_raw_portion(
     {
         return std::memcmp(mmapped + my_offs, &data[0], data_size);
     }
+    
+    /* Don't give up with mmap yet. Try to mmap the specific portion
+     * that we will be accessing now.
+     */
     
     /* mmap only works when the starting my_offset is aligned
      * on a page boundary. Therefore, we force it to align.
@@ -100,14 +126,16 @@ int mkcromfs_fblock::compare_raw_portion(
         }
     }
     return result;
+#endif
 }
 
-void mkcromfs_fblock::get(std::vector<unsigned char>* raw,
-                          std::vector<unsigned char>* compressed)
+void fblock_storage::get(std::vector<unsigned char>* raw,
+                         std::vector<unsigned char>* compressed)
 {
     /* Is our data currently non-compressed? */
     if(!is_compressed)
     {
+        /* Not compressed. */
         /* Ok. Ensure it's mmapped (mmapping is handy) */
         if(!mmapped) Remap();
         /* If mmapping worked, we're almost done. */
@@ -118,11 +146,13 @@ void mkcromfs_fblock::get(std::vector<unsigned char>* raw,
             
             /* If the caller wants compressed... */
             if(compressed)
-                *compressed = LZMACompress(
+            {
+                *compressed = DoLZMACompress(
                     raw ? *raw /* If we already copied the raw data, use that */
                           /* Otherwise, create a vector for LZMACompress to use */
                         : std::vector<unsigned char> (mmapped, mmapped+filesize)
                                           );
+            }
             return;
         }
         /* mmapping didn't work. Fortunately we have got a plan B. */
@@ -140,34 +170,53 @@ void mkcromfs_fblock::get(std::vector<unsigned char>* raw,
     }
     
     /* Read the file contents */
-    std::vector<unsigned char> result( filesize );
-    read(fd, &result[0], result.size());
-    close(fd);
-    
+
     /* Is the file data compressed? */
     if(is_compressed)
     {
-        /* If the caller wants compressed, just copy it. */
-        if(compressed) *compressed = result;
-        /* If the caller wants raw, give a decompressed copy. File remains compressed. */
-        if(raw)        *raw = LZMADeCompress(result);
+        /* File is compressed */
+        if(compressed) /* does the caller want compressed data? */
+        {
+            /* read into the desired compressed data */
+            compressed->resize(filesize);
+            read(fd, &(*compressed)[0], (*compressed).size());
+            /* If the caller wants raw, give a decompressed copy. File remains compressed. */
+            if(raw)      *raw = LZMADeCompress(*compressed);
+        }
+        else if(raw)
+        {
+            /* read into a temp buffer */
+            std::vector<unsigned char> result( filesize );
+            read(fd, &result[0], result.size());
+            /* If the caller wants raw, give a decompressed copy. File remains compressed. */
+            *raw = LZMADeCompress(result);
+        }
     }
     else
     {
-        /* If the caller wants compressed, compress it */
-        if(compressed)
+        /* File is uncompressed (raw) */
+        if(raw) /* does the caller want raw data? */
         {
-            *compressed = LZMACompress(result);
-            /* Since we already compressed it, save the compressed data into the file */
-            put_compressed(*compressed);
+            /* read into the desired raw data */
+            raw->resize(filesize);
+            read(fd, &(*raw)[0], (*raw).size());
+            /* If the caller wants compressed, give a compressed copy. File remains raw. */
+            if(compressed)      *compressed = DoLZMACompress(*raw);
         }
-        /* If the caller wants raw, just copy it. (It wasn't compressed.) */
-        if(raw)        *raw = result;
+        else if(compressed)
+        {
+            /* read into a temp buffer */
+            std::vector<unsigned char> result( filesize );
+            read(fd, &result[0], result.size());
+            /* If the caller wants compressed, give a compressed copy. File remains raw. */
+            *compressed = DoLZMACompress(result);
+        }
     }
+    close(fd);
 }
 
-void mkcromfs_fblock::put_appended_raw(
-    const mkcromfs_fblock::AppendInfo& append,
+void fblock_storage::put_appended_raw(
+    const AppendInfo& append,
     const unsigned char* data,
     const uint_fast32_t datasize)
 {
@@ -242,61 +291,18 @@ void mkcromfs_fblock::put_appended_raw(
     close(fd);
 }
 
-/* Search the current fblock data for an occurance of the needle.
- * Returns an "AppendInfo" that describes how to append the needle
- * into the fblock, if it matched.
- */
-mkcromfs_fblock::AppendInfo
-mkcromfs_fblock::AnalyzeAppend(
-    const BoyerMooreNeedle& needle,
-    uint_fast32_t minimum_pos)
+void fblock_storage::InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size)
 {
-    AppendInfo append;
+    /* TODO: Add mechanism to load only a part of the file
+     * (to be useful in compare_raw_portion() )
+     */
     
-    /***** Temporary buffer for the myriad of ways to handle the data *****/
-    
-    struct Buf
-    {
-        const unsigned char* Buffer;
-    private:
-        enum { None, Allocated } State;
-    public:
-        Buf() : Buffer(NULL), State(None) { }
-        
-        void AssignRefFrom(const unsigned char* d, unsigned)
-        {
-            Buffer = d; State = None;
-        }
-        void AssignCopyFrom(const unsigned char* d, unsigned size)
-        {
-            unsigned char* p = new unsigned char[size];
-            std::memcpy(p, d, size);
-            State = Allocated;
-            Buffer = p;
-        }
-        void LoadFrom(int fd, uint_fast32_t size)
-        {
-            unsigned char* pp = new unsigned char[size];
-            int res = pread(fd, pp, size, 0);
-            Buffer = pp;
-            State = Allocated;
-        }
-        ~Buf()
-        {
-            switch(State)
-            {
-                case Allocated: delete[] Buffer; break;
-                case None: ;
-            }
-        }
-    } Buffer;
-
     /***** Load file contents *****/
-    
+    size = 0;
     if(is_compressed)
     {
         std::vector<unsigned char> rawdata = get_raw();
-        append.OldSize = rawdata.size();
+        size = rawdata.size();
         if(DecompressWhenLookup)
         {
             put_raw(rawdata);
@@ -310,7 +316,7 @@ mkcromfs_fblock::AnalyzeAppend(
     }
     else
     {
-        append.OldSize = filesize;
+        size = filesize;
         
         if(!mmapped) Remap();
         if(mmapped)
@@ -326,6 +332,7 @@ mkcromfs_fblock::AnalyzeAppend(
                 /* File not found. Prevent null pointer, load a dummy buffer. */
                 static const unsigned char d=0;
                 Buffer.AssignRefFrom(&d, 0);
+                size = 0; // not correct, but prevents segmentation fault...
             }
             else
             {
@@ -334,85 +341,22 @@ mkcromfs_fblock::AnalyzeAppend(
             }
         }
     }
-    
-    append.SetAppendPos(append.OldSize, needle.size());
-    
-    /**** Find the appension position ****/
+}
 
-#if DEBUG_APPEND
-    std::fprintf(stderr, "Appension (%s), rawsize=%u, datasize=%u, ptr=%p, mmapped=%p\n",
-        is_compressed ? "compressed" : "raw",
-        append.OldSize, needle.size(),
-        Buffer.Buffer,
-        mmapped);
-    std::fflush(stderr);
-#endif
-    if(!needle.empty() && append.OldSize > 0)
-    {
-        uint_fast32_t result = append.OldSize; /* By default, insert at end. */
-        
-        const unsigned char* ptr = Buffer.Buffer;
-        
-        /* The maximum offset where we can search for a complete match
-         * using an optimized algorithm.
-         */
-        int_fast32_t full_match_max = (long)append.OldSize - (long)needle.size();
-        if(full_match_max >= (int_fast32_t)minimum_pos) /* number of possible starting positions */
-        {
-            //std::fprintf(stderr, "full_match_max = %d\n", (int)full_match_max);
-            
-            /* +needle.size() because it is the number of bytes to search */
-            uint_fast32_t res = minimum_pos + 
-                needle.SearchIn(ptr + minimum_pos,
-                                full_match_max + needle.size() - minimum_pos);
-            if(res < full_match_max)
-            {
-                append.SetAppendPos(res, needle.size());
-                return append;
-            }
-        }
-        
-        /* The rest of this algorithm checks for partial matches only */
-        /* Though it _can_ check for complete matches too. */
-        
-        uint_fast32_t cap = std::min((long)append.OldSize, (long)(FSIZE - needle.size()));
-        
-        if(full_match_max < (int_fast32_t)minimum_pos) full_match_max = minimum_pos;
-        for(uint_fast32_t a=full_match_max; a<cap; ++a)
-        {
-            /* We believe std::memchr() might be better optimized
-             * than std::find(). At least in glibc, memchr() does
-             * does longword access on aligned addresses, whereas
-             * find() (from STL) compares byte by byte.
-             */
-            //fprintf(stderr, "a=%u, cap=%u\n", (unsigned)a, (unsigned)cap);
-            const unsigned char* refptr =
-                (const unsigned char*)std::memchr(ptr+a, needle[0], cap-a);
-            if(!refptr) break;
-            a = refptr - ptr;
-            unsigned compare_size = std::min((long)needle.size(), (long)(append.OldSize - a));
-            
-            /* compare 1 byte less because find() already confirmed the first byte */
-            if(std::memcmp(refptr+1, &needle[1], compare_size-1) == 0)
-            {
-#if DEBUG_OVERLAP
-                std::printf("\nOVERLAP: ORIG=%u, NEW=%u, POS=%u, COMPARED %u\n",
-                    (unsigned)cap, (unsigned)needle.size(),
-                    a, compare_size);
-                for(unsigned b=0; b<4+compare_size; ++b)
-                    std::printf("%02X ", ptr[cap - compare_size+b-4]);
-                std::printf("\n");
-                for(unsigned b=0; b<4; ++b) std::printf("   ");
-                for(unsigned b=0; b<4+compare_size; ++b)
-                    std::printf("%02X ", needle[b]);
-                std::printf("\n");
-#endif
-                result = a; /* Put it here. */
-                break;
-            }
-        }
-        
-        append.SetAppendPos(result, needle.size());
-    }
-    return append;
+/* Search the current fblock data for an occurance of the needle.
+ * Returns an "AppendInfo" that describes how to append the needle
+ * into the fblock, if it matched.
+ */
+const AppendInfo
+fblock_storage::AnalyzeAppend(
+    const BoyerMooreNeedle& needle,
+    uint_fast32_t minimum_pos)
+{
+    /***** Temporary buffer for the myriad of ways to handle the data *****/
+    /* With a destructor for exception-safety. */
+    
+    DataReadBuffer Buffer;
+    uint_fast32_t oldsize;
+    InitDataReadBuffer(Buffer, oldsize);
+    return ::AnalyzeAppend(needle, minimum_pos, FSIZE, Buffer.Buffer, oldsize);
 }

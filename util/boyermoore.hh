@@ -4,8 +4,11 @@
 #include <stdint.h>
 
 #include <vector>
+#include <string>
 #include <algorithm>
 #include <string.h>
+
+#include "autoptr"
 
 #ifdef __GNUC__
 # define likely(x)       __builtin_expect(!!(x), 1)
@@ -15,7 +18,7 @@
 # define unlikely(x) (x)
 #endif
 
-class BoyerMooreNeedle
+class BoyerMooreNeedle: public ptrable
 {
 public:
     explicit BoyerMooreNeedle(const std::vector<unsigned char>& n)

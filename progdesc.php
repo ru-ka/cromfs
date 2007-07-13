@@ -45,6 +45,8 @@ See the <a href=\"http://bisqwit.iki.fi/src/cromfs-changelog.txt\">ChangeLog</a>
 
 ", 'overview:1. Overview' => "
 
+<img src=\"http://bisqwit.iki.fi/src/cromfs-sizedemo.png\" align=\"right\" alt=\"[cromfs size demo]\" />
+
 <ul>
  <li>Data, inodes, directories and block lists are stored compressed</li>
  <li>Duplicate inodes, files and even duplicate file portions are detected and stored only once
@@ -53,10 +55,10 @@ See the <a href=\"http://bisqwit.iki.fi/src/cromfs-changelog.txt\">ChangeLog</a>
      thousands of nearly-identical megabyte-class files.</li>
    </ul>
   </li>
- <li>Files are stored in solid blocks, meaning that parts of different
-  files are compressed together for effective compression</li>
- <li>Furthermore, different files utilize the same data blocks where
-  possible, to reduce the amount of data that needs to be compressed</li>
+ <li>Files are divided into fragments and those fragments are stored as
+  offsets to solid blocks (fblocks) containing data, meaning that parts
+  of different files are compressed together for effective compression,
+  and identical fragments are compressed only once.</li>
  <li>Most of inode types recognized by Linux are supported (see <a href=\"#compare\">comparisons</a>).</li>
  <li>The <a href=\"http://www.7-zip.com/sdk.html\">LZMA compression</a> is used.
   In the general case, LZMA compresses better than gzip and bzip2.</li>
@@ -79,11 +81,12 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
  <li>Max number of files in a directory: 2<sup>30</sup> (smaller if filenames are longer, but still more than 100000 in almost all cases)</li>
  <li>Max number of inodes (all files, dirs etc combined): 2<sup>60</sup>, but depends on file sizes</li>
  <li>Max filesystem size: 2<sup>64</sup> bytes (16777216 TB)</li>
- <li>There are no \".\" and \"..\" entries in directories.</li>
+ <li>There are no \".\" or \"..\" entries in directories. This does not matter in Linux.</li>
  <li>cromfs and mkcromfs are slower than their peers.</li>
  <li>The cromfs-driver has a large memory footprint. It is not
    suitable for very size-constrained systems.</li>
- <li>Maximum filename length: 4095 bytes</li>
+ <li>Maximum filename length: 4294967295 bytes</li>
+ <li>Maximum symlink length: 65535 bytes</li>
  <li>Being an user-space filesystem, it might not be suitable for
    root filesystems of rescue, tiny-Linux and installation disks.
    (Facts needed.)</li>
@@ -91,11 +94,23 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
    (This has no effect to compression efficiency.)</li>
 </ul>
 
-Development status: Beta. The Cromfs project has not yet
-been tested extensively. There is no warranty against data
-loss or anything else, so use at your own risk.<br />
-That being said, it has been in use by the author since the first
-version, and as of the latest release, there are no known bugs.
+", 'status:1. Development status' => "
+
+Development status: Progressive.
+ <p />
+Cromfs has been in beta stage for over a year, during which time
+very little bugs have been reported, and no known bugs remain at
+this time.
+ <p />
+It does not make sense to keep it as \"beta\" indefinitely,
+but since there is never going to be a \"final\" version &mdash;
+new versions may always be released &mdash; it is now labeled
+as \"progressive\".
+ <p />
+In practice, the author trusts it works as advertised, but as per GPL policy,
+there is NO WARRANTY whatsoever. The entire risk to the quality and performance
+of the program suite is with you.
+ <pre>#include \"GNU gdb/show warranty\"</pre>
 
 ", 'compare:1. Comparing to other filesystems' => "
 
@@ -426,11 +441,14 @@ the memory usage would be around 10.2&nbsp;MB.
     it does not work. If it gives \"operation not permitted\", it might work.</li>
      </ul></li>
   </ul></li>
- <li>Build \"cromfs-driver\", \"util/mkcromfs\", \"util/cvcromfs\" and \"util/unmkcromfs\", i.e. command \"make\":
+ <li>Build the programs:
   <pre>\$ make</pre>
   
   If you get compilation problems related to <tt>hash_map</tt> or <tt>hash</tt>, 
   edit cromfs-defs.hh and remove the line that says <tt>#define USE_HASHMAP</tt>.
+   <p>
+  This builds the programs \"cromfs-driver\", \"cromfs-driver-static\",
+  \"util/mkcromfs\", \"util/cvcromfs\" and \"util/unmkcromfs\".
    </li>
  <li>Create a sample filesystem:
   <pre>\$ util/mkcromfs . sample.cromfs</pre>
@@ -456,6 +474,8 @@ the memory usage would be around 10.2&nbsp;MB.
 
 To improve the compression, try these tips:
 <ul>
+ <li>Do not change --lzmafastbytes. The default value is 273,
+     which is the maximum possible.</li>
  <li>Adjust the block size (--bsize) in mkcromfs. If your files
      have a lot identical content, aligned at a certain boundary,
      use that boundary as the block size value. If you are uncertain,
@@ -467,7 +487,7 @@ To improve the compression, try these tips:
  <li>Adjust the fblock size (--fsize) in mkcromfs. Larger values
      cause almost always better compression. However, large values
      also increase memory consumption when the filesystem is mounted,
-     so keep it sane. If uncertain, use the default (2<sup>21</sup> bytes).
+     so keep it sane. If uncertain, use the default value (2097152).
     <br />
      Note: The value does not need to be a power of two.
   </li>
@@ -478,20 +498,20 @@ To improve the compression, try these tips:
      means better compression.<br />
      You can use this formula to pick an optimal
      maximum value for -a:<br />
-      <code>amount_of_spare_RAM &times; blocksize / (32 &times; total_size_of_files &times; estimated_remaining_ratio)</code>
+      <code>amount_of_spare_RAM &times; bsize / (32 &times; total_size_of_files &times; estimated_remaining_ratio)</code>
 
 <!--
 sum_fblocks = total_size_of_files * estimated_remaining_ratio
-autoindexratio = blocksize / autoindexperiod
+autoindexratio = bsize / autoindexperiod
 amount_of_RAM = 32 * sum_fblocks / autoindexperiod
   hence
-amount_of_RAM = 32 * sum_fblocks / (blocksize / autoindexratio)
+amount_of_RAM = 32 * sum_fblocks / (bsize / autoindexratio)
   hence
-amount_of_RAM = autoindexratio * 32 * sum_fblocks / blocksize
+amount_of_RAM = autoindexratio * 32 * sum_fblocks / bsize
   hence
-autoindexratio = amount_of_RAM * blocksize / 32 / sum_fblocks
+autoindexratio = amount_of_RAM * bsize / 32 / sum_fblocks
   hence
-autoindexratio = amount_of_RAM * blocksize / (32 * total_size_of_files * estimated_remaining_ratio)
+autoindexratio = amount_of_RAM * bsize / (32 * total_size_of_files * estimated_remaining_ratio)
 -->
      <br />
      where <code>estimated_remaining_ratio</code> is a decimal number
@@ -511,10 +531,48 @@ autoindexratio = amount_of_RAM * blocksize / (32 * total_size_of_files * estimat
      the --fsize (thus improving compression) by an integer factor
      without increasing the memory or CPU usage of cromfs-driver.
      Using it is recommended, unless you want mkcromfs to be fast.<br />
-     Although there are no upper limits on the recommended values of -c,
-     it is not meaningful to make it larger than the resulting fblock
-     count on the filesystem being created.
+     The upper limit on meaningful values for the -c option is the
+     number of fblocks on the resulting filesystem.
+     <br />
+     If uncertain, try something like the value of <code>33554432 / fsize</code>.
+     For 2 MB fblocks, that would make -c16.
   </li>
+ <li>If your filesystem contains less than 4 GB of unique data, add
+     the --packedblocks option (-k). It will save (number_of_blocks*4)
+     bytes of uncompressed room by making
+     BLKTAB smaller.<br />
+     Due to LZMA compression, the saving in file size might become
+     neglible, but it will make cromfs-driver slightly faster,
+     and there are no speed penalties.</li>
+ <li>You can approximate how many blocks your filesystem will
+     have by this formula: <code>total_amount_of_unique_data / bsize</code>.
+     <ul>
+      <li>If the value is less than 65536, use the
+     --16bitblocknums (-2) option. It will theoretically save
+     (number_of_blocks*2) bytes of uncompressed room by making
+     inodes smaller.</li>
+      <li>If the value is less than 16777216, use the
+     --24bitblocknums (-3) option. It will theoretically save
+     (number_of_blocks) bytes of uncompressed room by making
+     inodes smaller.</li>
+     </ul>
+     Due to LZMA compression, the saving in file size might become
+     neglible, but it will make cromfs-driver slightly faster,
+     and there are no speed penalties.</li>
+ <li>Adjust the --lzmabits values. This affects the compression
+     phase of mkcromfs (the last phase after blockifying)
+  <ul>
+   <li>Use \"--lzmabits full\" if you have
+     absolutely no regard for compression time &mdash; it will try each
+     and every combination of pb, lp and lc and choose the one that results
+     in best LZMA compression &mdash; for every compressed item separately.
+     It is 225 times slower than the normal way.</li>
+   <li>Use \"--lzmabits auto\" if you want mkcromfs to use a heuristic
+     algorithm to choose the parameters based on a few experiments.
+     It is 27&hellip;200 times slower than the normal way,
+     depending on the data. This is enabled by default. Specifying
+     \"full\" or giving the values manually overrides it.</li>
+  </ul>
 </ul>
 
 ", '1.1.1. To improve mkcromfs speed' => "
@@ -524,7 +582,7 @@ To improve the filesystem generation speed, try these tips:
  <li>Use the --decompresslookups option (-e), if you have the
      diskspace to spare.</li>
  <li>Use a large value for the --randomcompressperiod option,
-     for example -r10000. This together with -e will significantly
+     for example -r100000. This together with -e will significantly
      improve the speed of mkcromfs, on the cost of temporary disk
      space usage. A small value causes mkcromfs to randomly compress
      one of the temporary fblocks more often. It has no effect to
@@ -532,6 +590,10 @@ To improve the filesystem generation speed, try these tips:
   </li>
  <li><a name=\"tempdir\"></a>Use the TEMP environment variable to control where the temp
      files are written. Example: <tt>TEMP=~/cromfs-temp ./mkcromfs &hellip;</tt></li>
+ <li>Specify a low value for --lzmafastbytes in the mkcromfs command
+     line. This will cause LZMA to consume less memory and be faster,
+     at the cost of compression power. The default value is 273 (maximum).
+     The minimum possible value is 5.</li>
  <li>Use larger block size (--bsize). Smaller blocks mean more blocks
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0
@@ -843,9 +905,6 @@ to this package.
   </ul></li>
  <li>Topic: Increasing useability
   <ul>
-   <li>Changing cromfs-driver so the timing between launch and the
-    filesystem being accessible is deterministic from something
-    more sane than waiting for \"ready\" to be output in stderr</li>
    <li>A proof of concept example of utilizing cromfs
     in a root filesystem (with initramfs)</li>
    <li>Add appending support (theoretically doable, just not very fast)</li>
@@ -855,6 +914,12 @@ to this package.
    <li>Graphical illustration on the filesystem structure
     (fs consists of fblocks, and files are split in blocks
      which are actually indexes to various fblocks)</li>
+   <li>Document the modular structure of the source code</li>
+ </ul></li>
+ <li>Topic: Portability
+  <ul>
+   <li>Write a Windows filesystem driver?</li>
+   <li>Test on big-endian system</li>
  </ul></li>
 </ul>
 

@@ -39,7 +39,6 @@ the fuse_reply_err() function.
         REPLY_ERR(ENOMEM); \
     }/*catch(char){}*/
 
-
 #define READDIR_DEBUG   0
 
 #define LIGHTWEIGHT_READDIR 0
@@ -93,7 +92,7 @@ extern "C" {
         stbuf.f_ffree  = 0;
         stbuf.f_fsid   = 0;
         stbuf.f_flag   = ST_RDONLY;
-        stbuf.f_namemax= 4096;
+        stbuf.f_namemax= (unsigned long int)(~0UL);
         fuse_reply_statfs(req, &stbuf);
         
         CROMFS_CTX_END()
@@ -128,21 +127,23 @@ extern "C" {
         
         CROMFS_CTX(fs)
         
-        const cromfs_dirinfo filelist = fs.read_dir(parent,  0, ~0U);
-        cromfs_dirinfo::const_iterator j = filelist.find(name);
-        bool found = j != filelist.end();
+        /* doc/FORMAT speaks of fast implementation of lookup()
+         * using binary search. Such method is now used by fs.dir_lookup().
+         */
         
+        cromfs_inodenum_t inonum = fs.dir_lookup(parent, name);
         fuse_entry_param pa;
-        pa.ino        = found ? j->second : 0;
-        pa.generation = j->second;
+        pa.ino        = inonum;
+        pa.generation = inonum;
         pa.attr_timeout  = TIMEOUT_CONSTANT;
         pa.entry_timeout = TIMEOUT_CONSTANT;
         
-        cromfs_inode_internal ino = fs.read_inode(j->second);
-        
-        if(trace_ops) fprintf(stderr, "lookup: using inode: %s\n", DumpInode(ino).c_str());
-        
-        stat_inode(pa.attr, j->second, ino);
+        if(inonum != 0)
+        {
+            cromfs_inode_internal ino = fs.read_inode(inonum);
+            if(trace_ops) fprintf(stderr, "lookup: using inode: %s\n", DumpInode(ino).c_str());
+            stat_inode(pa.attr, inonum, ino);
+        }
         
         fuse_reply_entry(req, &pa);
         
@@ -220,10 +221,10 @@ extern "C" {
         
         const cromfs_inode_internal i = fs.read_inode_and_blocks(ino);
 
-        unsigned char* Buf = new unsigned char[size];
-        int_fast64_t result = fs.read_file_data(i, off, Buf, size, "fileread");
-        fuse_reply_buf(req, (const char*)Buf, result);
-        delete[] Buf;
+        std::vector<unsigned char> Buf(size);
+        
+        int_fast64_t result = fs.read_file_data(i, off, &Buf[0], size, "fileread");
+        fuse_reply_buf(req, (const char*)&Buf[0], result);
         
         CROMFS_CTX_END()
     }
@@ -265,6 +266,12 @@ extern "C" {
         unsigned size_per_elem = 64;
         
         unsigned dirbuf_head = 0;
+        
+        /* Just in case, read the entire directory. There is very
+         * rarely a need to readdir() only a portion of it.
+         * This way, we will have it in cache.
+         */
+        fs.read_dir(ino, 0, (uint_fast32_t)~0U);
         
         while(size > 0)
         {

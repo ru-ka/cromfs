@@ -1,4 +1,4 @@
-VERSION=1.3.0
+VERSION=1.4.0
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -13,6 +13,7 @@ ARCHFILES=\
 	doc/ImplementationGuide.txt \
 	doc/WriteAccess.txt \
 	doc/BlockIndexing.txt \
+	doc/size_demo.txt \
 	doc/boxart.png \
 	doc/boxart-src.zip \
 	cromfs.spec \
@@ -21,7 +22,7 @@ ARCHFILES=\
 	cromfs-write.cc cromfs-write.hh \
 	cromfs-ops.cc cromfs-ops.hh \
 	main.c \
-	LzmaDecode.c LzmaDecode.h \
+	LzmaDecode.c LzmaDecode.h LzmaTypes.h \
 	\
 	range.hh range.tcc \
 	rangeset.hh rangeset.tcc \
@@ -35,6 +36,7 @@ ARCHFILES=\
 	util/lzma.cc util/lzma.hh \
 	util/util.cc util/util.hh \
 	util/fblock.cc util/fblock.hh \
+	util/append.cc util/append.hh \
 	util/fnmatch.cc util/fnmatch.hh \
 	util/crc32.h util/crc32.cc \
 	util/assert++.hh util/assert++.cc \
@@ -52,49 +54,49 @@ ARCHFILES=\
 	\
 	util/lzma/ORIGIN \
 	util/lzma/LGPL.txt \
+	util/lzma/lzma.txt \
 	\
-	util/lzma/C/7zip/Common/OutBuffer.h \
-	util/lzma/C/7zip/Common/StreamUtils.cpp \
-	util/lzma/C/7zip/Common/StdAfx.h \
-	util/lzma/C/7zip/Common/StreamUtils.h \
-	util/lzma/C/7zip/Common/InBuffer.h \
-	util/lzma/C/7zip/Common/OutBuffer.cpp \
-	util/lzma/C/7zip/Compress/LZ/HashChain/HC4.h \
-	util/lzma/C/7zip/Compress/LZ/HashChain/HCMain.h \
-	util/lzma/C/7zip/Compress/LZ/BinTree/BinTree2.h \
-	util/lzma/C/7zip/Compress/LZ/BinTree/BinTree3.h \
-	util/lzma/C/7zip/Compress/LZ/BinTree/BinTree4.h \
-	util/lzma/C/7zip/Compress/LZ/BinTree/BinTreeMain.h \
-	util/lzma/C/7zip/Compress/LZ/BinTree/BinTree.h \
-	util/lzma/C/7zip/Compress/LZ/IMatchFinder.h \
-	util/lzma/C/7zip/Compress/LZ/StdAfx.h \
-	util/lzma/C/7zip/Compress/LZ/LZInWindow.cpp \
-	util/lzma/C/7zip/Compress/LZ/LZInWindow.h \
-	util/lzma/C/7zip/Compress/LZMA/LZMA.h \
-	util/lzma/C/7zip/Compress/LZMA/StdAfx.h \
-	util/lzma/C/7zip/Compress/LZMA/LZMAEncoder.h \
-	util/lzma/C/7zip/Compress/LZMA/LZMAEncoder.cpp \
-	util/lzma/C/7zip/Compress/RangeCoder/RangeCoderBit.cpp \
-	util/lzma/C/7zip/Compress/RangeCoder/StdAfx.h \
-	util/lzma/C/7zip/Compress/RangeCoder/RangeCoder.h \
-	util/lzma/C/7zip/Compress/RangeCoder/RangeCoderBit.h \
-	util/lzma/C/7zip/Compress/RangeCoder/RangeCoderOpt.h \
-	util/lzma/C/7zip/Compress/RangeCoder/RangeCoderBitTree.h \
-	util/lzma/C/7zip/ICoder.h \
-	util/lzma/C/7zip/IStream.h \
-	util/lzma/C/Common/Defs.h \
-	util/lzma/C/Common/Alloc.h \
-	util/lzma/C/Common/CRC.h \
-	util/lzma/C/Common/MyUnknown.h \
-	util/lzma/C/Common/StdAfx.h \
-	util/lzma/C/Common/MyWindows.h \
-	util/lzma/C/Common/MyInitGuid.h \
-	util/lzma/C/Common/Alloc.cpp \
-	util/lzma/C/Common/NewHandler.h \
-	util/lzma/C/Common/MyGuidDef.h \
-	util/lzma/C/Common/MyCom.h \
-	util/lzma/C/Common/CRC.cpp \
-	util/lzma/C/Common/Types.h \
+	util/lzma/C/7zCrc.c \
+	util/lzma/C/7zCrc.h \
+	util/lzma/C/Alloc.c \
+	util/lzma/C/Alloc.h \
+	util/lzma/C/IStream.h \
+	util/lzma/C/Types.h \
+	util/lzma/CPP/Common/CRC.cpp \
+	util/lzma/CPP/Common/Defs.h \
+	util/lzma/CPP/Common/MyCom.h \
+	util/lzma/CPP/Common/MyException.h \
+	util/lzma/CPP/Common/MyGuidDef.h \
+	util/lzma/CPP/Common/MyInitGuid.h \
+	util/lzma/CPP/Common/MyUnknown.h \
+	util/lzma/CPP/Common/MyWindows.h \
+	util/lzma/CPP/Common/NewHandler.h \
+	util/lzma/CPP/Common/StdAfx.h \
+	util/lzma/CPP/Common/Types.h \
+	util/lzma/C/Compress/Lz/LzHash.h \
+	util/lzma/C/Compress/Lz/MatchFinder.c \
+	util/lzma/C/Compress/Lz/MatchFinder.h \
+	util/lzma/C/Compress/Lzma/LzmaDecode.c \
+	util/lzma/C/Compress/Lzma/LzmaDecode.h \
+	util/lzma/C/Compress/Lzma/LzmaTypes.h \
+	util/lzma/CPP/7zip/ICoder.h \
+	util/lzma/CPP/7zip/IStream.h \
+	util/lzma/CPP/7zip/Common/InBuffer.h \
+	util/lzma/CPP/7zip/Common/OutBuffer.cpp \
+	util/lzma/CPP/7zip/Common/OutBuffer.h \
+	util/lzma/CPP/7zip/Common/StdAfx.h \
+	util/lzma/CPP/7zip/Common/StreamUtils.cpp \
+	util/lzma/CPP/7zip/Common/StreamUtils.h \
+	util/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.cpp \
+	util/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.h \
+	util/lzma/CPP/7zip/Compress/LZMA/LZMA.h \
+	util/lzma/CPP/7zip/Compress/LZMA/StdAfx.h \
+	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.cpp \
+	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.h \
+	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBitTree.h \
+	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoder.h \
+	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderOpt.h \
+	util/lzma/CPP/7zip/Compress/RangeCoder/StdAfx.h \
 	\
 	tests/run.sh \
 	tests/a/fblock.hh tests/a/lzma.hh \
