@@ -77,7 +77,7 @@ struct StorageOptToucher: public BlockToucher
 };
 struct BlkTabConverter: public BlockToucher
 {
-    uint_fast32_t fsize;
+    uint_fast32_t bsize,fsize;
     bool HadPacked;
     bool WantPacked;
     
@@ -87,25 +87,40 @@ struct BlkTabConverter: public BlockToucher
     {
         if(HadPacked != WantPacked)
         {
-            unsigned NumBlocks = Buffer.size() / (HadPacked ? 4 : 8);
-            std::vector<cromfs_block_storage> blktab( NumBlocks);
+            const unsigned OldBlockSize = (HadPacked ? 4 : 8);
+            
+            unsigned NumBlocks = Buffer.size() / OldBlockSize;
+            
+            std::vector<cromfs_block_internal> blktab( NumBlocks);
+            
             for(unsigned a=0; a<NumBlocks; ++a)
+            {
+                uint_fast32_t fblocknum = 0;
+                uint_fast32_t startoffs = 0;
                 if(HadPacked)
-                    blktab[a].fblocknum = R32(&Buffer[a*4]) / fsize,
-                    blktab[a].startoffs = R32(&Buffer[a*4]) % fsize;
+                    fblocknum = R32(&Buffer[a*4]) / fsize,
+                    startoffs = R32(&Buffer[a*4]) % fsize;
                 else
-                    blktab[a].fblocknum = R32(&Buffer[a*8+0]),
-                    blktab[a].startoffs = R32(&Buffer[a*8+4]);
-        
-            Buffer.resize(NumBlocks * (WantPacked ? 4 : 8));
+                    fblocknum = R32(&Buffer[a*8+0]),
+                    startoffs = R32(&Buffer[a*8+4]);
+                blktab[a].define(fblocknum, startoffs, bsize,fsize);
+            }
+            
+            const unsigned NewBlockSize = (WantPacked ? 4 : 8);
+            
+            Buffer.resize(NumBlocks * NewBlockSize);
             for(unsigned a=0; a<NumBlocks; ++a)
+            {
+                uint_fast32_t fblocknum = blktab[a].get_fblocknum(bsize,fsize);
+                uint_fast32_t startoffs = blktab[a].get_startoffs(bsize,fsize);
                 if(WantPacked)
                     W32(&Buffer[a*4],
-                        blktab[a].fblocknum * fsize
-                      + blktab[a].startoffs);
+                        fblocknum * fsize
+                      + startoffs);
                 else
-                    W32(&Buffer[a*8+0], blktab[a].fblocknum),
-                    W32(&Buffer[a*8+4], blktab[a].startoffs);
+                    W32(&Buffer[a*8+0], fblocknum),
+                    W32(&Buffer[a*8+4], startoffs);
+            }
         }
     }
 };
@@ -304,7 +319,8 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     BlkTabConverter ConvertBlkTab;
     ConvertBlkTab.HadPacked = old_storage_opts & CROMFS_OPT_PACKED_BLOCKS;
     ConvertBlkTab.WantPacked = storage_opts & CROMFS_OPT_PACKED_BLOCKS;
-    ConvertBlkTab.fsize = sblock.compressed_block_size;
+    ConvertBlkTab.bsize = sblock.bsize;
+    ConvertBlkTab.fsize = sblock.fsize;
     
     sblock.blktab_size =
         ConvertBuffer(infd,outfd,
@@ -361,7 +377,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
         
         if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
         {
-            if(new_size > sblock.compressed_block_size)
+            if(new_size > sblock.fsize)
             {
                 std::printf("\n");
                 std::fflush(stdout);
@@ -380,12 +396,12 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
         pwrite64(outfd, Buf, 4, write_offs);
         
         if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
-            write_offs += 4 + sblock.compressed_block_size;
+            write_offs += 4 + sblock.fsize;
         else
             write_offs += 4 + new_size;
         
         if(old_storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
-            read_offs += 4 + sblock.compressed_block_size;
+            read_offs += 4 + sblock.fsize;
         else
             read_offs += 4 + (uint_fast64_t)fblock.length;
     }
@@ -438,6 +454,8 @@ int main(int argc, char** argv)
             {"verbose",     0, 0,'v'},
             {"lzmafastbytes",           1,0,4001},
             {"lzmabits",                1,0,4002},
+            {"bwt",                     0,0,2001},
+            {"mtf",                     0,0,2002},
             {0,0,0,0}
         };
         int c = getopt_long(argc, argv, "hVs:o:rS:fk", long_options, &option_index);
@@ -493,6 +511,10 @@ int main(int argc, char** argv)
                     "     Alternatively, you can choose \"--lzmabits full\", which will\n"
                     "     try every possible option. Beware it will consume lots of time.\n"
                     "     \"--lzmabits auto\" is a lighter alternative to \"--lzmabits full\".\n"
+                    " --bwt\n"
+                    "     Use BWT transform when compressing. Experimental.\n"
+                    " --mtf\n"
+                    "     Use MTF transform when compressing. Experimental.\n"
                     "\n");
                 return 0;
             }
@@ -556,6 +578,16 @@ int main(int argc, char** argv)
                 storage_opts |= CROMFS_OPT_PACKED_BLOCKS;
                 break;
             }
+            case 2001: // bwt
+            {
+                storage_opts |= CROMFS_OPT_USE_BWT;
+                break;
+            }
+            case 2002: // mtf
+            {
+                storage_opts |= CROMFS_OPT_USE_MTF;
+                break;
+            }
             case 4001: // lzmafastbytes
             {
                 char* arg = optarg;
@@ -575,10 +607,12 @@ int main(int argc, char** argv)
                 {
                     if(!arg_index && !strcmp(arg, "auto")) { LZMA_HeavyCompress=1; break; }
                     if(!arg_index && !strcmp(arg, "full")) { LZMA_HeavyCompress=2; break; }
+                    LZMA_HeavyCompress=0;
                     while(*arg==' ')++arg;
                     if(!*arg) break;
                     char* comma = strchr(arg, ',');
                     if(!comma) comma = strchr(arg, '\0');
+                    bool last_comma = !*comma;
                     *comma = '\0';
                     long value = strtol(arg, &arg, 10);
                     long max=4;
@@ -586,21 +620,24 @@ int main(int argc, char** argv)
                     {
                         case 0: // pb
                             LZMA_PosStateBits = value;
+                            //fprintf(stderr, "pb=%ld\n", value);
                             break;
                         case 1: // lp
                             LZMA_LiteralPosStateBits = value;
+                            //fprintf(stderr, "lp=%ld\n", value);
                             break;
                         case 2: // lc
                             LZMA_LiteralContextBits = value;
+                            //fprintf(stderr, "lc=%ld\n", value);
                             max=8;
                             break;
                     }
                     if(value < 0 || value > max || arg_index > 2)
                     {
-                        std::fprintf(stderr, "cvcromfs: Invalid value(s) for --lzmabits. See `cvcrmfs --help'\n");
+                        std::fprintf(stderr, "mkcromfs: Invalid value(s) for --lzmabits. See `mkcromfs --help'\n");
                         return -1;
                     }
-                    if(!*comma) break;
+                    if(last_comma) break;
                     arg=comma+1;
                     ++arg_index;
                 }

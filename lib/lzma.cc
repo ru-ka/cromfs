@@ -314,8 +314,8 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 
 #undef RC_NORMALIZE
 
-#include "../LzmaDecode.h"
-#include "../LzmaDecode.c"
+#include "LzmaDecode.h"
+#include "LzmaDecode.c"
 
 const std::vector<unsigned char> LZMADeCompress
     (const std::vector<unsigned char>& buf)

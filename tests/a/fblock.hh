@@ -2,59 +2,21 @@
 #define DEBUG_OVERLAP 0
 #define DEBUG_FBLOCKINDEX 0
 
+#include "mmapping.hh"
+#include "boyermoore.hh"
+#include "datareadbuf.hh"
+#include "append.hh"
+#include "lzma.hh"
+
 #include <vector>
 #include <string>
 #include <cstdio>
 #include <cstdlib>
 #include <stdint.h>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "boyermoore.hh"
-#include "append.hh"
-#include "lzma.hh"
-
 const char* GetTempDir();
-
-struct DataReadBuffer
-{
-    const unsigned char* Buffer;
-private:
-    enum { None, Allocated } State;
-public:
-    DataReadBuffer() : Buffer(NULL), State(None) { }
-    
-    void AssignRefFrom(const unsigned char* d, unsigned)
-    {
-        Buffer = d; State = None;
-    }
-    void AssignCopyFrom(const unsigned char* d, unsigned size)
-    {
-        unsigned char* p = new unsigned char[size];
-        std::memcpy(p, d, size);
-        State = Allocated;
-        Buffer = p;
-    }
-    void LoadFrom(int fd, uint_fast32_t size)
-    {
-        unsigned char* pp = new unsigned char[size];
-        int res = pread(fd, pp, size, 0);
-        Buffer = pp;
-        State = Allocated;
-    }
-    ~DataReadBuffer()
-    {
-        switch(State)
-        {
-            case Allocated: delete[] Buffer; break;
-            case None: ;
-        }
-    }
-private:
-    void operator=(const DataReadBuffer&);
-    DataReadBuffer(const DataReadBuffer&);
-};
 
 class fblock_storage
 {
@@ -62,7 +24,7 @@ private:
     int fblock_disk_id;
     bool is_compressed;
     uint_fast32_t filesize;
-    unsigned char* mmapped;
+    MemMappingType<false> mmapped;
 public:
     fblock_storage()
     {
@@ -70,7 +32,7 @@ public:
         fblock_disk_id = disk_id++;
         filesize = 0;
         is_compressed = false;
-        mmapped = NULL;
+        mmapped.Unmap();
     }
     
     bool is_uncompressed() const { return !is_compressed; }
@@ -189,12 +151,12 @@ private:
              std::vector<unsigned char>* compressed);
 
     void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size);
+    void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size,
+                            uint_fast32_t req_offset,
+                            uint_fast32_t req_size);
 
 public:
-    void Unmap()
-    {
-        if(mmapped) { munmap(mmapped, filesize); mmapped = NULL; }
-    }
+    void Unmap() { mmapped.Unmap(); }
     void Remap()
     {
         Unmap();
@@ -214,11 +176,7 @@ public:
     }
     
 private:
-    void RemapFd(int fd)
-    {
-        void* p = mmap(NULL, filesize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-        if(p != (void*)-1) mmapped = (unsigned char*)p;
-    }
+    void RemapFd(int fd) { mmapped.SetMap(fd, 0, filesize); }
 
 public:
     typedef uint_fast32_t undo_t;

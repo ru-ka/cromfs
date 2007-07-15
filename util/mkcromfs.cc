@@ -14,6 +14,7 @@
 
 #ifdef USE_HASHMAP
 # include <ext/hash_map>
+# include "hash.hh"
 #endif
 
 #include <unistd.h>
@@ -35,6 +36,8 @@
 #include "crc32.h"
 #include "util.hh"
 #include "fnmatch.hh"
+#include "bwt.hh"
+#include "mtf.hh"
 
 /* Settings */
 #include "mkcromfs_sets.hh"
@@ -45,12 +48,16 @@ unsigned RandomCompressPeriod = 20;
 uint_fast32_t MinimumFreeSpace = 16;
 uint_fast32_t AutoIndexPeriod = 256;
 uint_fast32_t MaxFblockCountForBruteForce = 1;
+bool MayPackBlocks = true;
+bool MayAutochooseBlocknumSize = true;
+bool MaySuggestDecompression = true;
 
-size_t BlockifyAmount1 = 64; // Number of blockifys to keep in buffer, hoping for optimal sorting
-size_t BlockifyAmount2 = 1;  // Number of blockifys to add to buffer at once
-
+// Number of blockifys to keep in buffer, hoping for optimal sorting
+size_t BlockifyAmount1 = 64;
+// Number of blockifys to add to buffer at once
+size_t BlockifyAmount2 = 1;
+// 0 = nope. 1 = yep, 2 = yes, and try combinations too
 int TryOptimalOrganization = 0;
-    /* 0 = nope. 1 = yep, 2 = yes, and try combinations too */
 
 
 long FSIZE = 2097152;
@@ -93,15 +100,24 @@ static uint_fast32_t storage_opts = 0x00000000;
       - 2*!!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS) )
 
 
-#define NO_BLOCK ((cromfs_blocknum_t)~0ULL)
-struct mkcromfs_block_location
+#define NO_BLOCK ((cromfs_blocknum_t)~UINT64_C(0))
+
+struct mkcromfs_block_location: public cromfs_block_internal
 {
-    cromfs_fblocknum_t fblocknum;
-    uint_least32_t     startoffs;
-    cromfs_blocknum_t  blocknum;
-    mkcromfs_block_location(cromfs_fblocknum_t f, uint_fast32_t o,
-                            cromfs_blocknum_t b)
-        : fblocknum(f), startoffs(o), blocknum(b)
+    cromfs_blocknum_t  blocknum __attribute__((packed));
+
+    mkcromfs_block_location(
+        cromfs_fblocknum_t fbnum, uint_fast32_t sofs,
+        cromfs_blocknum_t b)
+            : cromfs_block_internal(), blocknum(b)
+    {
+        cromfs_block_internal::define(fbnum, sofs, BSIZE,FSIZE);
+    }
+
+    mkcromfs_block_location(
+        const cromfs_block_internal& bi,
+        cromfs_blocknum_t b)
+            : cromfs_block_internal(bi), blocknum(b)
     {
     }
 } __attribute__((packed));
@@ -113,10 +129,10 @@ class cromfs
 private:
     uint_fast64_t amount_blockdata;
     uint_fast64_t amount_fblockdata;
-    int ExitStatus;
+    mutable int ExitStatus;
 
     /* These data will be written into the filesystem. */
-    std::vector<cromfs_block_storage> blocks;
+    std::vector<cromfs_block_internal> blocks;
     std::vector<mkcromfs_fblock> fblocks;
     std::vector<unsigned char> inotab;
     std::vector<unsigned char> raw_root_inode;
@@ -152,15 +168,16 @@ public:
     
     void WalkRootDir(const std::string& path)
     {
-        if(DisplayFiles)
-        {
-            std::printf("Paths scanned, now blockifying\n");
-        }
-        if(true)
+        if(true) // scope
         {
             cromfs_inode_internal rootdir;
             
             cromfs_dirinfo dirinfo = WalkDir(path);
+            
+            if(DisplayFiles)
+            {
+                std::printf("Paths scanned, now blockifying\n");
+            }
             
             rootdir.mode     = S_IFDIR | 0555;
             rootdir.time     = time(NULL);
@@ -178,7 +195,7 @@ public:
             
             schedule->RepointAsRawInode(raw_root_inode, 0);
         }
-        if(true)
+        if(true) // scope
         {
             cromfs_inode_internal inotab_inode;
             inotab_inode.mode = storage_opts;
@@ -210,13 +227,15 @@ public:
             schedule->RepointAsRawInode(raw_inotab_inode, 0);
         }
         FlushBlockifyRequests();
+        EnablePackedBlocksIfPossible();
+        W32(&raw_inotab_inode[0], storage_opts);
     }
 
     /***********************************************/
     /* End here: Write the filesystem into a file. */
     /***********************************************/
     
-    void WriteTo(int fd)
+    void WriteTo(int fd) const
     {
 #if 0 /* for speed profiling */
         uint_fast64_t tmp=0;
@@ -238,58 +257,65 @@ public:
                     );
         }
         
+        std::vector<unsigned char>
+            compressed_inotab_inode,
+            compressed_root_inode;
+        
         if(LZMA_HeavyCompress==2)
         {
-            raw_inotab_inode = LZMACompressHeavy(raw_inotab_inode, "raw_inotab_inode");
-            raw_root_inode   = LZMACompressHeavy(raw_root_inode, "raw_root_inode");
+            compressed_inotab_inode = LZMACompressHeavy(raw_inotab_inode, "raw_inotab_inode");
+            compressed_root_inode   = LZMACompressHeavy(raw_root_inode, "raw_root_inode");
         }
         else if(LZMA_HeavyCompress)
         {
-            raw_inotab_inode = LZMACompressAuto(raw_inotab_inode, "raw_inotab_inode");
-            raw_root_inode   = LZMACompressAuto(raw_root_inode, "raw_root_inode");
+            compressed_inotab_inode = LZMACompressAuto(raw_inotab_inode, "raw_inotab_inode");
+            compressed_root_inode   = LZMACompressAuto(raw_root_inode, "raw_root_inode");
         }
         else
         {
-            raw_inotab_inode = LZMACompress(raw_inotab_inode);
-            raw_root_inode   = LZMACompress(raw_root_inode);
+            compressed_inotab_inode = LZMACompress(raw_inotab_inode);
+            compressed_root_inode   = LZMACompress(raw_root_inode);
         }
         
+        unsigned onesize = (storage_opts & CROMFS_OPT_PACKED_BLOCKS) ? 4 : 8;
         if(DisplayEndProcess)
         {
-            unsigned onesize = (storage_opts & CROMFS_OPT_PACKED_BLOCKS) ? 4 : 8;
             std::printf("Compressing %u block records (%u bytes each)...",
                 (unsigned)blocks.size(), onesize);
             fflush(stdout);
         }
 
-        std::vector<unsigned char> raw_blktab;
+        std::vector<unsigned char> raw_blktab(blocks.size() * onesize);
         if(storage_opts & CROMFS_OPT_PACKED_BLOCKS)
-        {
-            raw_blktab.resize( blocks.size() * 4 );
             for(unsigned a=0; a<blocks.size(); ++a)
             {
-                W32(&raw_blktab[a*4],
-                  blocks[a].fblocknum * FSIZE + blocks[a].startoffs);
+                uint_fast32_t fblocknum = blocks[a].get_fblocknum(BSIZE,FSIZE);
+                uint_fast32_t startoffs = blocks[a].get_startoffs(BSIZE,FSIZE);
+                
+                //fprintf(stderr, "Writing P block %u = %u:%u\n", a,fblocknum,startoffs);
+                
+                W32(&raw_blktab[a*onesize], fblocknum * FSIZE + startoffs);
             }
-        }
         else
-        {
-            raw_blktab.resize( blocks.size() * 8 );
             for(unsigned a=0; a<blocks.size(); ++a)
             {
-                W32(&raw_blktab[a*8+0], blocks[a].fblocknum);
-                W32(&raw_blktab[a*8+4], blocks[a].startoffs);
+                uint_fast32_t fblocknum = blocks[a].get_fblocknum(BSIZE,FSIZE);
+                uint_fast32_t startoffs = blocks[a].get_startoffs(BSIZE,FSIZE);
+
+                //fprintf(stderr, "Writing NP block %u = %u:%u\n", a,fblocknum,startoffs);
+
+                W32(&raw_blktab[a*onesize+0], fblocknum);
+                W32(&raw_blktab[a*onesize+4], startoffs);
             }
-        }
         
         if(LZMA_HeavyCompress==2)
         {
             raw_blktab = LZMACompressHeavy(raw_blktab, "raw_blktab");
         }
-        else if(LZMA_HeavyCompress)
+        /*else if(LZMA_HeavyCompress)
         {
             raw_blktab = LZMACompressAuto(raw_blktab, "raw_blktab");
-        }
+        }*/
         else
         {
             const unsigned blktab_periodicity
@@ -307,16 +333,16 @@ public:
 
         cromfs_superblock_internal sblock;
         sblock.sig          = CROMFS_SIGNATURE;
-        sblock.rootdir_size = raw_root_inode.size();
-        sblock.inotab_size  = raw_inotab_inode.size();
+        sblock.rootdir_size = compressed_root_inode.size();
+        sblock.inotab_size  = compressed_inotab_inode.size();
         sblock.blktab_size  = raw_blktab.size();
         
         sblock.rootdir_room = sblock.rootdir_size * RootDirInflateFactor;
         sblock.inotab_room  = sblock.inotab_size  * InotabInflateFactor;
         sblock.blktab_room  = sblock.blktab_size  * BlktabInflateFactor;
         
-        sblock.compressed_block_size   = FSIZE;
-        sblock.uncompressed_block_size = BSIZE;
+        sblock.fsize   = FSIZE;
+        sblock.bsize = BSIZE;
         sblock.bytes_of_files          = bytes_of_files;
         
         sblock.SetOffsets();
@@ -329,9 +355,9 @@ public:
         write(fd, Superblock, sblock.GetSize());
         
         //fprintf(stderr, "root goes at %llX\n", lseek64(fd,0,SEEK_CUR));
-        SparseWrite(fd, &raw_root_inode[0],   raw_root_inode.size(), sblock.rootdir_offs);
+        SparseWrite(fd, &compressed_root_inode[0],   compressed_root_inode.size(), sblock.rootdir_offs);
         //fprintf(stderr, "inotab goes at %llX\n", lseek64(fd,0,SEEK_CUR));
-        SparseWrite(fd, &raw_inotab_inode[0], raw_inotab_inode.size(), sblock.inotab_offs);
+        SparseWrite(fd, &compressed_inotab_inode[0], compressed_inotab_inode.size(), sblock.inotab_offs);
 
         SparseWrite(fd, &raw_blktab[0], raw_blktab.size(), sblock.blktab_offs);
         
@@ -350,26 +376,42 @@ public:
             }
             
             char Buf[64];
-            std::vector<unsigned char> fblock, fblock_raw;
+            std::vector<unsigned char> fblock_lzma, fblock_raw;
             
-            fblocks[a].get(fblock_raw, fblock);
+            if(storage_opts & (CROMFS_OPT_USE_BWT | CROMFS_OPT_USE_MTF))
+            {
+                fblock_raw = fblock_lzma = fblocks[a].get_raw();
+                if(storage_opts & CROMFS_OPT_USE_BWT)
+                    fblock_lzma = BWT_encode_embedindex(fblock_lzma);
+                if(storage_opts & CROMFS_OPT_USE_MTF)
+                    fblock_lzma = MTF_encode(fblock_lzma);
+                if(LZMA_HeavyCompress == 2)
+                    fblock_lzma = LZMACompressHeavy(fblock_lzma, "fblock");
+                else if(LZMA_HeavyCompress)
+                    fblock_lzma = LZMACompressAuto(fblock_lzma, "fblock");
+                else fblock_lzma = LZMACompress(fblock_lzma);
+            }
+            else
+            {
+                fblocks[a].get(fblock_raw, fblock_lzma);
+            }
             
             if(DisplayEndProcess)
             {
                 std::printf(" %u bytes (orig %u)      ",
-                    (unsigned)fblock.size(),
+                    (unsigned)fblock_lzma.size(),
                     (unsigned)fblock_raw.size());
             }
             
-            W64(Buf, fblock.size());
+            W64(Buf, fblock_lzma.size());
             write(fd, Buf, 4);
             
             const uint_fast64_t pos = lseek64(fd, 0, SEEK_CUR);
-            SparseWrite(fd, &fblock[0], fblock.size(), pos);
+            SparseWrite(fd, &fblock_lzma[0], fblock_lzma.size(), pos);
             
             if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
             {
-                if(fblock.size() > (size_t)FSIZE)
+                if(fblock_lzma.size() > (size_t)FSIZE)
                 {
                     std::printf("\n");
                     std::fflush(stdout);
@@ -385,19 +427,13 @@ public:
             }
             else
             {
-                lseek64(fd, pos + fblock.size(), SEEK_SET);
+                lseek64(fd, pos + fblock_lzma.size(), SEEK_SET);
             }
             
             std::fflush(stdout);
             
-            compressed_total   += fblock.size();
+            compressed_total   += fblock_lzma.size();
             uncompressed_total += fblock_raw.size();
-            
-            /* Because this function can't be called twice (encode_inode does
-             * changes to data that can't be repeated), might as well delete
-             * temporary files while at it.
-             */
-            fblocks[a].Delete();
         }
         
         ftruncate64(fd, lseek64(fd, 0, SEEK_CUR));
@@ -428,6 +464,44 @@ private:
     /*******************/
     
     /*****************************************************/
+    /* Methods for setting on some options based on the  */
+    /* data.                                             */
+    /*****************************************************/
+
+    void EnablePackedBlocksIfPossible()
+    {
+        if(MayPackBlocks)
+        {
+            uint_fast64_t max_blockoffset = FSIZE - BSIZE;
+            max_blockoffset *= fblocks.size();
+            if(max_blockoffset < UINT64_C(0x100000000))
+            {
+                storage_opts |= CROMFS_OPT_PACKED_BLOCKS;
+                std::printf(
+                    "mkcromfs: Automatically enabling --packedblocks because it is possible for this filesystem.\n");
+            }
+        }
+        if(blocks.size() < 0x10000UL)
+        {
+            if(!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS))
+            {
+                std::printf( "mkcromfs: --16bitblocksnums would have been possible for this filesystem. But you didn't select it.\n");
+                if(MayAutochooseBlocknumSize)
+                    std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
+            }
+        }
+        else if(blocks.size() < 0x1000000UL)
+        {
+            if(!(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS))
+            {
+                std::printf( "mkcromfs: --24bitblocksnums would have been possible for this filesystem. But you didn't select it.\n");
+                if(MayAutochooseBlocknumSize)
+                    std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
+            }
+        }
+    }
+    
+    /*****************************************************/
     /* The different types of plan for storing the data. */
     /*****************************************************/
 
@@ -441,7 +515,8 @@ private:
     public:
         ReusingPlan(bool) : success(false),blocknum(NO_BLOCK),block(0),crc(0) { }
         
-        ReusingPlan(crc32_t c, const mkcromfs_block_location& b, cromfs_blocknum_t bn)
+        ReusingPlan(crc32_t c, const mkcromfs_block_location& b,
+                    cromfs_blocknum_t bn)
             : success(true),blocknum(bn),block(&b),crc(c) { }
         
         operator bool() const { return success; }
@@ -567,10 +642,10 @@ private:
             /* Check each candidate (up to MaxFblockCountForBruteForce)
              * for the fit which reuses the maximum amount of data.
              */
-            for(unsigned a = std::min((unsigned)candidates.size(),
-                                      (unsigned)MaxFblockCountForBruteForce);
-                a-- > 0; )
+            for(unsigned a=0; a<candidates.size(); ++a)
             {
+                if(a >= MaxFblockCountForBruteForce && found_candidate) break;
+                
                 cromfs_fblocknum_t fblocknum = candidates[a];
                 const mkcromfs_fblock& fblock = fblocks[fblocknum];
                 
@@ -585,13 +660,15 @@ private:
                 //printf("[cand %u:%u]", (unsigned)fblocknum, (unsigned)this_adds);
                 //fflush(stdout);
                 
-                if(appended.AppendedSize <=
-                    (overlap_size
-                      ? (FSIZE)
-                      : (FSIZE - MinimumFreeSpace)
-                    )
-                && (!found_candidate || this_adds < smallest_adds)
-                  )
+                bool this_is_good =
+                    overlap_size
+                    ? (appended.AppendedSize < FSIZE)
+                    : (appended.AppendedSize < FSIZE - MinimumFreeSpace);
+                
+                if(found_candidate && this_adds >= smallest_adds)
+                    this_is_good = false;
+                
+                if(this_is_good)
                 {
                     found_candidate = true;
                     smallest_fblock = fblocknum;
@@ -642,8 +719,8 @@ private:
             {
                 std::printf("block %u => [%u @ %u] (autoindex hit) (overlap fully)\n",
                     (unsigned)blocknum,
-                    (unsigned)block.fblocknum,
-                    (unsigned)block.startoffs);
+                    (unsigned)block.get_fblocknum(BSIZE,FSIZE),
+                    (unsigned)block.get_startoffs(BSIZE,FSIZE));
             }
         }
         else
@@ -652,8 +729,8 @@ private:
             {
                 std::printf("block %u == [%u @ %u] (reused block)\n",
                     (unsigned)blocknum,
-                    (unsigned)block.fblocknum,
-                    (unsigned)block.startoffs);
+                    (unsigned)block.get_fblocknum(BSIZE,FSIZE),
+                    (unsigned)block.get_startoffs(BSIZE,FSIZE));
             }
         }
         return blocknum;
@@ -737,9 +814,8 @@ private:
             std::printf("\n");
         }
         
-        cromfs_block_storage block;
-        block.fblocknum = fblocknum;
-        block.startoffs = new_data_offset;
+        cromfs_block_internal block;
+        block.define(fblocknum, new_data_offset, BSIZE,FSIZE);
         
         /* If the block is uncompressed, preserve it fblock_index
          * so that CompressOneRandomly() may pick it some day.
@@ -820,7 +896,9 @@ private:
                 }
                 
                 block_index.insert(std::make_pair(crc,
-                    mkcromfs_block_location(fblocknum, startoffs, NO_BLOCK)));
+                    mkcromfs_block_location(
+                        fblocknum, startoffs,
+                        NO_BLOCK)));
               dont_add_crc: ;
             }
         }
@@ -829,17 +907,19 @@ private:
     bool block_is(const mkcromfs_block_location& block,
                   const std::vector<unsigned char>& data) const
     {
-        return fblocks[block.fblocknum].compare_raw_portion(data, block.startoffs) == 0;
+        return block_is(block, &data[0], data.size());
     }
 
     bool block_is(const mkcromfs_block_location& block,
                   const unsigned char* data,
                   uint_fast32_t data_size) const
     {
-        return fblocks[block.fblocknum].compare_raw_portion(data, data_size, block.startoffs) == 0;
+        return fblocks[block.get_fblocknum(BSIZE,FSIZE)]
+                  .compare_raw_portion(data, data_size,
+                    block.get_startoffs(BSIZE,FSIZE)) == 0;
     }
 
-    cromfs_blocknum_t CreateNewBlockNoIndex(const cromfs_block_storage& block)
+    cromfs_blocknum_t CreateNewBlockNoIndex(const cromfs_block_internal& block)
     {
         amount_blockdata += sizeof(block);
         cromfs_blocknum_t blocknum = blocks.size();
@@ -849,17 +929,17 @@ private:
 
     cromfs_blocknum_t CreateNewBlockNoIndex(const mkcromfs_block_location& info)
     {
-        cromfs_block_storage block = { info.fblocknum, info.startoffs };
+        cromfs_block_internal block(info);
         return CreateNewBlockNoIndex(block);
     }
 
     cromfs_blocknum_t CreateNewBlockAddIndex
-        (const cromfs_block_storage& block,
+        (const cromfs_block_internal& block,
          const crc32_t crc)
     {
         cromfs_blocknum_t blocknum = CreateNewBlockNoIndex(block);
         block_index.insert(std::make_pair(crc, 
-            mkcromfs_block_location(block.fblocknum, block.startoffs, blocknum)));
+            mkcromfs_block_location(block, blocknum) ));
         return blocknum;
     }
     
@@ -1059,6 +1139,7 @@ private:
                       unsigned char* target)
         {
             individual_order order(data, target);
+            
             order.badness = offset; // a dummy sorting rule at first
             
             const ReusingPlan plan1 = cromfs_obj.CreateReusingPlan(order.data, order.crc);
@@ -1075,14 +1156,14 @@ private:
         void HandleOrders(ssize_t max_remaining_orders = BlockifyAmount1)
         {
             /*
-            printf("Handle: ");
+            std::printf("Handle: ");
             for(unsigned c=0,a=0, b=blockify_orders.size(); a<b; ++a)
             {
-                printf("[%u]%08X ",
+                std::printf("[%u]%08X ",
                     a, blockify_orders[a].crc);
                 if(++c==7 && a+1<b){printf("\n        ");c=0; }
             }
-            printf("\n");
+            std::printf("\n");
             */
             
             ssize_t num_handle = blockify_orders.size() - max_remaining_orders;
@@ -1111,11 +1192,12 @@ private:
                 // Find the fblock that contains this given data, or if that's
                 // not possible, find out which fblock to append to, or whether
                 // to create a new fblock.
-                const ReusingPlan plan1 = cromfs_obj.CreateReusingPlan(order.data, order.crc);
+                const ReusingPlan plan1
+                    = cromfs_obj.CreateReusingPlan(order.data, order.crc);
                 if(plan1)
                 {
                     /*
-                    printf("Plan: %u,crc %08X,badness(%g) - ",
+                    std::printf("Plan: %u,crc %08X,badness(%g) - ",
                         0,
                         order.crc,
                         order.badness);
@@ -1129,7 +1211,7 @@ private:
                     const WritePlan plan2 = cromfs_obj.CreateWritePlan(*order.needle, order.crc,
                         order.GetFblockTestingSize());
                     /*
-                    printf("Plan: %u,crc %08X,badness(%g),fblock(%u)old(%u)base(%u)size(%u) - ",
+                    std::printf("Plan: %u,crc %08X,badness(%g),fblock(%u)old(%u)base(%u)size(%u) - ",
                         0,
                         order.crc,
                         order.badness,
@@ -1176,7 +1258,8 @@ private:
                 j = i; ++j;
                 individual_order& order = *i;
 
-                const ReusingPlan plan1 = cromfs_obj.CreateReusingPlan(order.data, order.crc);
+                const ReusingPlan plan1
+                    = cromfs_obj.CreateReusingPlan(order.data, order.crc);
                 if(plan1)
                 {
                     /* Surprise, it matched. Handle it immediately. */
@@ -1224,7 +1307,7 @@ private:
                     cromfs::SituationBackup backup;
                     cromfs_obj.CreateBackup(backup);
                     
-                    printf("> false write- ");
+                    std::printf("> false write- ");
                     cromfs_obj.Execute(plan, false);
 
                     uint_fast64_t size_added_sub = 0, size_added_count = 0;
@@ -1246,7 +1329,7 @@ private:
                     if(size_added_count)
                         j->badness += size_added_sub / (double)size_added_count;
                     
-                    printf(">> badness %g\n", j->badness);
+                    std::printf(">> badness %g\n", j->badness);
                     
                     cromfs_obj.RestoreBackup(backup);
                 }
@@ -1269,19 +1352,20 @@ private:
                              uint_fast64_t bpos, uint_fast64_t bmax) const
         {
             char Buf[512];
-            sprintf(Buf, "Blockifying: %5.1f%% (%llu/%llu)",
+            std::sprintf(Buf, "Blockifying: %5.1f%% (%llu/%llu) -- %llu blocks produced",
                 pos
                 * 100.0
                 / max,
                 (unsigned long long)bpos,
-                (unsigned long long)bmax);
+                (unsigned long long)bmax,
+                (unsigned long long)cromfs_obj.blocks.size());
             if(DisplayBlockSelections)
-                printf("%s\n", Buf);
+                std::printf("%s\n", Buf);
             else
-                printf("%s\r", Buf);
+                std::printf("%s\r", Buf);
             /*
-            printf("\33]2;mkcromfs: %s\7\r", Buf);
-            fflush(stdout);
+            std::printf("\33]2;mkcromfs: %s\7\r", Buf);
+            std::fflush(stdout);
             */
         }
         
@@ -1320,6 +1404,7 @@ private:
                     uint_fast64_t eat = std::min((uint_fast64_t)BSIZE, nbytes);
                     
                     AddOrder(source->read(eat), offset, target);
+                    
                     nbytes -= eat;
                     offset += eat;
                     target += BLOCKNUM_SIZE_BYTES(); // where pointer will be written to.
@@ -1337,8 +1422,6 @@ private:
             
             DisplayProgress(total_done, total_size, blocks_done, blocks_total);
             
-            std::printf("All data read -- flushing blocks\n");
-
             HandleOrders(0);
         }
     } scheduler;
@@ -1719,12 +1802,22 @@ private:
         return true;
     }
 public:
-    uint_fast64_t operator() (const std::string& path)
+    uint_fast64_t num_blocks;
+    uint_fast64_t num_file_bytes;
+    uint_fast64_t num_inodes;
+    
+    EstimateSpaceNeededFor(const std::string& path):
+        hardlink_set(), num_blocks(0),
+        num_file_bytes(0), num_inodes(0)
     {
-        uint_fast64_t result = 0;
-        
+        Handle(path);
+    }
+private:
+    void Handle(const std::string& path)
+    {
         DIR* dir = opendir(path.c_str());
-        if(!dir) return 0;
+        if(!dir) return;
+        
         std::vector<std::string> dirs;
         while(dirent* ent = readdir(dir))
         {
@@ -1736,91 +1829,118 @@ public:
             if( (FollowSymlinks ? stat64 : lstat64) (pathname.c_str(), &st) < 0) continue;
             
             /* Count the size of the directory entry */
-            result += 8 + entname.size() + 1;
+            num_file_bytes += 8 + entname.size() + 1;
             
             if(check_hardlink_file(st.st_dev, st.st_ino))
             {
                 continue; // nothing more to do for this entry
             }
             
-            /* Count the size of the inode */
-            result += 0x18;
-            
             if(S_ISDIR(st.st_mode)) { dirs.push_back(pathname); continue; }
             
             /* Count the size of the content */
-            uint_fast64_t file_size = st.st_size;
-            result += file_size;
-            uint_fast64_t num_blocks = (file_size + (BSIZE-1)) / BSIZE;
-            result += num_blocks * 8;
-            //fprintf(stderr, "After %s: %llu\n", pathname.c_str(), (unsigned long long)result);
+            uint_fast64_t file_size   = st.st_size;
+            uint_fast64_t file_blocks = (file_size + BSIZE-1) / BSIZE;
+            
+            num_file_bytes += file_size;
+            num_blocks     += file_blocks;
+            num_inodes     += 1;
         }
         closedir(dir);
         
         for(unsigned a=0; a<dirs.size(); ++a)
-            result += (*this) ( dirs[a] );
-        
-        return result;
+            Handle(dirs[a]);
     }
 };
 
-static void CheckDecompressionSuitability(const std::string& rootpath)
+class CheckSomeDefaultOptions
 {
-    std::string TempDir = GetTempDir();
-    struct statfs64 stats;
-    if(statfs64(TempDir.c_str(), &stats) != 0)
+public:
+    CheckSomeDefaultOptions(const std::string& rootpath)
     {
-        perror(TempDir.c_str());
-        return; // not a severe error though
-    }
+        EstimateSpaceNeededFor estimate(rootpath);
     
-    uint_fast64_t space_have   = stats.f_bfree * stats.f_bsize;
-    
-    uint_fast64_t space_needed = EstimateSpaceNeededFor() (rootpath);
-    
-    if(space_needed >= space_have) goto NotEnabled;
-
-    std::printf(
-        "Good news! Your tempdir, [1m%s[0m, has [1m%s[0m free.\n"
-        "mkcromfs estimates that if the [1m-e -r100000[0m options were enabled,\n"
-        "it would require about [1m%s[0m of temporary disk space.\n"
-        "This would be likely much faster than the default method.\n"
-        "The default method requires less temporary space, but is slower.\n",
-        TempDir.c_str(),
-        ReportSize(space_have).c_str(),
-        ReportSize(space_needed).c_str());
-    
-    if(space_needed < space_have / 20)
-    {
-        std::printf(
-            "Actually, the ratio is so small that I'll just enable\n"
-            "the mode without even asking. You can suppress this behavior\n"
-            "by manually specifying one of the -e, -r or -q options.\n");
-        goto Enabled;
-    }
-    for(;;)
-    {
-        std::printf(
-            "Do you want to enable the 'decompresslookups' mode? (Y/N) ");
-        std::fflush(stdout);
-        char Buf[512];
-        if(!std::fgets(Buf, sizeof(Buf), stdin))
+        if(MayAutochooseBlocknumSize)
         {
-            std::printf("\nEOF from stdin, assuming the answer is \"no\".\n");
-            goto NotEnabled;
+            if(estimate.num_blocks < 0x10000UL)
+            {
+                std::printf(
+                    "mkcromfs: Automatically enabling --16bitblocknums because it seems possible for this filesystem.\n");
+                storage_opts |= CROMFS_OPT_16BIT_BLOCKNUMS;
+            }
+            else if(estimate.num_blocks < 0x1000000UL)
+            {
+                std::printf(
+                    "mkcromfs: Automatically enabling --24bitblocknums because it seems possible for this filesystem.\n");
+                storage_opts |= CROMFS_OPT_24BIT_BLOCKNUMS;
+            }
         }
-        if(Buf[0] == 'y' || Buf[0] == 'Y') goto Enabled;
-        if(Buf[0] == 'n' || Buf[0] == 'N') goto NotEnabled;
-        std::printf("Invalid input, please try again...\n");
+
+        if(MaySuggestDecompression)
+        {
+            uint_fast64_t space_needed =
+                estimate.num_inodes * 0x18
+              + estimate.num_blocks * BLOCKNUM_SIZE_BYTES()
+              + estimate.num_blocks * ((storage_opts & CROMFS_OPT_PACKED_BLOCKS) ? 4 : 8)
+              + estimate.num_file_bytes;
+            
+            std::string TempDir = GetTempDir();
+            struct statfs64 stats;
+            if(statfs64(TempDir.c_str(), &stats) != 0)
+            {
+                perror(TempDir.c_str()); // not a severe error though
+            }
+            else
+            {
+                uint_fast64_t space_have   = stats.f_bfree * stats.f_bsize;
+                
+                if(space_needed >= space_have) goto NotEnabled;
+
+                std::printf(
+                    "Good news! Your tempdir, [1m%s[0m, has [1m%s[0m free.\n"
+                    "mkcromfs estimates that if the [1m-e -r100000[0m options were enabled,\n"
+                    "it would require about [1m%s[0m of temporary disk space.\n"
+                    "This would be likely much faster than the default method.\n"
+                    "The default method requires less temporary space, but is slower.\n",
+                    TempDir.c_str(),
+                    ReportSize(space_have).c_str(),
+                    ReportSize(space_needed).c_str());
+                
+                if(space_needed < space_have / 20)
+                {
+                    std::printf(
+                        "Actually, the ratio is so small that I'll just enable\n"
+                        "the mode without even asking. You can suppress this behavior\n"
+                        "by manually specifying one of the -e, -r or -q options.\n");
+                    goto Enabled;
+                }
+                for(;;)
+                {
+                    std::printf(
+                        "Do you want to enable the 'decompresslookups' mode? (Y/N) ");
+                    std::fflush(stdout);
+                    char Buf[512];
+                    if(!std::fgets(Buf, sizeof(Buf), stdin))
+                    {
+                        std::printf("\nEOF from stdin, assuming the answer is \"no\".\n");
+                        goto NotEnabled;
+                    }
+                    if(Buf[0] == 'y' || Buf[0] == 'Y') goto Enabled;
+                    if(Buf[0] == 'n' || Buf[0] == 'N') goto NotEnabled;
+                    std::printf("Invalid input, please try again...\n");
+                }
+            Enabled:
+                std::printf("Activating commandline options: -e -r100000%s\n",
+                    MaxFblockCountForBruteForce ? "" : " -c2");
+                DecompressWhenLookup = true;
+                RandomCompressPeriod = 100000;
+                if(!MaxFblockCountForBruteForce) MaxFblockCountForBruteForce = 2;
+            NotEnabled: ;
+            }
+        }
     }
-Enabled:
-    std::printf("Activating commandline options: -e -r100000%s\n",
-        MaxFblockCountForBruteForce ? "" : " -c2");
-    DecompressWhenLookup = true;
-    RandomCompressPeriod = 100000;
-    if(!MaxFblockCountForBruteForce) MaxFblockCountForBruteForce = 2;
-NotEnabled: ;
-}
+};
+
 
 static cromfs* cleanup_cromfs_handle = 0;
 static void CleanupTempsExit(int signo)
@@ -1842,8 +1962,6 @@ int main(int argc, char** argv)
     
     unsigned AutoIndexRatio = 16;
 
-    bool MaybeSuggestDecompression = true;
-    
     signal(SIGINT, CleanupTempsExit);
     signal(SIGTERM, CleanupTempsExit);
     signal(SIGHUP, CleanupTempsExit);
@@ -1878,16 +1996,19 @@ int main(int argc, char** argv)
             {"blockifybufferincrement", 1,0,3002},
             {"blockifyoptimizemethod",  1,0,3003},
             {"blockifyoptimisemethod",  1,0,3003},
+            {"32bitblocknums",          0,0,'4'},
             {"24bitblocknums",          0,0,'3'},
             {"16bitblocknums",          0,0,'2'},
-            {"packedblocks",            0,0,'k'},
+            {"nopackedblocks",          0,0,6001},
             {"lzmafastbytes",           1,0,4001},
             {"lzmabits",                1,0,4002},
             {"blockifyorder",           1,0,5001},
             {"dirparseorder",           1,0,5002},
+            {"bwt",                     0,0,2001},
+            {"mtf",                     0,0,2002},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVvf:b:er:s:a:c:qx:X:lS:32k", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVvf:b:er:s:a:c:qx:X:lS:432", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -1966,10 +2087,22 @@ int main(int argc, char** argv)
                     "     default value of 4294967296.\n"
                     "     If your total size of files divided by the selected bsize\n"
                     "     approaches this limit, do not use this option.\n"
-                    " --packedblocks, -k\n"
-                    "     Tells mkcromfs to store blocks in 4 bytes instead of 8 bytes.\n"
-                    "     Do not use this option if your cromfs volume packs more than\n"
-                    "     4 gigabytes of unique data. Otherwise, use it to save some space.\n"
+                    " --32bitblocknums, -4\n"
+                    "     By default, mkcromfs automatically chooses --16bitblocknums\n"
+                    "     or --24bitblocknums if it detects that either one is possible.\n"
+                    "     However, with this option you can force it to use 32-bit blocknums\n"
+                    "     instead, overriding the automatical detection.\n"
+                    " --nopackedblocks\n"
+                    "     By default, mkcromfs stores blocks in 4 bytes instead of 8 bytes,\n"
+                    "     if it is possible for the filesystem being created. However, you\n"
+                    "     may use this option to disable it (for example, if you are creating\n"
+                    "     a filesystem that may be write-extended).\n"
+                    "     This option supersedes the old --packedblocks (-k) with opposite\n"
+                    "     semantics.\n"
+                    " --bwt\n"
+                    "     Use BWT transform when compressing. Experimental.\n"
+                    " --mtf\n"
+                    "     Use MTF transform when compressing. Experimental.\n"
                     "\n"
                     "Compression algorithm parameters:\n"
                     " --minfreespace, -s <value>\n"
@@ -2042,9 +2175,9 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: The minimum allowed fsize is 64. You gave %ld%s.\n", FSIZE, arg);
                     return -1;
                 }
-                if(FSIZE > 0x7FFFFFFF)
+                if(FSIZE > 0x7FFFFFFE)
                 {
-                    std::fprintf(stderr, "mkcromfs: The maximum allowed fsize is 0x7FFFFFFF. You gave 0x%lX%s.\n", FSIZE, arg);
+                    std::fprintf(stderr, "mkcromfs: The maximum allowed fsize is 0x7FFFFFFE. You gave 0x%lX%s.\n", FSIZE, arg);
                     return -1;
                 }
                 break;
@@ -2064,7 +2197,7 @@ int main(int argc, char** argv)
             case 'e':
             {
                 DecompressWhenLookup = true;
-                MaybeSuggestDecompression = false;
+                MaySuggestDecompression = false;
                 break;
             }
             case 'l':
@@ -2082,7 +2215,7 @@ int main(int argc, char** argv)
                     return -1;
                 }
                 RandomCompressPeriod = val;
-                MaybeSuggestDecompression = false;
+                MaySuggestDecompression = false;
                 break;
             }
             case 'a':
@@ -2129,7 +2262,7 @@ int main(int argc, char** argv)
                 else if(DisplayEndProcess) DisplayEndProcess = false;
                 else
                     std::fprintf(stderr, "mkcromfs: -qqqq not known, -qqq is the maximum.\n");
-                MaybeSuggestDecompression = false;
+                MaySuggestDecompression = false;
                 break;
             }
             case 'v':
@@ -2170,29 +2303,51 @@ int main(int argc, char** argv)
                 }
                 break;
             }
+            case '4':
+            {
+                if(storage_opts & (CROMFS_OPT_16BIT_BLOCKNUMS | CROMFS_OPT_24BIT_BLOCKNUMS))
+                {
+                    std::fprintf(stderr, "mkcromfs: You can only select one of the -2, -3 and -4 options.\n");
+                    return -1;
+                }
+                MayAutochooseBlocknumSize = false;
+                break;
+            }
             case '3':
             {
                 storage_opts |= CROMFS_OPT_24BIT_BLOCKNUMS;
-                if(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS)
+                if(!MayAutochooseBlocknumSize || (storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS))
                 {
-                    std::fprintf(stderr, "mkcromfs: You cannot select both -2 and -3 options.\n");
+                    std::fprintf(stderr, "mkcromfs: You can only select one of the -2, -3 and -4 options.\n");
                     return -1;
                 }
+                MayAutochooseBlocknumSize = false;
                 break;
             }
             case '2':
             {
                 storage_opts |= CROMFS_OPT_16BIT_BLOCKNUMS;
-                if(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS)
+                if(!MayAutochooseBlocknumSize || (storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS))
                 {
-                    std::fprintf(stderr, "mkcromfs: You cannot select both -2 and -3 options.\n");
+                    std::fprintf(stderr, "mkcromfs: You can only select one of the -2, -3 and -4 options.\n");
                     return -1;
                 }
+                MayAutochooseBlocknumSize = false;
                 break;
             }
-            case 'k':
+            case 2001: // bwt
             {
-                storage_opts |= CROMFS_OPT_PACKED_BLOCKS;
+                storage_opts |= CROMFS_OPT_USE_BWT;
+                break;
+            }
+            case 2002: // mtf
+            {
+                storage_opts |= CROMFS_OPT_USE_MTF;
+                break;
+            }
+            case 6001: // nopackedblocks
+            {
+                MayPackBlocks = false;
                 break;
             }
             case 4001: // lzmafastbytes
@@ -2214,11 +2369,12 @@ int main(int argc, char** argv)
                 {
                     if(!arg_index && !strcmp(arg, "auto")) { LZMA_HeavyCompress=1; break; }
                     if(!arg_index && !strcmp(arg, "full")) { LZMA_HeavyCompress=2; break; }
-                    LZMA_HeavyCompress=1;
+                    LZMA_HeavyCompress=0;
                     while(*arg==' ')++arg;
                     if(!*arg) break;
                     char* comma = strchr(arg, ',');
                     if(!comma) comma = strchr(arg, '\0');
+                    bool last_comma = !*comma;
                     *comma = '\0';
                     long value = strtol(arg, &arg, 10);
                     long max=4;
@@ -2226,12 +2382,15 @@ int main(int argc, char** argv)
                     {
                         case 0: // pb
                             LZMA_PosStateBits = value;
+                            //fprintf(stderr, "pb=%ld\n", value);
                             break;
                         case 1: // lp
                             LZMA_LiteralPosStateBits = value;
+                            //fprintf(stderr, "lp=%ld\n", value);
                             break;
                         case 2: // lc
                             LZMA_LiteralContextBits = value;
+                            //fprintf(stderr, "lc=%ld\n", value);
                             max=8;
                             break;
                     }
@@ -2240,7 +2399,7 @@ int main(int argc, char** argv)
                         std::fprintf(stderr, "mkcromfs: Invalid value(s) for --lzmabits. See `mkcromfs --help'\n");
                         return -1;
                     }
-                    if(!*comma) break;
+                    if(last_comma) break;
                     arg=comma+1;
                     ++arg_index;
                 }
@@ -2392,12 +2551,9 @@ int main(int argc, char** argv)
         return errno;
     }
     ftruncate64(fd, 0);
-
-    if(MaybeSuggestDecompression)
-    {
-        CheckDecompressionSuitability(path.c_str());
-    }
     
+    (CheckSomeDefaultOptions(path));
+
     cromfs fs;
     cleanup_cromfs_handle = &fs;
     fs.WalkRootDir(path.c_str());

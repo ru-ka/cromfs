@@ -31,13 +31,16 @@ public:
 
     void forget_blktab();
 
+    const std::string DumpBlock(const cromfs_block_internal& block) const;
+
 protected:
     void reread_superblock();
     void reread_blktab();
     void reread_fblktab();
     
     void read_block(cromfs_blocknum_t ind, uint_fast32_t offset,
-                    unsigned char* target, uint_fast32_t size);
+                    unsigned char* target,
+                    uint_fast32_t size);
     
     cromfs_inode_internal read_special_inode
         (uint_fast64_t offset, uint_fast64_t size,
@@ -59,7 +62,7 @@ protected:
     fblock_cache_type cache_fblocks;
     
     std::vector<cromfs_fblock_internal> fblktab;
-    std::vector<cromfs_block_storage> blktab;
+    std::vector<cromfs_block_internal> blktab;
     
     uint_fast32_t storage_opts;
     
@@ -69,4 +72,3 @@ private:
 };
 
 const std::string DumpInode(const cromfs_inode_internal& inode);
-const std::string DumpBlock(const cromfs_block_storage& block);

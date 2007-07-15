@@ -1,10 +1,10 @@
-#include <cstdlib>
-
 #include "fblock.hh"
 #include "boyermoore.hh"
 #include "mkcromfs_sets.hh"
 
 #include "assert++.hh"
+
+#include <cstdlib>
 
 static const std::vector<unsigned char>
     DoLZMACompress(const std::vector<unsigned char>& data)
@@ -35,98 +35,11 @@ int fblock_storage::compare_raw_portion(
      * We must check for that case, and reject if it is so.
      */
 
-#if 0
-    /* This is neat and all, but has a shortcoming:
-     * If data is uncompressed and mmap fails, InitDataReadBuffer will
-     * pread() the entire file. But we only need to pread() the part
-     * that we'll compare.
-     */
     DataReadBuffer Buffer;
     uint_fast32_t oldsize;
-    InitDataReadBuffer(Buffer, oldsize);
+    InitDataReadBuffer(Buffer, oldsize, my_offs, data_size);
     if(oldsize < my_offs + data_size) return -1;
-    return std::memcmp(&Buffer.Buffer[my_offs], &data[0], data_size);
-#else
-    if(is_compressed)
-    {
-        /* If the file is compressed, we must decompress it
-         * to the RAM before it can be compared at all.
-         * We now decompress it in its whole entirety.
-         */
-        std::vector<unsigned char> raw = get_raw();
-        if(DecompressWhenLookup) put_raw(raw);
-        ssize_t size      = data_size;
-        ssize_t remaining = raw.size() - my_offs;
-        if(remaining < size) return -1;
-        return std::memcmp(&raw[my_offs], &data[0], size);
-    }
-    if(my_offs + data_size > filesize) return -1;
-    
-    /* Now the file is not compressed. */
-    
-    /* Try mmapping it (the entire file). */
-    if(!mmapped) Remap();
-    
-    /* If mmapping immediately worked, the comparison
-     * can be delegated to std::memcmp. */
-    if(mmapped)
-    {
-        return std::memcmp(mmapped + my_offs, &data[0], data_size);
-    }
-    
-    /* Don't give up with mmap yet. Try to mmap the specific portion
-     * that we will be accessing now.
-     */
-    
-    /* mmap only works when the starting my_offset is aligned
-     * on a page boundary. Therefore, we force it to align.
-     */
-    uint_fast32_t prev_my_offs = my_offs & ~4095; /* 4095 is assumed to be page size-1 */
-    /* Because of aligning, calculate the amount of bytes
-     * that were mmapped but are not part of the comparison.
-     */
-    uint_fast32_t ignore = my_offs - prev_my_offs;
-    
-    int result = -1;
-    int fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
-    if(fd >= 0)
-    {
-        /* Try to use mmap. This way, only the portion of file
-         * that actually needs to be compared, will be accessed.
-         * If we are comparing an 1M block and memcmp detects a
-         * difference within the first 3 bytes, only about 4 kB
-         * of the file will be read. This is really fast.
-         */
-        void* p = mmap(NULL, ignore+data_size, PROT_READ, MAP_SHARED, fd, prev_my_offs);
-        if(p != (void*)-1)
-        {
-            /* mmapping worked. close fd, since we only need the mmap now. */
-            close(fd);
-            
-            /* Delegate comparison to std::memcmp */
-            const unsigned char* pp = (const unsigned char*)p;
-            result = std::memcmp(&data[0], pp + ignore, data_size);
-            
-            /* And unmap the temporary mapping */
-            munmap(p, ignore+data_size);
-        }
-        else
-        {
-            /* If mmap didn't like our idea, try to use pread
-             * instead. pread is llseek+read combined. This should
-             * work if anything is going to work at all.
-             */
-            std::vector<unsigned char> tmpbuf(data_size);
-            ssize_t r = pread(fd, &tmpbuf[0], data_size, my_offs);
-            close(fd);
-            if(r != (ssize_t)data_size)
-                result = -1;
-            else
-                result = std::memcmp(&data[0], &tmpbuf[0], data_size);
-        }
-    }
-    return result;
-#endif
+    return std::memcmp(Buffer.Buffer, &data[0], data_size);
 }
 
 void fblock_storage::get(std::vector<unsigned char>* raw,
@@ -142,7 +55,7 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
         if(mmapped)
         {
             /* If the caller wants raw, just copy it. */
-            if(raw) raw->assign(mmapped, mmapped+filesize);
+            if(raw) raw->assign(mmapped.get_ptr(), mmapped.get_ptr()+filesize);
             
             /* If the caller wants compressed... */
             if(compressed)
@@ -150,7 +63,7 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
                 *compressed = DoLZMACompress(
                     raw ? *raw /* If we already copied the raw data, use that */
                           /* Otherwise, create a vector for LZMACompress to use */
-                        : std::vector<unsigned char> (mmapped, mmapped+filesize)
+                        : std::vector<unsigned char> (mmapped.get_ptr(), mmapped.get_ptr()+filesize)
                                           );
             }
             return;
@@ -254,8 +167,10 @@ void fblock_storage::put_appended_raw(
         assertvar(append.AppendBaseOffset);
         assert(buf.size() >= append.AppendBaseOffset);
         assertflush();
-
+        
+        // Write precending part:
         if(!buf.empty()) write(fd, &buf[0], append.AppendBaseOffset);
+        // Write appended part:
         if(datasize > 0) write(fd, &data[0], datasize);
         
         /* Note: We need not worry about what comes after datasize.
@@ -293,10 +208,14 @@ void fblock_storage::put_appended_raw(
 
 void fblock_storage::InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size)
 {
-    /* TODO: Add mechanism to load only a part of the file
-     * (to be useful in compare_raw_portion() )
-     */
-    
+    InitDataReadBuffer(Buffer, size, 0, uint_fast32_t(~0UL));
+}
+
+void fblock_storage::InitDataReadBuffer(
+    DataReadBuffer& Buffer, uint_fast32_t& size,
+    uint_fast32_t req_offset,
+    uint_fast32_t req_size)
+{
     /***** Load file contents *****/
     size = 0;
     if(is_compressed)
@@ -312,17 +231,26 @@ void fblock_storage::InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& s
                 if(mmapped) goto UseMMapping;
             }
         }
-        Buffer.AssignCopyFrom(&rawdata[0], rawdata.size());
+        
+        if(req_offset > size) req_offset = size;
+        
+        Buffer.AssignCopyFrom(&rawdata[req_offset],
+            std::min(size - req_offset, req_size)
+                             );
     }
     else
     {
         size = filesize;
+
+        if(req_offset > size) req_offset = size;
         
         if(!mmapped) Remap();
         if(mmapped)
         {
     UseMMapping:
-            Buffer.AssignRefFrom(mmapped, filesize);
+            Buffer.AssignRefFrom(mmapped.get_ptr() + req_offset,
+                std::min(size - req_offset, req_size)
+                                );
         }
         else
         {
@@ -336,7 +264,9 @@ void fblock_storage::InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& s
             }
             else
             {
-                Buffer.LoadFrom(fd, filesize);
+                Buffer.LoadFrom(fd,
+                    std::min(size - req_offset, req_size),
+                                req_offset);
                 close(fd);
             }
         }

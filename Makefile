@@ -1,4 +1,4 @@
-VERSION=1.4.0
+VERSION=1.4.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -22,81 +22,87 @@ ARCHFILES=\
 	cromfs-write.cc cromfs-write.hh \
 	cromfs-ops.cc cromfs-ops.hh \
 	main.c \
-	LzmaDecode.c LzmaDecode.h LzmaTypes.h \
-	\
-	range.hh range.tcc \
-	rangeset.hh rangeset.tcc \
-	rangemultimap.hh rangemultimap.tcc \
 	\
 	util/Makefile.sets util/Makefile util/depfun.mak \
+	lib/Makefile.sets lib/Makefile lib/depfun.mak \
 	\
-	hash.hh \
-	\
-	util/datasource.hh \
-	util/lzma.cc util/lzma.hh \
-	util/util.cc util/util.hh \
 	util/fblock.cc util/fblock.hh \
-	util/append.cc util/append.hh \
-	util/fnmatch.cc util/fnmatch.hh \
-	util/crc32.h util/crc32.cc \
-	util/assert++.hh util/assert++.cc \
-	util/memmem.h util/memmem.c \
-	util/boyermoore.hh \
 	util/mkcromfs.cc \
 	util/unmkcromfs.cc \
 	util/cvcromfs.cc \
 	util/mkcromfs_sets.hh \
 	\
-	util/autoptr \
-	util/range.hh util/range.tcc \
-	util/rangeset.hh util/rangeset.tcc \
-	util/rangemultimap.hh util/rangemultimap.tcc \
+	lib/endian.hh \
+	lib/hash.hh \
+	lib/datasource.hh \
+	lib/datareadbuf.hh \
+	lib/mmapping.hh \
+	lib/bwt.cc lib/bwt.hh \
+	lib/mtf.cc lib/mtf.hh \
+	lib/lzma.cc lib/lzma.hh \
+	lib/util.cc lib/util.hh \
+	lib/append.cc lib/append.hh \
+	lib/fnmatch.cc lib/fnmatch.hh \
+	lib/crc32.h lib/crc32.cc \
+	lib/assert++.hh lib/assert++.cc \
+	lib/memmem.h lib/memmem.c \
+	lib/boyermoore.hh \
+	lib/autoptr \
 	\
-	util/lzma/ORIGIN \
-	util/lzma/LGPL.txt \
-	util/lzma/lzma.txt \
+	lib/range.hh lib/range.tcc \
+	lib/rangeset.hh lib/rangeset.tcc \
+	lib/rangemultimap.hh lib/rangemultimap.tcc \
 	\
-	util/lzma/C/7zCrc.c \
-	util/lzma/C/7zCrc.h \
-	util/lzma/C/Alloc.c \
-	util/lzma/C/Alloc.h \
-	util/lzma/C/IStream.h \
-	util/lzma/C/Types.h \
-	util/lzma/CPP/Common/CRC.cpp \
-	util/lzma/CPP/Common/Defs.h \
-	util/lzma/CPP/Common/MyCom.h \
-	util/lzma/CPP/Common/MyException.h \
-	util/lzma/CPP/Common/MyGuidDef.h \
-	util/lzma/CPP/Common/MyInitGuid.h \
-	util/lzma/CPP/Common/MyUnknown.h \
-	util/lzma/CPP/Common/MyWindows.h \
-	util/lzma/CPP/Common/NewHandler.h \
-	util/lzma/CPP/Common/StdAfx.h \
-	util/lzma/CPP/Common/Types.h \
-	util/lzma/C/Compress/Lz/LzHash.h \
-	util/lzma/C/Compress/Lz/MatchFinder.c \
-	util/lzma/C/Compress/Lz/MatchFinder.h \
-	util/lzma/C/Compress/Lzma/LzmaDecode.c \
-	util/lzma/C/Compress/Lzma/LzmaDecode.h \
-	util/lzma/C/Compress/Lzma/LzmaTypes.h \
-	util/lzma/CPP/7zip/ICoder.h \
-	util/lzma/CPP/7zip/IStream.h \
-	util/lzma/CPP/7zip/Common/InBuffer.h \
-	util/lzma/CPP/7zip/Common/OutBuffer.cpp \
-	util/lzma/CPP/7zip/Common/OutBuffer.h \
-	util/lzma/CPP/7zip/Common/StdAfx.h \
-	util/lzma/CPP/7zip/Common/StreamUtils.cpp \
-	util/lzma/CPP/7zip/Common/StreamUtils.h \
-	util/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.cpp \
-	util/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.h \
-	util/lzma/CPP/7zip/Compress/LZMA/LZMA.h \
-	util/lzma/CPP/7zip/Compress/LZMA/StdAfx.h \
-	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.cpp \
-	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.h \
-	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBitTree.h \
-	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoder.h \
-	util/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderOpt.h \
-	util/lzma/CPP/7zip/Compress/RangeCoder/StdAfx.h \
+	lib/grzip/BWT.c \
+	lib/grzip/libGRZip.h \
+	\
+	lib/LzmaDecode.c lib/LzmaDecode.h lib/LzmaTypes.h \
+	\
+	lib/lzma/ORIGIN \
+	lib/lzma/LGPL.txt \
+	lib/lzma/lzma.txt \
+	\
+	lib/lzma/C/7zCrc.c \
+	lib/lzma/C/7zCrc.h \
+	lib/lzma/C/Alloc.c \
+	lib/lzma/C/Alloc.h \
+	lib/lzma/C/IStream.h \
+	lib/lzma/C/Types.h \
+	lib/lzma/CPP/Common/CRC.cpp \
+	lib/lzma/CPP/Common/Defs.h \
+	lib/lzma/CPP/Common/MyCom.h \
+	lib/lzma/CPP/Common/MyException.h \
+	lib/lzma/CPP/Common/MyGuidDef.h \
+	lib/lzma/CPP/Common/MyInitGuid.h \
+	lib/lzma/CPP/Common/MyUnknown.h \
+	lib/lzma/CPP/Common/MyWindows.h \
+	lib/lzma/CPP/Common/NewHandler.h \
+	lib/lzma/CPP/Common/StdAfx.h \
+	lib/lzma/CPP/Common/Types.h \
+	lib/lzma/C/Compress/Lz/LzHash.h \
+	lib/lzma/C/Compress/Lz/MatchFinder.c \
+	lib/lzma/C/Compress/Lz/MatchFinder.h \
+	lib/lzma/C/Compress/Lzma/LzmaDecode.c \
+	lib/lzma/C/Compress/Lzma/LzmaDecode.h \
+	lib/lzma/C/Compress/Lzma/LzmaTypes.h \
+	lib/lzma/CPP/7zip/ICoder.h \
+	lib/lzma/CPP/7zip/IStream.h \
+	lib/lzma/CPP/7zip/Common/InBuffer.h \
+	lib/lzma/CPP/7zip/Common/OutBuffer.cpp \
+	lib/lzma/CPP/7zip/Common/OutBuffer.h \
+	lib/lzma/CPP/7zip/Common/StdAfx.h \
+	lib/lzma/CPP/7zip/Common/StreamUtils.cpp \
+	lib/lzma/CPP/7zip/Common/StreamUtils.h \
+	lib/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.cpp \
+	lib/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.h \
+	lib/lzma/CPP/7zip/Compress/LZMA/LZMA.h \
+	lib/lzma/CPP/7zip/Compress/LZMA/StdAfx.h \
+	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.cpp \
+	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.h \
+	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBitTree.h \
+	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoder.h \
+	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderOpt.h \
+	lib/lzma/CPP/7zip/Compress/RangeCoder/StdAfx.h \
 	\
 	tests/run.sh \
 	tests/a/fblock.hh tests/a/lzma.hh \
@@ -115,7 +121,7 @@ CXXFLAGS += -O3 -fno-rtti
 
 CPPFLAGS += `pkg-config --cflags fuse`
 
-OBJS=cromfs.o cromfs-ops.o main.o
+OBJS=cromfs.o cromfs-ops.o main.o lib/bwt.o lib/mtf.o
 
 LDLIBS += -lfuse
 

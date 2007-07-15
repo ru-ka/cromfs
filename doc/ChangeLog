@@ -4,6 +4,22 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.4.1	2007-07-15 Joel Yliluoma <bisqwit@iki.fi>
+- Added autochoosing heuristics for the -3 (--24bitblocknums),
+  -2 (--16bitblocknums) and -k (--packedblocks) options, because
+  it can improve compression and those who profile mkcromfs,
+  will do so with its default options :)
+- Added --32bitblocknums (-4) for overriding the autochoosing heuristics.
+- Replaced the -k (--packedblocks) option with --nopackedblocks
+  for overriding the heuristics.
+- Fixed a bug that caused almost-empty fblocks to be created needlessly.
+- Fixed a bug that prevented --lzmabits from being parsed properly.
+- Reorganized source code directories, resulting in a larger diff than normally.
+- Experimentally added BWT and MTF filters. Both seem to do more harm than
+  good, so they're disabled by default. Apparently LZMA benefits from neither.
+- Fixed a severe bug introduced in 1.4.0 that prevented older filesystems from
+  being mounted properly.
+
 1.4.0	2007-07-13 Joel Yliluoma <bisqwit@iki.fi>
 - Removed filename length limit
 - Rewrote most of mkcromfs. A new algorithm of organizing the blocks of
@@ -26,6 +42,7 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 - Fixed a few endianess problems.
 - Added --lzmafastbytes option in mkcromfs and cvcromfs, making the number of
   LZMA "fast bytes" configurable. Also raised the default from 64 to 273 (maximum).
+  Larger number usually results in a better compression.
 - Added --lzmabits option in mkcromfs and cvcromfs for LZMA compression finetuning.
 - Added possibility to alter the order in which different types of files
   are compressed. (Options --blockifyorder and --dirparseorder in mkcromfs.)

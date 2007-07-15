@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.4.0.
+  This is the documentation of cromfs-1.4.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlish">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -549,13 +549,6 @@ autoindexratio = amount_of_RAM * bsize / (32 * total_size_of_files * estimated_r
      If uncertain, try something like the value of <code>33554432 / fsize</code>.
      For 2 MB fblocks, that would make -c16.
   </li>
- <li>If your filesystem contains less than 4 GB of unique data, add
-     the --packedblocks option (-k). It will save (number_of_blocks*4)
-     bytes of uncompressed room by making
-     BLKTAB smaller.<br />
-     Due to LZMA compression, the saving in file size might become
-     neglible, but it will make cromfs-driver slightly faster,
-     and there are no speed penalties.</li>
  <li>You can approximate how many blocks your filesystem will
      have by this formula: <code>total_amount_of_unique_data / bsize</code>.
      <ul>
@@ -892,11 +885,12 @@ cromfs has been written by Joel Yliluoma, a.k.a.
 and is distributed under the terms of the
 <a href="http://www.gnu.org/licenses/licenses.html#GPL">General Public License</a> (GPL).
  <br/>
-The LZMA code embedded within is licensed under LGPL.
+The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
+The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml29><b id=eml15 class=nonmail>@</b><span id=eml16 class=ismail>Joel</span><span id=eml17 class=nonmail><b>qaf0ie</b></span><span id=eml18 class=ismail> Yli</span><b id=eml19 class=nonmail>gh.efAyyx</b><span id=eml20 class=ismail>luom</span><span id=eml21 class=nonmail><b>euuly</b></span><span id=eml22 class=ismail>a &lt;bi</span><b id=eml23 class=nonmail>m</b><span id=eml24 class=ismail>sqwi</span><span id=eml25 class=nonmail><b>/.</b></span><span id=eml26 class=ismail>t@ik</span><b id=eml27 class=nonmail>y.vkmag@</b><span id=eml28 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+by e-mail at:<span id=eml29><b id=eml15 class=nonmail>@eo</b><span id=eml16 class=ismail>Joel</span><span id=eml17 class=nonmail><b>2m@0</b></span><span id=eml18 class=ismail> Yli</span><b id=eml19 class=nonmail>vs7x6Bg@1a</b><span id=eml20 class=ismail>luom</span><span id=eml21 class=nonmail><b>ec1/0</b></span><span id=eml22 class=ismail>a &lt;bi</span><b id=eml23 class=nonmail>m0o</b><span id=eml24 class=ismail>sqwi</span><span id=eml25 class=nonmail><b>.</b></span><span id=eml26 class=ismail>t@ik</span><b id=eml27 class=nonmail>u5l87q4@/</b><span id=eml28 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
 s='';for(i=15;i<29;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
@@ -935,6 +929,12 @@ to this package.
    <li>Write a Windows filesystem driver?</li>
    <li>Test on big-endian system</li>
  </ul></li>
+ <li>Topic: Increasing compression power
+  <ul>
+   <li>Devise a great algorithm for EvaluateBlockifyOrders() in mkcromfs,
+       to sort the blocks in an order that yields best compression results.
+  </ul>
+ </li>
 </ul>
 
 </div><H2 id="requ" class="level2"><a name="requ"></a>13. Requirements</H2><div class="level2" id="divrequ">
@@ -960,9 +960,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Fri, 13 Jul 2007 22:48:11 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Sun, 15 Jul 2007 02:21:16 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Sat, 14 Jul 2007 00:10:11 +0300</small>
+  at Sun, 15 Jul 2007 03:50:49 +0300</small>
  </p>
 </body>
 </html>

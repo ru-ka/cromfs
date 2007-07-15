@@ -51,7 +51,7 @@ In any case, FBLKTAB must be the last item in the filesystem.
 
 In CROMFS03, the INOTAB inode contains flag bits in the inode's "mode" field:
       byte 3   byte 2   byte 1   byte 0
-      00000000 00000000 00000k23 0000000f
+      00000000 000000mb 00000k23 0000000f
       f:
       	1 = fblocks are stored sparsely (padded to FSIZE)
       	0 = fblocks are stored tightly (no padding)
@@ -63,6 +63,10 @@ In CROMFS03, the INOTAB inode contains flag bits in the inode's "mode" field:
       k:
         1 = BLOCKs are packed
         0 = BLOCks are not packed
+      m:
+        1 = Using MTF (move-to-front) filtering, 0 = not
+      b:
+        1 = Using BWT (burrows-wheeler-transform) filtering, 0 = not
 
 ---------------------------
 
@@ -75,6 +79,10 @@ STRUCT: FBLOCK (size: 13 + n)
 	(Note: Since cromfs version 1.1.0, FSIZE indicates the maximum size of
 	 uncompressed FBLOCKs. Previously it indicated the maximum size of compressed
 	 FBLOCKs.)
+	If MTF or BWT filters are enabled, they are operated on
+	the decompressed FBLOCK data. The order when extracting
+	is to first decode MTF, then decode BWT. In compressing
+	the order is the opposite.
 
 STRUCT: BLKDATA (LZMA-compressed) (size: 8*n)
 	0000	BLOCK[]  BLKTAB = all blocks of the filesystem (indexed by block number)

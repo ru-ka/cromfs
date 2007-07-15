@@ -537,13 +537,6 @@ autoindexratio = amount_of_RAM * bsize / (32 * total_size_of_files * estimated_r
      If uncertain, try something like the value of <code>33554432 / fsize</code>.
      For 2 MB fblocks, that would make -c16.
   </li>
- <li>If your filesystem contains less than 4 GB of unique data, add
-     the --packedblocks option (-k). It will save (number_of_blocks*4)
-     bytes of uncompressed room by making
-     BLKTAB smaller.<br />
-     Due to LZMA compression, the saving in file size might become
-     neglible, but it will make cromfs-driver slightly faster,
-     and there are no speed penalties.</li>
  <li>You can approximate how many blocks your filesystem will
      have by this formula: <code>total_amount_of_unique_data / bsize</code>.
      <ul>
@@ -880,7 +873,8 @@ cromfs has been written by Joel Yliluoma, a.k.a.
 and is distributed under the terms of the
 <a href=\"http://www.gnu.org/licenses/licenses.html#GPL\">General Public License</a> (GPL).
  <br/>
-The LZMA code embedded within is licensed under LGPL.
+The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
+The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
  <p/>
 Patches and other related material can be submitted to the
 author
@@ -921,6 +915,12 @@ to this package.
    <li>Write a Windows filesystem driver?</li>
    <li>Test on big-endian system</li>
  </ul></li>
+ <li>Topic: Increasing compression power
+  <ul>
+   <li>Devise a great algorithm for EvaluateBlockifyOrders() in mkcromfs,
+       to sort the blocks in an order that yields best compression results.
+  </ul>
+ </li>
 </ul>
 
 ", 'requ:1. Requirements' => "

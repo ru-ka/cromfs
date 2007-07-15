@@ -1,4 +1,4 @@
-VERSION=1.4.0
+VERSION=1.4.1
 
 include Makefile.sets
 
@@ -13,28 +13,35 @@ OPTIM += -O3
 #OPTIM += -O1 -pg -g
 #LDOPTS += -pg
 
+CPPFLAGS += -I../lib
+
 # multithread versions of lzma -- Windows only
 #CPPFLAGS += -DCOMPRESS_MF_MT
 #CPPFLAGS += -DCOMPRESS_MT
 
-#OBJS_LZMA += lzma/CPP/7zip/Compress/LZMA_Alone/LzmaAlone.o
-OBJS_LZMA += lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.o
-OBJS_LZMA += lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.o
-OBJS_LZMA += lzma/CPP/7zip/Common/StreamUtils.o
-OBJS_LZMA += lzma/CPP/7zip/Common/OutBuffer.o
-OBJS_LZMA += lzma/C/Compress/Lz/MatchFinder.o
-OBJS_LZMA += lzma/C/Alloc.o
-OBJS_LZMA += lzma/CPP/Common/CRC.o
-OBJS_LZMA += lzma/C/7zCrc.o
-OBJS_LZMA += lzma.o
+#OBJS_LZMA += ../lib/lzma/CPP/7zip/Compress/LZMA_Alone/LzmaAlone.o
+OBJS_LZMA += ../lib/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.o
+OBJS_LZMA += ../lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.o
+OBJS_LZMA += ../lib/lzma/CPP/7zip/Common/StreamUtils.o
+OBJS_LZMA += ../lib/lzma/CPP/7zip/Common/OutBuffer.o
+OBJS_LZMA += ../lib/lzma/C/Compress/Lz/MatchFinder.o
+OBJS_LZMA += ../lib/lzma/C/Alloc.o
+OBJS_LZMA += ../lib/lzma/CPP/Common/CRC.o
+OBJS_LZMA += ../lib/lzma/C/7zCrc.o
+OBJS_LZMA += ../lib/lzma.o
 
 OBJS_MK += $(OBJS_LZMA)
-OBJS_MK += mkcromfs.o crc32.o fblock.o memmem.o util.o fnmatch.o assert++.o append.o
+OBJS_MK += mkcromfs.o fblock.o \
+	   ../lib/crc32.o ../lib/memmem.o ../lib/util.o \
+	   ../lib/fnmatch.o ../lib/assert++.o ../lib/append.o \
+	   ../lib/bwt.o ../lib/mtf.o
 
-OBJS_UN += unmkcromfs.o ../cromfs.o util.o fnmatch.o
+OBJS_UN += unmkcromfs.o ../cromfs.o \
+	   ../lib/util.o ../lib/fnmatch.o \
+	   ../lib/bwt.o ../lib/mtf.o
 
 OBJS_CV += $(OBJS_LZMA)
-OBJS_CV += cvcromfs.o util.o
+OBJS_CV += cvcromfs.o ../lib/util.o
 
 all: mkcromfs unmkcromfs cvcromfs
 
@@ -47,15 +54,14 @@ mkcromfs: $(OBJS_MK)
 cvcromfs: $(OBJS_CV)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDLIBS)
 
-mkcromfs.o: fblock.hh lzma.hh datasource.hh crc32.h util.hh mkcromfs_sets.hh \
-	boyermoore.hh append.hh
-fblock.o: fblock.hh boyermoore.hh mkcromfs_sets.hh assert++.hh autoptr append.hh
-unmkcromfs.o: ../cromfs.hh util.hh
-cvmkcromfs.o: ../cromfs-defs.hh lzma.hh util.hh
-lzma.o: ../LzmaDecode.h ../LzmaDecode.c ../LzmaTypes.h
-
-
 lzmatest: lzmatest.o $(OBJS_LZMA)
+	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDLIBS)
+
+bwt_test: bwt_test.o ../lib/bwt.o
+	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDLIBS)
+wfc_test: wfc_test.o ../lib/wfc.o
+	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDLIBS)
+st4_test: st4_test.o ../lib/st4.o
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDLIBS)
 
 include depfun.mak

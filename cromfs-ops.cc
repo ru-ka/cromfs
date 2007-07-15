@@ -83,9 +83,9 @@ extern "C" {
         const cromfs_superblock_internal& sblock = fs.get_superblock();
         
         struct statvfs stbuf;
-        stbuf.f_bsize  = sblock.uncompressed_block_size;
-        stbuf.f_frsize = sblock.uncompressed_block_size;
-        stbuf.f_blocks = sblock.bytes_of_files / sblock.uncompressed_block_size;
+        stbuf.f_bsize  = sblock.bsize;
+        stbuf.f_frsize = sblock.bsize;
+        stbuf.f_blocks = sblock.bytes_of_files / sblock.bsize;
         stbuf.f_bfree  = 0;
         stbuf.f_bavail = 0;
         stbuf.f_files  = 0;//not correct

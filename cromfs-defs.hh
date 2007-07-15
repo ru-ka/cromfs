@@ -15,17 +15,11 @@ See doc/FORMAT for the documentation of the filesystem structure.
 /* Disable this if you have hash-related compilation problems. */
 #define USE_HASHMAP
 
-#ifndef __STDC_CONSTANT_MACROS
-#define __STDC_CONSTANT_MACROS /* for UINT16_C etc */
-#endif
-
-#include <stdint.h>
+#include "lib/endian.hh"
 
 #include <vector>
 #include <string>
 #include <map>
-
-
 
 #define CROMFS_SIGNATURE_01   UINT64_C(0x313053464d4f5243)
 #define CROMFS_SIGNATURE_02   UINT64_C(0x323053464d4f5243)
@@ -38,95 +32,11 @@ enum CROMFS_OPTS
     CROMFS_OPT_SPARSE_FBLOCKS  = 0x00000001,
     CROMFS_OPT_24BIT_BLOCKNUMS = 0x00000100,
     CROMFS_OPT_16BIT_BLOCKNUMS = 0x00000200,
-    CROMFS_OPT_PACKED_BLOCKS   = 0x00000400
+    CROMFS_OPT_PACKED_BLOCKS   = 0x00000400,
+    CROMFS_OPT_USE_BWT         = 0x00010000,
+    CROMFS_OPT_USE_MTF         = 0x00020000
 };
 
-
-static inline uint_fast16_t R8(const void* p)
-{
-    const unsigned char* data = (const unsigned char*)p;
-    return data[0];
-}
-static inline uint_fast16_t R16(const void* p)
-{
-    const unsigned char* data = (const unsigned char*)p;
-    return R8(data)  | (R8(data+1) << UINT16_C(8));
-}
-static inline uint_fast32_t R24(const void* p)
-{
-    const unsigned char* data = (const unsigned char*)p;
-    return R16(data) | (R8(data+2) << UINT32_C(16));
-}
-static inline uint_fast32_t R32(const void* p)
-{
-    const unsigned char* data = (const unsigned char*)p;
-    return R16(data) | (R16(data+2) << UINT32_C(16));
-}
-
-#define L (uint_fast64_t)
-
-static inline uint_fast64_t R64(const void* p)
-{
-    const unsigned char* data = (const unsigned char*)p;
-    return (L R32(data)) | ((L R32(data+4)) << UINT64_C(32));
-}
-
-#undef L
-
-static inline uint_fast64_t Rn(const void* p, unsigned bytes)
-{
-    switch(bytes)
-    {
-        case 1: return R8(p);
-        case 2: return R16(p);
-        case 3: return R24(p);
-        case 4: return R32(p);
-        case 8: return R64(p);
-    }
-    return 0;
-}
-
-static void W8(void* p, uint_fast8_t value)
-{
-    unsigned char* data = (unsigned char*)p;
-    data[0] = value;
-}
-static void W16(void* p, uint_fast16_t value)
-{
-    unsigned char* data = (unsigned char*)p;
-    W8(data+0, value   );
-    W8(data+1, value>>8);
-}
-static void W24(void* p, uint_fast32_t value)
-{
-    unsigned char* data = (unsigned char*)p;
-    W16(data+0, value);
-    W8(data+2,  value >> UINT32_C(16));
-}
-static void W32(void* p, uint_fast32_t value)
-{
-    unsigned char* data = (unsigned char*)p;
-    W16(data+0, value);
-    W16(data+2, value >> UINT32_C(16));
-}
-static void W64(void* p, uint_fast64_t value)
-{
-    unsigned char* data = (unsigned char*)p;
-    W32(data+0, (value));
-    W32(data+4, (value >> UINT64_C(32)));
-}
-
-static inline void Wn(void* p, uint_fast64_t value, unsigned bytes)
-{
-    switch(bytes)
-    {
-        case 1: W8(p, value); break;
-        case 2: W16(p, value); break;
-        case 3: W24(p, value); break;
-        case 4: W32(p, value); break;
-        case 8: W64(p, value); break;
-    }
-}
 
 /* Use "least" instead of "fast" for these types, because they
  * are included in structs and vectors that are directly copied
@@ -155,10 +65,25 @@ struct cromfs_fblock_internal
     uint_fast32_t length;
 };
 
-struct cromfs_block_storage
+struct cromfs_block_internal /* optimized for size, because mkcromfs needs it */
 {
     uint_least32_t fblocknum __attribute__((packed));
     uint_least32_t startoffs __attribute__((packed));
+public:
+    void define(uint_fast32_t fb, uint_fast32_t so,
+                uint_fast64_t bsize,uint_fast64_t fsize)
+    {
+        fblocknum = fb;
+        startoffs = so;
+    }
+    inline uint_fast32_t get_startoffs(uint_fast32_t bsize, uint_fast32_t fsize) const
+    {
+        return startoffs;
+    }
+    inline uint_fast32_t get_fblocknum(uint_fast32_t bsize, uint_fast32_t fsize) const
+    {
+        return fblocknum;
+    }
 } __attribute__((packed));
 
 struct cromfs_superblock_internal
@@ -167,8 +92,8 @@ struct cromfs_superblock_internal
     uint_fast64_t fblktab_offs;
     uint_fast64_t inotab_offs,  inotab_size,  inotab_room;
     uint_fast64_t rootdir_offs, rootdir_size, rootdir_room;
-    uint_fast32_t compressed_block_size;
-    uint_fast64_t uncompressed_block_size; /* 64-bit to reduce the number of casts */
+    uint_fast32_t fsize;
+    uint_fast64_t bsize; /* 64-bit to reduce the number of casts */
     uint_fast64_t bytes_of_files;
     uint_fast64_t sig;
     
@@ -206,8 +131,8 @@ struct cromfs_superblock_internal
         fblktab_offs            = R64(Superblock+0x0010);
         inotab_offs             = R64(Superblock+0x0018);
         rootdir_offs            = R64(Superblock+0x0020);
-        compressed_block_size   = R32(Superblock+0x0028); /* aka. FSIZE */
-        uncompressed_block_size = R32(Superblock+0x002C); /* aka. BSIZE */
+        fsize   = R32(Superblock+0x0028); /* aka. FSIZE */
+        bsize = R32(Superblock+0x002C); /* aka. BSIZE */
         bytes_of_files          = R64(Superblock+0x0030);   
         
         RecalcRoom();
@@ -230,8 +155,8 @@ struct cromfs_superblock_internal
         W64(Superblock+0x10, fblktab_offs);
         W64(Superblock+0x18, inotab_offs);
         W64(Superblock+0x20, rootdir_offs);
-        W32(Superblock+0x28, compressed_block_size);
-        W32(Superblock+0x2C, uncompressed_block_size);
+        W32(Superblock+0x28, fsize);
+        W32(Superblock+0x2C, bsize);
         W64(Superblock+0x30, bytes_of_files);
         
         if(rootdir_offs >= 0x50)

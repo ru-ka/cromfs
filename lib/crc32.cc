@@ -43,7 +43,11 @@ uint_fast32_t crc32_update(uint_fast32_t c, unsigned char b)
 
 crc32_t crc32_calc(const unsigned char* buf, unsigned long size)
 {
-    uint_fast32_t value = crc32_startvalue;
+    return crc32_calc_upd(crc32_startvalue, buf, size);
+}
+crc32_t crc32_calc_upd(crc32_t c, const unsigned char* buf, unsigned long size)
+{
+    uint_fast32_t value = c;
 
 #if 0
     unsigned long pos = 0;
