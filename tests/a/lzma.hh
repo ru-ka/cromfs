@@ -45,6 +45,10 @@ const std::vector<unsigned char> LZMACompressAuto
     (const std::vector<unsigned char>& buf,
      const char* why = "?");
 
+const std::vector<unsigned char>
+    DoLZMACompress(int HeavyLevel,
+        const std::vector<unsigned char>& data, const char* why = "?");
+
 /*
 LZMA compressed file format
  ---------------------------

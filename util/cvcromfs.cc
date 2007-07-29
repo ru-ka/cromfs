@@ -2,7 +2,9 @@
 #define __STDC_CONSTANT_MACROS
 
 #include "lzma.hh"
-#include "../cromfs-defs.hh"
+#include "cromfs-defs.hh"
+#include "longfileread.hh"
+#include "longfilewrite.hh"
 #include "util.hh"
 
 #include <getopt.h>
@@ -103,7 +105,7 @@ struct BlkTabConverter: public BlockToucher
                 else
                     fblocknum = R32(&Buffer[a*8+0]),
                     startoffs = R32(&Buffer[a*8+4]);
-                blktab[a].define(fblocknum, startoffs, bsize,fsize);
+                blktab[a].define(fblocknum, startoffs/*, bsize,fsize*/);
             }
             
             const unsigned NewBlockSize = (WantPacked ? 4 : 8);
@@ -129,18 +131,18 @@ struct BlkTabConverter: public BlockToucher
 static BlockToucher NotTouching;
 static uint_fast64_t ConvertBuffer
     (int infd, int outfd,
-     uint_fast64_t in_offs,
-     uint_fast64_t in_size,
-     uint_fast64_t out_offs,
+     const uint_fast64_t in_offs,
+     const uint_fast64_t in_size,
+     const uint_fast64_t out_offs,
      bool was_compressed,
      bool want_compressed,
      bool recompress,
      BlockToucher& touch_block = NotTouching)
 {
-    std::vector<unsigned char> Buffer(in_size);
-    pread64(infd, &Buffer[0], Buffer.size(), in_offs);
+    LongFileRead reader(infd, in_offs, in_size);
+    std::vector<unsigned char> Buffer(reader.GetAddr(), reader.GetAddr()+in_size);
     
-    std::printf("read %u, ", (unsigned)Buffer.size());
+    std::printf("read %u, ", (unsigned)in_size);
     std::fflush(stdout);
     
     if(was_compressed && (!want_compressed || recompress || touch_block.NeedsData()))
@@ -164,8 +166,8 @@ static uint_fast64_t ConvertBuffer
     std::printf("written %u", (unsigned)Buffer.size());
     std::fflush(stdout);
     
-    SparseWrite(outfd, &Buffer[0], Buffer.size(), out_offs);
-
+    LongFileWrite writer(outfd,0);
+    writer.write(&Buffer[0], Buffer.size(), out_offs);
     return Buffer.size();
 }
 
@@ -410,7 +412,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     
     // Last write the modified header
     sblock.WriteToBuffer(Superblock);
-    pwrite64(outfd, Superblock, sblock.GetSize(), 0);
+    ( LongFileWrite(outfd, 0, sblock.GetSize(), Superblock) );
     ftruncate64(outfd, write_offs);
     
     std::printf("done.\n");

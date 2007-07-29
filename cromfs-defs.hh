@@ -70,17 +70,16 @@ struct cromfs_block_internal /* optimized for size, because mkcromfs needs it */
     uint_least32_t fblocknum __attribute__((packed));
     uint_least32_t startoffs __attribute__((packed));
 public:
-    void define(uint_fast32_t fb, uint_fast32_t so,
-                uint_fast64_t bsize,uint_fast64_t fsize)
+    void define(uint_fast32_t fb, uint_fast32_t so)
     {
         fblocknum = fb;
         startoffs = so;
     }
-    inline uint_fast32_t get_startoffs(uint_fast32_t bsize, uint_fast32_t fsize) const
+    inline uint_fast32_t get_startoffs(uint_fast32_t /*bsize*/, uint_fast32_t /*fsize*/) const
     {
         return startoffs;
     }
-    inline uint_fast32_t get_fblocknum(uint_fast32_t bsize, uint_fast32_t fsize) const
+    inline uint_fast32_t get_fblocknum(uint_fast32_t /*bsize*/, uint_fast32_t /*fsize*/) const
     {
         return fblocknum;
     }
@@ -131,8 +130,8 @@ struct cromfs_superblock_internal
         fblktab_offs            = R64(Superblock+0x0010);
         inotab_offs             = R64(Superblock+0x0018);
         rootdir_offs            = R64(Superblock+0x0020);
-        fsize   = R32(Superblock+0x0028); /* aka. FSIZE */
-        bsize = R32(Superblock+0x002C); /* aka. BSIZE */
+        fsize                   = R32(Superblock+0x0028);
+        bsize                   = R32(Superblock+0x002C);
         bytes_of_files          = R64(Superblock+0x0030);   
         
         RecalcRoom();
@@ -185,6 +184,13 @@ struct cromfs_superblock_internal
 typedef std::vector<unsigned char> cromfs_datablock;
 typedef std::vector<unsigned char> cromfs_cached_fblock;
 typedef std::map<std::string, cromfs_inodenum_t> cromfs_dirinfo;
+
+#define BLOCKNUM_SIZE_BYTES() \
+   (4 - 1*!!(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS) \
+      - 2*!!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS) )
+
+#define DATALOCATOR_SIZE_BYTES() \
+    ((storage_opts & CROMFS_OPT_PACKED_BLOCKS) ? 4 : 8)
 
 #ifdef __GNUC__
 # define likely(x)       __builtin_expect(!!(x), 1)

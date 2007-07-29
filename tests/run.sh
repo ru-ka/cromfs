@@ -1,4 +1,4 @@
-[A#!/bin/sh
+#!/bin/sh
 
 # - Symlinks are not tested here, because they fail date comparison
 #   (symlink timestamps cannot be set)
@@ -25,6 +25,7 @@ else
 	echo "*** TEST 1: FAIL"
 fi
 rm -rf a.listing b.listing b tmp.cromfs
+#exit
 
 
 ## TEST 2 (no sparse files)

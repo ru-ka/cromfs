@@ -1,8 +1,51 @@
 Cromfs changelog
 
 cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
-License: GPL
+License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+1.5.0	2007-07-29 Joel Yliluoma <bisqwit@iki.fi>
+- License change: Now it is under GPL3. (Previously GPL2.)
+- mkcromfs: Changed the order in which inode numbers are assigned,
+  improving the access times, reducing directory fragmentation
+  and making the recently added --dirparseorder a more useful
+  option. It seems to also improve compression.
+- Internal changes: In an effort to improve portability of the
+  code, moved most of the file access code into include files
+  that handle sparseness, memory mapping and regular file
+  reading/writing in one place.
+- mkcromfs: In attempt to improve the block scheduler, a
+  new --blockifyoptimizemethod value was introduced. It uses
+  a variation of the Asymmetric Travelling Salesman Problem
+  to determine an optimal order for blockifying. It may or may not
+  improve compression, but it does consume a lot more CPU time.
+- mkcromfs: The memory efficiency of the block index was improved,
+  enabling the use of slightly larger autoindex ratio if one so chooses.
+  (Note: The actual effect of the change is yet untested.)
+- mkcromfs: Fixed a bug in autoindex: Index hits did not assign
+  a block number to the index. Compression power improved again.
+- General: Using posix_fadvice() to hint the kernel about proper
+  page cache strategy. Theoretically should improve performance.
+- Experimented with asynchronous IO (AIO) in unmkcromfs. However,
+  it seemed to not do much good, so it is now disabled by default,
+  enableable only by a #define.
+- cromfs-driver: Changed the cache so that now oldest accessed
+  flocks are deallocated first, instead of randomly choosing one.
+  Same for directory listings. Should improve performance.
+- mkcromfs: Added threading to improve performance on multicore systems.
+  (New option: --threads).
+- unmkcromfs: Added threading to improve performance on multicore systems.
+  (New option: --threads).
+- mkcromfs: Raised the default value of --bruteforcelimit to 2,
+  from the previous value of 1. (0 and 1 are equal.)
+- Added -ldl in Makefile to enable linking with fuse 2.7.
+- mkcromfs: Replaced --autoindexratio (-a) with --autoindexperiod (-A)
+  that has inverse, but cleaner, semantics. The old option will still
+  work, but is now deprecated.
+- mkcromfs: Improved autoindexer performance.
+- unmkcromfs: Fixed an error that prevented hardlinked files
+  from being extracted properly in some cases.
+- Documentation updates (some new compression tests & comparisons)
 
 1.4.1	2007-07-15 Joel Yliluoma <bisqwit@iki.fi>
 - Added autochoosing heuristics for the -3 (--24bitblocknums),

@@ -1,4 +1,4 @@
-#include "../cromfs-defs.hh" /* For R64 */
+#include "endian.hh" /* For R64 */
 
 #include "lzma/CPP/Common/MyWindows.h"
 #include "lzma/CPP/Common/MyInitGuid.h"
@@ -8,6 +8,7 @@
 
 #include <vector>
 #include <algorithm>
+#include <string>
 
 #include <stdint.h>
 
@@ -562,7 +563,7 @@ public:
         }
         else if(focus_mode)
         {
-        ReFocus:
+        //ReFocus:
             if(LZMA_verbose >= 1)
             {
                 fprintf(stderr, "\t\tfocus mode(cur=%u, lo=%u, hi=%u)\n",
@@ -647,7 +648,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
             ? LZMACompress(buf,t,lp,lc, 65536)
             : LZMACompress(buf,t,lp,lc);
         if(LZMA_verbose >= 2)
-            fprintf(stderr, "-> %u\n", result.size());
+            fprintf(stderr, "-> %u\n", (unsigned)result.size());
         
         finder.Got(result.size());
         
@@ -669,7 +670,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
             ? LZMACompress(buf,pb,t,lc, 65536)
             : LZMACompress(buf,pb,t,lc);
         if(LZMA_verbose >= 2)
-            fprintf(stderr, "-> %u\n", result.size());
+            fprintf(stderr, "-> %u\n", (unsigned)result.size());
 
         finder.Got(result.size());
         
@@ -691,7 +692,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
             ? LZMACompress(buf,pb,lp,t, 65536)
             : LZMACompress(buf,pb,lp,t);
         if(LZMA_verbose >= 2)
-            fprintf(stderr, "-> %u\n", result.size());
+            fprintf(stderr, "-> %u\n", (unsigned)result.size());
 
         finder.Got(result.size());
 
@@ -720,4 +721,13 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
     fflush(stderr);
     
     return bestresult;
+}
+
+const std::vector<unsigned char>
+    DoLZMACompress(int HeavyLevel,
+        const std::vector<unsigned char>& data, const char* why)
+{
+    if(HeavyLevel >= 2) return LZMACompressHeavy(data, why);
+    if(HeavyLevel >= 1) return LZMACompressAuto(data, why);
+    return LZMACompress(data);
 }

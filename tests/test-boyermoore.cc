@@ -1,4 +1,4 @@
-#include "../util/boyermoore.hh"
+#include "../lib/boyermoore.hh"
 #include <cstdlib>
 #include <cstdio>
 
@@ -11,10 +11,8 @@ unsigned aiu(const std::vector<unsigned char>& hay,
 }
 
 static const std::vector<unsigned char>
-    GenRandomVector(unsigned minlen, unsigned maxlen)
+    GenRandomVector(unsigned len)
 {
-    unsigned len = minlen + rand() % (maxlen-minlen);
-    
     std::vector<unsigned char> result(len);
     
     for(unsigned a=0; a<len; ++a)
@@ -24,7 +22,14 @@ static const std::vector<unsigned char>
     return result;
 }
 
-static void Test()
+static const std::vector<unsigned char>
+    GenRandomVector(unsigned minlen, unsigned maxlen)
+{
+    unsigned len = minlen + rand() % (maxlen-minlen);
+    return GenRandomVector(len);
+}    
+
+static void Test(bool horspool)
 {
     /* Generate a random haystack and a random needle */
     std::vector<unsigned char> haystack = GenRandomVector(100, 1000000);
@@ -40,7 +45,9 @@ static void Test()
     std::printf("%u in %u... \r", needle.size(), haystack.size());
     std::fflush(stdout);
     
-    unsigned foundpos = ding.SearchIn(haystack);
+    unsigned foundpos = horspool
+        ? ding.SearchInHorspool(haystack)
+        : ding.SearchIn(haystack);
     
     if(foundpos < needlepos)
     {
@@ -67,17 +74,113 @@ static void Test()
     }
 }
 
+static void TestWithAppend()
+{
+    /* Generate a random haystack and a random needle */
+    std::vector<unsigned char> haystack = GenRandomVector(100, 1500);
+    const std::vector<unsigned char> needle   = GenRandomVector(20, haystack.size()-1);
+    
+    /* Then see what BoyerMoore comes up with */
+    const BoyerMooreNeedleWithAppend ding(needle);
+    std::fflush(stderr);
+    for(unsigned reuse_count = 0; reuse_count < 2000; ++reuse_count)
+    {
+        haystack = GenRandomVector(haystack.size());
+        
+        /* Select a position randomly and ensure that the needle
+         * exists in that position */ rerand:;
+        unsigned needlepos = std::rand() % (haystack.size() + 1);
+        if(needlepos + needle.size() <= haystack.size()) goto rerand;
+        
+    #if 1
+        std::memcpy(&haystack[needlepos], &needle[0],
+            std::min(needle.size(),
+                     haystack.size() - needlepos) );
+    #else
+        haystack.resize(needlepos);
+        haystack.insert(haystack.end(), needle.begin(), needle.end());
+
+    #endif
+        
+        /*std::printf("%u in %u (append %u)...\r",
+            needle.size(), haystack.size(),
+            std::max(0l, (long)(needlepos + needle.size() - haystack.size()))
+          );
+        std::fflush(stdout);*/
+        
+        unsigned foundpos = ding.SearchInWithAppend(haystack);
+        std::fflush(stderr);
+        
+        if(foundpos < needlepos)
+        {
+            /* If the found position is smaller than what we intended,
+             * check if it's actually true
+             */
+            unsigned compare_size = std::min(needle.size(), haystack.size() - foundpos);
+           
+            if(std::memcmp(&haystack[foundpos], &needle[0], compare_size) == 0)
+            {
+                /* Accept this position */
+                needlepos = foundpos;
+            }
+        }
+        
+        if(foundpos != needlepos)
+        {
+            unsigned compare_size = std::min(needle.size(), haystack.size() - needlepos);
+            if(std::memcmp(&haystack[needlepos], &needle[0], compare_size) != 0)
+            {
+                fprintf(stderr, "Test faulty\n");
+            }
+
+            std::fprintf(stderr, "Error: needle=%u, haystack=%u, pos=%u, claims %u\n",
+                needle.size(),
+                haystack.size(),
+                needlepos,
+                foundpos);
+            std::fflush(stderr);
+            ++fails;
+        }
+    }
+}
+
 
 int main(void)
 {
+#if 0
     for(unsigned a=0; a<250; ++a)
     {
         std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
-        Test();
+        Test(false); // full
     }
-    
     if(!fails)
         std::printf("BoyerMoore tests OK\n");
     else
         std::fprintf(stderr, "BoyerMoore: %u failures\n", fails);
+    fails=0;
+#endif
+#if 0
+    for(unsigned a=0; a<250; ++a)
+    {
+        std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
+        Test(true); // horspool
+    }
+    if(!fails)
+        std::printf("BoyerMoore Horspool tests OK\n");
+    else
+        std::fprintf(stderr, "BoyerMoore Horspool: %u failures\n", fails);
+    fails=0;
+#endif
+#if 1
+    for(unsigned a=0; a<2500; ++a)
+    {
+        std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
+        TestWithAppend();
+    }
+    if(!fails)
+        std::printf("BoyerMoore Append tests OK\n");
+    else
+        std::fprintf(stderr, "BoyerMoore Append: %u failures\n", fails);
+    fails=0;
+#endif
 }

@@ -1,4 +1,4 @@
-VERSION=1.4.1
+VERSION=1.5.0
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -20,23 +20,33 @@ ARCHFILES=\
 	\
 	cromfs.cc cromfs.hh cromfs-defs.hh \
 	cromfs-write.cc cromfs-write.hh \
-	cromfs-ops.cc cromfs-ops.hh \
-	main.c \
+	fuse-ops.cc fuse-ops.hh \
+	fuse-main.c \
 	\
 	util/Makefile.sets util/Makefile util/depfun.mak \
 	lib/Makefile.sets lib/Makefile lib/depfun.mak \
 	\
-	util/fblock.cc util/fblock.hh \
 	util/mkcromfs.cc \
 	util/unmkcromfs.cc \
 	util/cvcromfs.cc \
 	util/mkcromfs_sets.hh \
 	\
+	lib/cromfs-inodefun.cc lib/cromfs-inodefun.hh \
+	lib/cromfs-directoryfun.cc lib/cromfs-directoryfun.hh \
+	lib/cromfs-fblockfun.cc lib/cromfs-fblockfun.hh \
+	lib/cromfs-blockindex.cc lib/cromfs-blockindex.hh \
+	lib/cromfs-blockifier.cc lib/cromfs-blockifier.hh \
+	\
 	lib/endian.hh \
 	lib/hash.hh \
+	lib/threadfun.hh \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
+	lib/autoclosefd.hh \
+	lib/bucketcontainer.hh \
+	lib/datacache.hh \
 	lib/mmapping.hh \
+	lib/fadvise.cc lib/fadvise.hh \
 	lib/bwt.cc lib/bwt.hh \
 	lib/mtf.cc lib/mtf.hh \
 	lib/lzma.cc lib/lzma.hh \
@@ -46,7 +56,12 @@ ARCHFILES=\
 	lib/crc32.h lib/crc32.cc \
 	lib/assert++.hh lib/assert++.cc \
 	lib/memmem.h lib/memmem.c \
+	lib/sparsewrite.cc lib/sparsewrite.hh \
+	lib/longfileread.hh \
+	lib/longfilewrite.hh lib/longfilewrite.cc \
 	lib/boyermoore.hh \
+	lib/superstringfinder.hh \
+	lib/asymmetrictsp.hh \
 	lib/autoptr \
 	\
 	lib/range.hh lib/range.tcc \
@@ -119,11 +134,17 @@ include Makefile.sets
 #CXXFLAGS += -O1 -fno-inline -g
 CXXFLAGS += -O3 -fno-rtti
 
-CPPFLAGS += `pkg-config --cflags fuse`
+CPPFLAGS += `pkg-config --cflags fuse` -pthread
 
-OBJS=cromfs.o cromfs-ops.o main.o lib/bwt.o lib/mtf.o
+OBJS=\
+	cromfs.o fuse-ops.o fuse-main.o \
+	lib/bwt.o lib/mtf.o \
+	lib/cromfs-inodefun.o \
+	lib/fadvise.o
 
-LDLIBS += -lfuse
+LDLIBS += -lfuse -ldl
+# Added -ldl because fuse 2.7.x depends on it,
+# according to report by cromo@klej.net
 
 DEPFUN_INSTALL=ignore
 

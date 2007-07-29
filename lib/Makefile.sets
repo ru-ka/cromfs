@@ -1,8 +1,9 @@
 CC=gcc
 CPP=g++
+CXX=g++
 #CXX=g++-2.95
 #CXX=g++-3.3
-CXX=g++
+#CXX=g++-4.2
 #CXX=remotegcc -soktober -- g++
 
 CPPDEBUG=-g -pipe

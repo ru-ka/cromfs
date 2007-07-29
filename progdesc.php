@@ -17,17 +17,12 @@ $text = array(
    '1. Purpose' => "
 
 <img src=\"http://bisqwit.iki.fi/src/cromfs-boxart.png\" align=\"left\" alt=\"cromfs\" />
-Cromfs is a compressed read-only filesystem for Linux. Cromfs is intended
-for permanently archiving gigabytes of big files that have lots of redundancy.
+Cromfs is a compressed read-only filesystem for Linux.
+It uses the LZMA compression algorithm from <a href=\"http://www.7-zip.com/\">7-zip</a>,
+and a powerful block merging mechanism, that is especially efficient
+with gigabytes of large files having lots of redundancy.
  <p/>
-In terms of compression it is much similar to
-<a href=\"http://www.7-zip.com/\">7-zip</a> files, except that random
-access is provided  for the whole archive contents; the user does not need
-to launch a program to decompress a single file, nor does he need to wait
-while the system decompresses 500 files from a 1000-file archive to get
-him the 1 file he wanted to open.
- <p/>
-Note: The primary design goal of cromfs is compression power.
+The primary design goal of cromfs is compression power.
 It is much slower than its peers, and uses more RAM.
 If all you care about is \"powerful compression\"
 and \"random file access\", then you will be happy with cromfs.
@@ -49,22 +44,19 @@ See the <a href=\"http://bisqwit.iki.fi/src/cromfs-changelog.txt\">ChangeLog</a>
 
 <ul>
  <li>Data, inodes, directories and block lists are stored compressed</li>
- <li>Duplicate inodes, files and even duplicate file portions are detected and stored only once
-   <ul>
-    <li>Especially suitable for gigabyte-class archives of
-     thousands of nearly-identical megabyte-class files.</li>
-   </ul>
-  </li>
  <li>Files are divided into fragments and those fragments are stored as
   offsets to solid blocks (fblocks) containing data, meaning that parts
   of different files are compressed together for effective compression,
-  and identical fragments are compressed only once.</li>
+  and identical fragments are compressed only once.
+  <ul><li>Duplicate inodes, files and even duplicate file portions are detected
+   and stored only once without extra overhead</li></ul>
+  </li>
  <li>Most of inode types recognized by Linux are supported (see <a href=\"#compare\">comparisons</a>).</li>
- <li>The <a href=\"http://www.7-zip.com/sdk.html\">LZMA compression</a> is used.
-  In the general case, LZMA compresses better than gzip and bzip2.</li>
- <li>As with usual filesystems, the files on a cromfs volume can be
-  randomly accessed in arbitrary order; by all the means one would
-  expect, including memorymapping.</li>
+ <li>The <a href=\"http://www.7-zip.com/sdk.html\">LZMA compression</a> is used
+  for fblocks. In the general case, LZMA compresses better than gzip and bzip2.</li>
+ <li>Being a filesystem, the files on a cromfs volume can be
+  randomly accessed in arbitrary order; by all the means one
+  would expect, including memorymapping.</li>
  <li>Works on 64-bit and 32-bit systems.</li>
 </ul>
 
@@ -83,7 +75,7 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
  <li>Max filesystem size: 2<sup>64</sup> bytes (16777216 TB)</li>
  <li>There are no \".\" or \"..\" entries in directories. This does not matter in Linux.</li>
  <li>cromfs and mkcromfs are slower than their peers.</li>
- <li>The cromfs-driver has a large memory footprint. It is not
+ <li>The cromfs-driver consumes a lot of memory. It is not
    suitable for very size-constrained systems.</li>
  <li>Maximum filename length: 4294967295 bytes</li>
  <li>Maximum symlink length: 65535 bytes</li>
@@ -96,7 +88,8 @@ See <a href=\"http://bisqwit.iki.fi/src/cromfs-format.txt\"
 
 ", 'status:1. Development status' => "
 
-Development status: Progressive.
+Development status: Stable. (Really: progressive.)<br />
+(Fully functional release exists, but is updated from time to time.)
  <p />
 Cromfs has been in beta stage for over a year, during which time
 very little bugs have been reported, and no known bugs remain at
@@ -151,17 +144,17 @@ and by no means a scientific study, but here goes:
   </tr>
  <tr align=left>
   <th>Maximum file size</th>
-   <td class=hmm>16 EB (2<sup>44</sup> MB) (theoretical; actual limit depends on settings)</td>
-   <td class=bad>16 MB (2<sup>4</sup> MB)</td>
-   <td class=good>16 EB (2<sup>44</sup> MB)<br /> (4 GB before v3.0)</td>
+   <td class=hmm>16 EB (2<sup>64</sup> bytes) (theoretical; actual limit depends on settings)</td>
+   <td class=bad>16 MB (2<sup>24</sup> bytes)</td>
+   <td class=good>16 EB (2<sup>64</sup> bytes)<br /> (4 GB before v3.0)</td>
    <td class=good>Depends on slave filesystem</td>
   </tr>
  <tr align=left>
   <th>Maximum filesystem size</th>
-   <td class=good>16 EB (2<sup>44</sup> MB)</td>
+   <td class=good>16 EB (2<sup>64</sup> bytes)</td>
    <td class=bad>272 MB</td>
-   <td class=good>16 EB (2<sup>44</sup> MB)<br /> (4 GB before v3.0)</td>
-   <td>Unknown</td>
+   <td class=good>16 EB (2<sup>64</sup> bytes)<br /> (4 GB before v3.0)</td>
+   <td class=good>16 EB (2<sup>64</sup> bytes)</td>
   </tr>
  <tr align=left>
   <th>Duplicate whole file detection</th>
@@ -210,15 +203,24 @@ and by no means a scientific study, but here goes:
    <td class=hmm>Safe, but not exchangeable</td>
    <td class=hmm>Depends on slave filesystem</td>
  <tr align=left>
-  <th>Kernelspace/userspace<br />
-    (fuse is good for security and modularity
-     but cannot be used in bootdisks etc,
-     kernel is vice versa)
-  </th>
-   <td class=hmm>User (fuse)</td>
-   <td class=hmm>Kernel</td>
-   <td class=hmm>Kernel</td>
-   <td class=hmm>Kernel</td>
+  <th>Linux kernel driver</th>
+   <td class=bad>No</td>
+   <td class=good>Yes</td>
+   <td class=good>Yes</td>
+   <td class=good>Yes</td>
+ <tr align=left>
+  <th>Userspace driver</th>
+   <td class=good>Yes (fuse)</td>
+   <td class=bad>No</td>
+   <td class=hmm>An extraction tool (unsquashfs)</td>
+   <td class=bad>An extraction tool (extract_compressed_fs),
+     but cannot be used to extract a single file</td>
+ <tr align=left>
+  <th>Windows driver</th>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
+   <td class=bad>No</td>
  <tr align=left>
   <th>Appending to a previously created filesystem</th>
    <td class=bad>No</td>
@@ -242,20 +244,20 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Fragmentation<br />(good for compression, bad for access speed)</th>
-   <td class=hmm>Aimed for</th>
+   <td class=hmm>Abundant</th>
    <td class=hmm>None</td>
    <td class=good>File tails only</td>
    <td class=hmm>Depends on slave filesystem</td>
  <tr align=left>
   <th>Holes (aka. sparse files); storage optimization
       of blocks which consist entirely of nul bytes</th>
-   <td class=good>Identical blocks are merged and compressed, not limited to nul-blocks.</th>
+   <td class=good>Any two identical blocks are merged and stored only once.</th>
    <td class=good>Supported</td>
    <td class=bad>Not supported</th>
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
-  <th>Waste space (partially filled sectors)</th>
-   <td class=good>No (unless readwrite support is asked, but even then it only makes a sparse file)</td>
+  <th>Padding (partially filled sectors, wastes space)</th>
+   <td class=good>No<!-- (unless readwrite support is asked, but even then it only makes a sparse file)--></td>
    <td>Unknown</td>
    <td class=hmm>Mostly not</td>
    <td class=hmm>Depends on slave filesystem, usually yes</td>
@@ -266,7 +268,10 @@ and by no means a scientific study, but here goes:
    <td>Unknown</td>
    <td>Unknown, may depend on slave filesystem</td>
 </table>
-
+ <p>
+Note: If you notice that this table contains wrong information,
+please contact me telling what it is and I will change it.
+ <p/>
 Note: cromfs now saves the uid and gid in the filesystem. However,
 when the uid is 0 (root), the cromfs-driver returns the uid of the
 user who mounted the filesystem, instead of root. Similarly for gid.
@@ -282,6 +287,9 @@ compression ratio.<br />
 <br />
 In this table, <i>k</i> equals 1024 bytes (2<sup>10</sup>)
 and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
+ <p>
+Note: Again, these tests have not been peer-verified so it is not
+a real scientific study. But I attest that these are the results I got.
 
 <style type=\"text/css\"><!--
 .comcom b  { color:#007 }
@@ -291,64 +299,66 @@ and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
  <tr>
   <th>Item</th>
   <th align=\"left\">10783 NES ROMs (2523 MB)</th>
-  <th align=\"left\">Mozilla source code from CVS (279 MB)</th>
+  <th align=\"left\">Firefox 2.0.0.5 source code (233 MB)<br />
+    (MD5sum 5a6ca3e4ac3ebc335d473cd3f682a916)
+    </th>
   <th align=\"left\">Damn small Linux liveCD (113 MB)<br />
    (size taken from \"du -c\" output in the uncompressed filesystem)</th>
  </tr>
+
  <tr align=\"right\"3 valign=\"top\">
   <th>Cromfs</th>
-  <td class=good><tt>mkcromfs -s16384 -a&hellip; -b&hellip; -f&hellip;</tt>
-   <br />With 16M fblocks, 2k blocks: <b>202,811,971</b> bytes
-   <br />With 16M fblocks, 1k blocks, <b>198,410,407</b> bytes
-   <!--<br />With 16M fblocks, &frac12;k blocks: <b>194,795,834</b> bytes-->
-   <br />With 16M fblocks, &frac14;k blocks: <b>194,386,381</b> bytes
-   <!--br />With 16M fblocks, &frac14;k blocks and -c8 option: <b>191,283,335</b> bytes
-        (not included on the page because I also replaced symlinks
-         with hardlinks)
-   -->
-   <br />Even smaller sizes achievable by using the -c option.
+  <td class=good><tt>mkcromfs -s65536 -c16 -a&hellip; -b&hellip; -f&hellip;</tt>
+   <br />With 16M fblocks, 2k blocks: <b>198,553,574</b> bytes (v1.4.1)
+   <br />With 16M fblocks, 1k blocks, <b>194,813,427</b> bytes (v1.4.1)
+   <br />With 16M fblocks, &frac14;k blocks: <b>187,575,926</b> bytes (v1.5.0)
    </td>
   <td class=good><tt>mkcromfs</tt>
-   <br /><b>29,525,376</b> bytes</td>
+   <br />With default options: <b>33,865,522</b> bytes (v1.5.0)
+   <br />(Peak memory use: ~270 MB, 230 MB of which were memory-mapped files)
+   </td>
   <td class=good><tt>mkcromfs -f1048576</tt>
-   <br />With 64k blocks (-b65536), <b>39,778,030</b> bytes
-   <br />With 16k blocks (-b16384), <b>39,718,882</b> bytes
-   <br />With 1k blocks (-b1024), <b>40,141,729</b> bytes
+   <br />With 64k blocks (-b65536), <b>39,778,030</b> bytes (v1.2.0)
+   <br />With 16k blocks (-b16384), <b>39,718,882</b> bytes (v1.2.0)
+   <br />With 1k blocks (-b1024), <b>40,141,729</b> bytes (v1.2.0)
    </td>
  </tr>
+
  <tr align=\"right\" valign=\"top\">
-  <th>Cramfs</th>
+  <th>Cramfs v1.1</th>
   <td class=bad><tt>mkcramfs -b65536</tt>
    <br />dies prematurely, \"filesystem too big\"</td>
   <td class=bad><tt>mkcramfs</tt>
-   <br />with 2M blocks (-b2097152), <b>58,720,256</b> bytes
-   <br />with 64k blocks (-b65536), <b>57,344,000</b> bytes
-   <br />with 4k blocks (-b4096), <b>68,435,968</b> bytes
+   <br />with 2M blocks (-b2097152), <b>65,011,712</b> bytes
+   <br />with 64k blocks (-b65536), <b>64,618,496</b> bytes
+   <br />with 4k blocks (-b4096), <b>77,340,672</b> bytes
    </td>
   <td class=bad><tt>mkcramfs -b65536</tt>
    <br /><b>51,445,760</b> bytes
    </td>
  </tr>
+
  <tr align=\"right\" valign=\"top\">
-  <th>Squashfs</th>
+  <th>Squashfs v3.2</th>
   <td class=bad><tt>mksquashfs -b65536</tt>
    <br />(using an optimized sort file) <b>1,185,546,240</b> bytes</td>
   <td class=hmm><tt>mksquashfs</tt>
-   <br /><b>43,335,680</b> bytes</td>
+   <br /><b>49,139,712</b> bytes</td>
   <td class=bad><tt>mksquashfs -b65536</tt>
    <br /><b>50,028,544</b> bytes
     </td>
  </tr>
+
  <tr align=\"right\" valign=\"top\">
-  <th>Cloop</th>
+  <th>Cloop v2.05~20060829</th>
   <td class=bad><tt>create_compressed_fs</tt>
    <br />(using an iso9660 image created with mkisofs -R)
    <br />using 7zip, 1M blocks (-B1048576 -t2 -L-1): <b>1,136,789,006</b> bytes
    </td>
   <td class=hmm><tt>create_compressed_fs</tt>
    <br />(using an iso9660 image created with mkisofs -RJ)
-   <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>41,201,014</b> bytes
-    <br />(1 MB is maximum block size in cloop)
+   <br />using 7zip, 1M blocks (-B1048576 -L-1): <b>46,726,041</b> bytes
+    <br />(1 MB is the maximum block size in cloop)
    </td>
   <td class=bad><tt>create_compressed_fs</tt>
    <br />(using an iso9660 image)
@@ -356,13 +366,16 @@ and <i>M</i> equals 1048576 bytes (2<sup>20</sup>).
    <br />using zlib, 64k blocks (-B65536 -L9): <b>50,641,093</b> bytes
    </td>
  </tr>
+
  <tr align=\"right\" valign=\"top\">
-  <th>7-zip (p7zip)<br /> (an archive, not a filesystem)</th>
+  <th>7-zip (p7zip) v4.30<br /> (an archive, not a filesystem)</th>
   <td><tt>7za -mx9 -ma=2 a</tt>
    <br />with 32M blocks (-md=32m): <b>235,037,017</b> bytes
    <br />with 128M blocks (-md=128m): <b>222,523,590</b> bytes
    <br />with 256M blocks (-md=256m): <b>212,533,778</b> bytes
-  <td>untested</td>
+  <td><tt>7za -mx9 -ma=2 -md=256m a</tt>
+   <br /><b>29,079,247</b> bytes
+   <br />(Peak memory use: 2545 MiB)</td>
   <td><tt>7za -mx9 -ma2 a</tt>
     <br /><b>37,205,238</b> bytes
    </td>
@@ -491,36 +504,11 @@ To improve the compression, try these tips:
     <br />
      Note: The value does not need to be a power of two.
   </li>
- <li>Adjust the --autoindexratio option (-a). A bigger value will
+ <li>Adjust the --autoindexperiod option (-A). A smaller value will
      increase the chances of mkcromfs finding an identical block
      from something it already processed (if your data has that
      opportunity). Finding that two blocks are identical always
-     means better compression.<br />
-     You can use this formula to pick an optimal
-     maximum value for -a:<br />
-      <code>amount_of_spare_RAM &times; bsize / (32 &times; total_size_of_files &times; estimated_remaining_ratio)</code>
-
-<!--
-sum_fblocks = total_size_of_files * estimated_remaining_ratio
-autoindexratio = bsize / autoindexperiod
-amount_of_RAM = 32 * sum_fblocks / autoindexperiod
-  hence
-amount_of_RAM = 32 * sum_fblocks / (bsize / autoindexratio)
-  hence
-amount_of_RAM = autoindexratio * 32 * sum_fblocks / bsize
-  hence
-autoindexratio = amount_of_RAM * bsize / 32 / sum_fblocks
-  hence
-autoindexratio = amount_of_RAM * bsize / (32 * total_size_of_files * estimated_remaining_ratio)
--->
-     <br />
-     where <code>estimated_remaining_ratio</code> is a decimal number
-     smaller than 1.0, indicating how much you think block merging will
-     reduce the amount of data to compress (i.e. how little will remain
-     to compress before even feeding it to LZMA).<br />
-     With 800 MB of RAM, 4 GB of files, block size (-b) of
-     512 bytes and estimated_remaining_ratio of 0.90 (10% reduction),
-     this formula would thus give a value of about 4 for the -a option.
+     means better compression.
   </li>
  <li>Sort your files. Files which have similar or partially
      identical content should be processed right after one other.</li>
@@ -591,6 +579,12 @@ To improve the filesystem generation speed, try these tips:
      which means more work. Larger blocks are less work.</li>
  <li>Do not use the --bruteforcelimit option (-c). The default value 0
      means that the candidate fblock will be selected straightforwardly.</li>
+ <li>If you have a multicore system, add the --threads option.
+     Select --threads 2 if you have a dual core system, for example.
+     You can also use a larger value than the number of cores, but
+     same guidelines apply as with the -j in GNU make. Currently
+     this option does not affect compression power, so it is
+     recommended to use it.</li>
 </ul>
 
 ", '1.1.1. To control the memory usage' => "
@@ -601,11 +595,11 @@ To control the memory usage, use these tips:
      is directly proportional to the size of your fblocks. It keeps at
      most 10 fblocks decompressed in the RAM at a time. If your fblocks
      are 4 MB in size, it will use 40 MB at max.</li>
- <li>In mkcromfs, adjust the --autoindexratio option (-a). This will
+ <li>In mkcromfs, adjust the --autoindexperiod option (-A). This will
      not have effect on the memory usage of cromfs-driver, but it will
      control the memory usage of mkcromfs. If you have lots of RAM, you
-     should use bigger --autoindexratio (because it will improve the chances
-     of getting better compression results), and use smaller if you have less RAM.</li>
+     should use smaller --autoindexperiod (because it will improve the chances
+     of getting better compression results), and use bigger if you have less RAM.</li>
  <li>Find the CACHE_MAX_SIZE settings in cromfs.cc and edit them. This will
      require recompiling the source. (In future, this should be made a command
      line option for cromfs-driver.)</li>
@@ -657,7 +651,7 @@ The inode contains the file attributes and its contents, but <em>not</em> its na
 This is the traditional way in *nix systems.
  <p/>
 When a file is \"hardlinked\" into multiple locations in the filesystem,
-the inode is not copied. The same single inode just is listed in multiple
+the inode is not copied. The inode number just is listed in multiple
 directories.<br />
 A symlink however, is an entirely new inode unrelated to
 the file it points to.
@@ -704,8 +698,11 @@ contents of the entire filesystem being created.
 A fblock is merely a storage.
 Regardless of the sizes of the blocks and fblocks, the fblock may
 contain any number of blocks, from 1 to upwards (no upper limit).
-It is beneficial for blocks to overlap, and this is an important source of the
-power of cromfs.
+It is beneficial for blocks to overlap, and this is an important
+source of the power of cromfs.
+ <p/>
+The working principle behind fblocks is: What is the shortest
+string that can contain all these substrings?
 
 ", 'concept_blocknumber:1.1.1. Block number and block table' => "
 
@@ -739,7 +736,7 @@ if it later finds an identical block in another file (or the same file),
 it won't need to search fblocks again to find a best placement.<br />
 The index is a map of block hashes to data locators and block numbers.
  <p/>
-The --autoindexratio setting can be used to extend this mechanism, that
+The --autoindexperiod (-A) setting can be used to extend this mechanism, that
 in addition to the blocks it has already encoded, it will memorize more
 locations in those fblocks &mdash; create \"just in case\" data locators
 for future use but not actually save them in the block table, unless
@@ -795,9 +792,7 @@ Theoretical requirements to use cromfs in the root filesystem:
    since version 1.2.2).</li>
  <li>An initrd, that contains the cromfs-driver program</li>
  <li>Fuse driver in the kernel (it may be loaded from the initrd).</li>
- <li>Use of pivot_root to change the root into the mounted image
-  <ul><li>One must wait until the cromfs-driver outputs \"ready\"
-      before accessing the filesystem</li></ul>
+ <li>Use of pivot_root to change the root into the mounted image</li>
  </li>
 </ul>
 
@@ -871,7 +866,8 @@ the filesystem (level of compression).
 cromfs has been written by Joel Yliluoma, a.k.a.
 <a href=\"http://iki.fi/bisqwit/\">Bisqwit</a>,<br />
 and is distributed under the terms of the
-<a href=\"http://www.gnu.org/licenses/licenses.html#GPL\">General Public License</a> (GPL).
+<a href=\"http://www.gnu.org/licenses/gpl-3.0.html\">General Public License</a>
+version 3 (GPL3).
  <br/>
 The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
 The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
@@ -883,7 +879,7 @@ author
 The author also wishes to hear if you use cromfs, and for what you
 use it and what you think of it.
 
-", 'wishlish:1.1. Contribution wishes' => "
+", 'wishlist:1.1. Contribution wishes' => "
 
 The author wishes for the following things to be done
 to this package.
@@ -902,6 +898,13 @@ to this package.
    <li>A proof of concept example of utilizing cromfs
     in a root filesystem (with initramfs)</li>
    <li>Add appending support (theoretically doable, just not very fast)</li>
+   <li>Add threading in blockifier (improves mkcromfs performance
+       on multicore systems). Try not to sacrifice compression
+       power in the doing so.</li>
+   <li>Add threading in cromfs-driver.
+       Needs write-locks in fblock_cache and readdir_cache.
+       Possibly in BWT too.
+       Also blktab and fblktab if those are being changed.</li>
   </ul></li>
  <li>Topic: Documentation
   <ul>
@@ -917,9 +920,26 @@ to this package.
  </ul></li>
  <li>Topic: Increasing compression power
   <ul>
-   <li>Devise a great algorithm for EvaluateBlockifyOrders() in mkcromfs,
-       to sort the blocks in an order that yields best compression results.
-  </ul>
+   <li>A fast and powerful approximation of the
+   <i>shortest common superstring</i> algorithm
+   is needed in mkcromfs.
+   <br>
+    Input description: A set of strings <i>S<sub>1</sub>, &hellip;, S<sub>n</sub>.</i>
+  <br>
+    Problem description: What is the shortest string <i>S<sup>'</sup></i>
+    such that for
+    each <i>S<sub>i</sub>, 1&le;i&le;n</i>, the string <i>S<sub>i</sub></i> appears as a
+    substring of <i>S<sup>'</sup></i>?
+   <br>
+     For example, for input
+      [\"digital\",\"organ\",\"tall\",\"ant\"],
+      it would produce \"organtdigitall\" or \"digitallorgant\".
+   <br>
+    Note: This problem seems to reduce into an Asymmetric Travelling
+    Salesman Problem, which is NP-hard or NP-complete.
+    The task here is to find a good approximation
+    that doesn't consume a lot of resources.
+  </li></ul>
  </li>
 </ul>
 

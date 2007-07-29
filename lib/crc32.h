@@ -1,3 +1,6 @@
+#ifndef bqtCrc32HH
+#define bqtCrc32HH
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,4 +21,6 @@ extern crc32_t crc32_calc_upd(crc32_t c, const unsigned char* buf, unsigned long
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

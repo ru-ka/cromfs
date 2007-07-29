@@ -1,6 +1,6 @@
 /*
 cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
-Licence: GPL
+Licence: GPL3
 
 cromfs.cc: The cromfs filesystem engine.
 The class cromfs should actually be a singleton, because of the signal
@@ -29,18 +29,15 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #include "lib/LzmaDecode.h"
 #include "lib/LzmaDecode.c"
-#include "lib/datareadbuf.hh"
 #include "lib/bwt.hh"
 #include "lib/mtf.hh"
-#include "lib/mmapping.hh"
+#include "lib/longfileread.hh"
+#include "lib/cromfs-inodefun.hh"
+#include "lib/fadvise.hh"
 #include "cromfs.hh"
 
 #define CROMFS_FSIZE  (sblock.fsize)
 #define CROMFS_BSIZE (sblock.bsize)
-
-#define BLOCKNUM_SIZE_BYTES() \
-   (4 - 1*!!(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS) \
-      - 2*!!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS) )
 
 #define SBLOCK_DEBUG    0
 #define READBLOCK_DEBUG 0
@@ -52,11 +49,8 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #define BLKTAB_CACHE_TIMEOUT 0
 
-/* How many directories to keep cached at the same time maximum */
-static const unsigned READDIR_CACHE_MAX_SIZE = 5;
-
-/* How many decompressed fblocks to cache in RAM at the same time maximum */
-static const unsigned FBLOCK_CACHE_MAX_SIZE = 20;
+unsigned READDIR_CACHE_MAX_SIZE = 5;
+unsigned FBLOCK_CACHE_MAX_SIZE = 20;
 
 template<typename T>
 static void EraseRandomlyOne(T& container)
@@ -69,6 +63,38 @@ static void EraseRandomlyOne(T& container)
         random   = smallest + std::rand() % (biggest-smallest);
 
     container.erase(container.lower_bound(random));
+}
+
+static const std::vector<unsigned char> LZMADeCompress
+    (const unsigned char* buf, size_t BufSize)
+{
+    if(BufSize <= 5+8) return std::vector<unsigned char> ();
+    
+    uint_least64_t out_sizemax = R64(&buf[5]);
+    
+    std::vector<unsigned char> result(out_sizemax);
+    
+    CLzmaDecoderState state;
+    LzmaDecodeProperties(&state.Properties, &buf[0], LZMA_PROPERTIES_SIZE);
+    state.Probs = new CProb[LzmaGetNumProbs(&state.Properties)];
+    
+    SizeT in_done;
+    SizeT out_done;
+    LzmaDecode(&state, &buf[13], BufSize-13, &in_done,
+               &result[0], result.size(), &out_done);
+    
+    delete[] state.Probs;
+    
+    result.resize(out_done);
+    return result;
+}
+
+static const std::vector<unsigned char>
+    DoLZMALoading(int fd, uint_fast64_t pos, uint_fast64_t size)
+        throw(cromfs_exception, std::bad_alloc)
+{
+    LongFileRead reader(fd, pos, size);
+    return LZMADeCompress(reader.GetAddr(), size);
 }
 
 const std::string DumpInode(const cromfs_inode_internal& inode)
@@ -110,45 +136,16 @@ const std::string cromfs::DumpBlock(const cromfs_block_internal& block) const
     return s.str();
 }
 
-static const std::vector<unsigned char> LZMADeCompress
-    (const unsigned char* buf, size_t BufSize)
+uint_fast64_t cromfs::CalcSizeInBlocks(uint_fast64_t filesize) const throw()
 {
-    if(BufSize <= 5+8) return std::vector<unsigned char> ();
-    
-    uint_least64_t out_sizemax = R64(&buf[5]);
-    
-    std::vector<unsigned char> result(out_sizemax);
-    
-    CLzmaDecoderState state;
-    LzmaDecodeProperties(&state.Properties, &buf[0], LZMA_PROPERTIES_SIZE);
-    state.Probs = new CProb[LzmaGetNumProbs(&state.Properties)];
-    
-    SizeT in_done;
-    SizeT out_done;
-    LzmaDecode(&state, &buf[13], BufSize-13, &in_done,
-               &result[0], result.size(), &out_done);
-    
-    delete[] state.Probs;
-    
-    result.resize(out_done);
-    return result;
-}
-
-static const std::vector<unsigned char> LZMADeCompress
-    (const std::vector<unsigned char>& buf)
-{
-    return LZMADeCompress(&buf[0], buf.size());
-}
-
-uint_fast64_t cromfs::CalcSizeInBlocks(uint_fast64_t filesize) const
-{
-    return (filesize + CROMFS_BSIZE-1) / CROMFS_BSIZE;
+    return ::CalcSizeInBlocks(filesize, CROMFS_BSIZE);
 }
 
 void cromfs::reread_superblock()
+        throw (cromfs_exception, std::bad_alloc)
 {
     cromfs_superblock_internal::BufferType Superblock;
-    if(pread64(fd, Superblock, sizeof(Superblock), 0) == -1) throw errno;
+    ( LongFileRead(fd, 0, sizeof(Superblock), Superblock) );
     
     storage_opts = 0;
     
@@ -160,7 +157,9 @@ void cromfs::reread_superblock()
     && sig != CROMFS_SIGNATURE_03
     ) throw EINVAL;
     
-    cache_fblocks.clear();
+    fblock_cache.clear();
+
+    FadviseWillNeed(fd, 0, sblock.fblktab_offs); // Will need all data up to first fblock.
     
 #if SBLOCK_DEBUG
     fprintf(stderr,
@@ -206,6 +205,11 @@ void cromfs::reread_superblock()
 
     rootdir = read_special_inode(sblock.rootdir_offs, sblock.rootdir_size, false);
     
+    /* As rootdir and inotab have now been read, it's safe to forget
+     * them from the page cache. */
+    FadviseDontNeed(fd, 0, sblock.blktab_offs);
+    FadviseWillNeed(fd, sblock.blktab_offs, sblock.blktab_size);
+    
     rootdir.mode = S_IFDIR | 0555;
     if(sig == CROMFS_SIGNATURE_01)
         rootdir.links = 2;
@@ -238,6 +242,7 @@ void cromfs::reread_superblock()
 }
 
 void cromfs::reread_fblktab()
+        throw (cromfs_exception, std::bad_alloc)
 {
     fblktab.clear();
     
@@ -253,7 +258,7 @@ void cromfs::reread_fblktab()
         cromfs_fblock_internal fblock;
         fblock.filepos = startpos+4;
         fblock.length  = R32(Buf);
-        uint_fast64_t orig_length = R64(Buf+9);
+        //uint_fast64_t orig_length = R64(Buf+9); // <- not interesting
         
         if(fblock.length <= 13)
         {
@@ -273,6 +278,10 @@ void cromfs::reread_fblktab()
             startpos += 4 + CROMFS_FSIZE;
         else
             startpos += 4 + fblock.length;
+
+        // Let the kernel know that the memory access pattern
+        // for a fblock does not have any readahead advantage.
+        FadviseRandom(fd, fblock.filepos-4, startpos);
     }
 }
 
@@ -284,7 +293,7 @@ void cromfs::forget_blktab()
 
 static cromfs* cromfs_alarm_obj = NULL;
 static void cromfs_alarm(int sig=0) __attribute__((constructor));
-static void cromfs_alarm(int sig)
+static void cromfs_alarm(int/* sig*/)
 {
     if(!cromfs_alarm_obj) return;
     cromfs_alarm_obj->forget_blktab();
@@ -319,18 +328,19 @@ static void cromfs_setup_alarm(cromfs& obj)
 }
 
 void cromfs::reread_blktab()
+        throw (cromfs_exception, std::bad_alloc)
 {
-    std::vector<unsigned char> blktab_data(sblock.blktab_size);
+    std::vector<unsigned char> blktab_data =
+        DoLZMALoading(fd, sblock.blktab_offs, sblock.blktab_size);
+
+    /* As we normally read blktab only once, it's safe
+     * to forget it from page cache now.
+     */
+    FadviseDontNeed(fd, sblock.blktab_offs, sblock.blktab_size);
     
-    ssize_t r = pread64(fd, &blktab_data[0], blktab_data.size(), sblock.blktab_offs);
-    if(r != (ssize_t)blktab_data.size())
-    {
-        throw EINVAL;
-    }
-
-    blktab_data = LZMADeCompress(blktab_data);
-
-    unsigned onesize = (storage_opts & CROMFS_OPT_PACKED_BLOCKS) ? 4 : 8;
+    /* Decode the blktab. */
+    
+    unsigned onesize = DATALOCATOR_SIZE_BYTES();
     if(storage_opts & CROMFS_OPT_PACKED_BLOCKS)
     {
         blktab.resize(blktab_data.size() / onesize);
@@ -341,7 +351,7 @@ void cromfs::reread_blktab()
                           startoffs = value % CROMFS_FSIZE;
 
             //fprintf(stderr, "P block %u defined as %u:%u\n", a, (unsigned)fblocknum, (unsigned)startoffs);
-            blktab[a].define(fblocknum, startoffs, CROMFS_BSIZE,CROMFS_FSIZE);
+            blktab[a].define(fblocknum, startoffs/*, CROMFS_BSIZE,CROMFS_FSIZE*/);
         }
     }
     else
@@ -352,7 +362,7 @@ void cromfs::reread_blktab()
             uint_fast32_t fblocknum = R32(&blktab_data[a*onesize+0]),
                           startoffs = R32(&blktab_data[a*onesize+4]);
             //fprintf(stderr, "NP block %u defined as %u:%u\n", a, (unsigned)fblocknum, (unsigned)startoffs);
-            blktab[a].define(fblocknum, startoffs, CROMFS_BSIZE,CROMFS_FSIZE);
+            blktab[a].define(fblocknum, startoffs/*, CROMFS_BSIZE,CROMFS_FSIZE*/);
         }
     }
     
@@ -363,31 +373,15 @@ void cromfs::reread_blktab()
     }
 #endif
 
-    cromfs_setup_alarm(*this);
-}
+    MadviseRandom(&blktab[0], blktab.size()*sizeof(blktab[0]));
 
-static void ExtractInodeHeader(cromfs_inode_internal& inode, const unsigned char* Buf)
-{
-    uint_fast32_t rdev_links;
-    
-    inode.mode    = R32(Buf+0x0000);
-    inode.time    = R32(Buf+0x0004);
-    rdev_links    = R32(Buf+0x0008);
-    inode.uid     = R16(Buf+0x000C);
-    inode.gid     = R16(Buf+0x000E);
-    inode.bytesize= R64(Buf+0x0010);
-    
-    if(S_ISCHR(inode.mode) || S_ISBLK(inode.mode))
-        { inode.links = 1; inode.rdev = rdev_links; }
-    else
-        { inode.links = rdev_links; inode.rdev = 0; }
-    
-    // if(S_ISDIR(inode.mode)) inode.links += 2; /* For . and .. */
+    cromfs_setup_alarm(*this);
 }
 
 cromfs_inode_internal cromfs::read_special_inode
     (uint_fast64_t offset, uint_fast64_t size,
      bool ignore_blocks)
+        throw (cromfs_exception, std::bad_alloc)
 {
     cromfs_inode_internal inode;
 
@@ -410,53 +404,26 @@ cromfs_inode_internal cromfs::read_special_inode
 #endif
                 throw EIO;
             }
-            std::vector<unsigned char> Buf(size);
-            if(pread64(fd, &Buf[0], size, offset+0) == -1) throw errno;
-            Buf = LZMADeCompress(&Buf[0], size);
+            std::vector<unsigned char> Buf = DoLZMALoading(fd, offset+0, size);
             
-            ExtractInodeHeader(inode, &Buf[0]);
-
 #if INODE_DEBUG
-            fprintf(stderr, "Read inode %s. Size %llu. Ignore blocks = %s\n",
+            fprintf(stderr, "Read inode %s. Ignore blocks = %s\n",
                 inodename,
-                (unsigned long long)inode.bytesize,
                 ignore_blocks ? "true" : "false");
 #endif
-            if(!ignore_blocks)
-            {
-                uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
-                inode.blocklist.resize(nblocks);
-                
-                unsigned block_bytesize = BLOCKNUM_SIZE_BYTES();
-#if INODE_DEBUG
-                fprintf(stderr, "block_bytesize=%u\n", block_bytesize);
-#endif
-                if(Buf.size() < block_bytesize*nblocks+0x18)
-                {
-                    /* Invalid inode */
-#if INODE_DEBUG
-                    fprintf(stderr, "Inode offs(0x%llX),size(%llu), buf.size=%u, expected %u (%u blocks)\n",
-                        (unsigned long long)offset,
-                        (unsigned long long)size,
-                        (unsigned)Buf.size(),
-                        (unsigned)(block_bytesize*nblocks+0x18),
-                        (unsigned)nblocks);
-#endif
-                    throw EIO;
-                }
-                
-                for(unsigned n=0; n<nblocks; ++n)
-                    inode.blocklist[n] = Rn(&Buf[0x18 + block_bytesize*n], block_bytesize);
-            }
+            if(ignore_blocks)
+                get_inode(&Buf[0], inode);
+            else
+                get_inode(&Buf[0], inode, CROMFS_BSIZE, BLOCKNUM_SIZE_BYTES());
+
             break;
         }
         case CROMFS_SIGNATURE_01:
         {
             unsigned char Buf[0x18];
+            ( LongFileRead(fd, offset+0, 0x18, Buf) );
             
-            if(pread64(fd, Buf, 0x18, offset+0) == -1) throw errno;
-            
-            ExtractInodeHeader(inode, Buf);
+            get_inode(Buf, inode);
             
 #if INODE_DEBUG
             printf("read_special_inode(%lld): %s\n",
@@ -469,11 +436,9 @@ cromfs_inode_internal cromfs::read_special_inode
                 uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
                 inode.blocklist.resize(nblocks);
                 
-                if(pread64(fd, &inode.blocklist[0], 4 * nblocks, offset+0x18) == -1) throw errno;
-                
-                /* Fix endianess after raw read */
+                LongFileRead reader(fd, offset+0x18, 4*nblocks);
                 for(unsigned n=0; n<nblocks; ++n)
-                    inode.blocklist[n] = R32(&inode.blocklist[n]);
+                    inode.blocklist[n] = R32(reader.GetAddr() + n*4);
             }
         }
     }
@@ -481,6 +446,7 @@ cromfs_inode_internal cromfs::read_special_inode
 }
 
 const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
+    throw (cromfs_exception, std::bad_alloc)
 {
     if(inodenum == 1)
     {
@@ -491,10 +457,10 @@ const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
     }
 
     unsigned char Buf[0x18];
-    read_file_data(inotab, (inodenum-2) * UINT64_C(4), Buf, 0x18, "inode");
+    read_file_data(inotab, GetInodeOffset(inodenum), Buf, 0x18, "inode");
     
     cromfs_inode_internal inode;
-    ExtractInodeHeader(inode, Buf);
+    get_inode(Buf, inode);
     
 #if INODE_DEBUG
     fprintf(stderr, "returning inode %llu: %s\n",
@@ -505,6 +471,7 @@ const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
 }
 
 const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inodenum)
+    throw (cromfs_exception, std::bad_alloc)
 {
     if(inodenum == 1)
     {
@@ -521,7 +488,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
     //fprintf(stderr, "%llu bytes: %llu blocks\n",
     //    (unsigned long long)result.bytesize, (unsigned long long)nblocks);
     
-    uint_fast64_t inode_offset = (inodenum-2) * UINT64_C(4) + 0x18;
+    uint_fast64_t inode_offset = GetInodeOffset(inodenum) + 0x18;
     
     result.blocklist.resize(nblocks);
     
@@ -555,6 +522,7 @@ void cromfs::read_block(cromfs_blocknum_t ind,
                         uint_fast32_t offset,
                         unsigned char* target,
                         uint_fast32_t size)
+        throw (cromfs_exception, std::bad_alloc)
 {
     if(blktab.empty()) reread_blktab();
     cromfs_setup_alarm(*this);
@@ -585,75 +553,43 @@ void cromfs::read_block(cromfs_blocknum_t ind,
 }
 
 cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t fblocknum)
+        throw (cromfs_exception, std::bad_alloc)
 {
-    fblock_cache_type::iterator i = cache_fblocks.find(fblocknum);
-
-    if(i != cache_fblocks.end())
-    {
-        return i->second;
-    }
-    
-    if(FBLOCK_CACHE_MAX_SIZE > 0
-    && cache_fblocks.size() >= FBLOCK_CACHE_MAX_SIZE)
-    {
-        /* TODO: instead of the picking one randomly,
-         * obsolete the one which was accessed longest time ago
-         */
-        EraseRandomlyOne(cache_fblocks);
-    }
-    
-    return cache_fblocks[fblocknum] = read_fblock_uncached(fblocknum);
+    cromfs_cached_fblock* result = fblock_cache.Find(fblocknum);
+    if(result) return *result;
+    fblock_cache.CheckAges();
+    return fblock_cache.Put(fblocknum, read_fblock_uncached(fblocknum));
 }
 
-cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t fblocknum)
+cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t fblocknum) const
+        throw (cromfs_exception, std::bad_alloc)
 {
-    if(fblktab.empty()) reread_fblktab();
+    if(fblktab.empty()) throw ENODATA;
     
     const uint_fast32_t comp_size = fblktab[fblocknum].length;
     const uint_fast64_t filepos   = fblktab[fblocknum].filepos;
     
-    DataReadBuffer Buffer;
-
-#if 1
-    MemMapping MMap(fd, filepos, comp_size);
-    if(MMap)
-    {
-        const unsigned char* buf = MMap.get_ptr();
 #if FBLOCK_DEBUG
-        fprintf(stderr, "- - - - reading fblock %u (%u bytes) from %llu: mmap @ %p\n",
-            (unsigned)fblocknum, (unsigned)comp_size,
-            (unsigned long long)filepos, buf);
+    fprintf(stderr, "- - - - reading fblock %u (%u bytes) from %llu\n",
+        (unsigned)fblocknum, (unsigned)comp_size,
+        (unsigned long long)filepos);
 #endif
-        Buffer.AssignRefFrom(buf, comp_size);
-    }
-    else
-#endif
-    {
-        /* mmap failed for some reason, revert to pread64 */
-        ssize_t r = Buffer.LoadFrom(fd, comp_size, filepos);
-    #if FBLOCK_DEBUG
-        fprintf(stderr, "- - - - reading fblock %u (%u bytes) from %llu: got %ld\n",
-            (unsigned)fblocknum, (unsigned)comp_size,
-            (unsigned long long)filepos, (long)r);
-    #endif
-        if(r < 0) throw errno;
-        if((uint_fast32_t)r < comp_size)
-        {
-            //fprintf(stderr, "GORE!!! 1\n");
-            throw EIO;
-        }
-    }
-    
-    std::vector<unsigned char> result = LZMADeCompress(Buffer.Buffer, comp_size);
+    std::vector<unsigned char> result = DoLZMALoading(fd, filepos, comp_size);
     if(storage_opts & CROMFS_OPT_USE_MTF) result = MTF_decode(result);
     if(storage_opts & CROMFS_OPT_USE_BWT) result = BWT_decode_embedindex(result);
     return result;
 }
 
-int_fast64_t cromfs::read_file_data(const cromfs_inode_internal& inode,
-                                    uint_fast64_t offset,
-                                    unsigned char* target, uint_fast64_t size,
-                                    const char* purpose)
+int_fast64_t cromfs::read_file_data(
+    const cromfs_inode_internal& inode,
+    uint_fast64_t offset,
+    unsigned char* target, uint_fast64_t size,
+    const char*
+#if READFILE_DEBUG
+                purpose
+#endif
+)
+    throw (cromfs_exception, std::bad_alloc)
 {
 #if READFILE_DEBUG
     fprintf(stderr,
@@ -707,9 +643,13 @@ int_fast64_t cromfs::read_file_data(const cromfs_inode_internal& inode,
             {
                 required_fblocks_set[fblock_bit_index] |= fblock_bit_value;
                 
-                fblock_cache_type::iterator i = cache_fblocks.find(fblocknum);
-                if(i == cache_fblocks.end())
+                if(fblock_cache.Has(fblocknum))
+                {
                     required_fblocks.push_back(fblocknum); // uncached blocks last
+                    // Initiate background reading for them.
+                    FadviseWillNeed(fd, fblktab[fblocknum].filepos,
+                                        fblktab[fblocknum].length);
+                }
                 else
                     required_fblocks.push_front(fblocknum); // cached blocks first
             }
@@ -722,9 +662,8 @@ int_fast64_t cromfs::read_file_data(const cromfs_inode_internal& inode,
     for(unsigned a=0, b=required_fblocks.size(); a<b; ++a)
     {
         const cromfs_fblocknum_t fblocknum = required_fblocks[a];
-        fblock_cache_type::iterator i = cache_fblocks.find(fblocknum);
         fprintf(stderr, " %u%s", (unsigned)required_fblocks[a],
-            i == cache_fblocks.end() ? "" : "(cached)"
+            fblock_cache.Has(fblocknum) ?  "(cached)" : ""
         );
     }
     fprintf(stderr, "\n");
@@ -817,24 +756,25 @@ static const cromfs_dirinfo get_dirinfo_portion(const cromfs_dirinfo& full,
     return cromfs_dirinfo(first, j);
 }
 
-static std::map<cromfs_inodenum_t, cromfs_dirinfo> readdir_cache;
-
 const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
                                       uint_fast32_t dir_offset,
                                       uint_fast32_t dir_count)
+    throw (cromfs_exception, std::bad_alloc)
 {
-    std::map<cromfs_inodenum_t, cromfs_dirinfo>::const_iterator
-        i = readdir_cache.find(inonum);
-    if(i != readdir_cache.end())
+    cromfs_dirinfo* cached = readdir_cache.Find(inonum);
+    if(cached)
     {
-        if(dir_offset == 0 && dir_count >= i->second.size())
+        if(dir_offset == 0 && dir_count >= cached->size())
         {
-            return i->second;
+            return *cached;
         }
-        return get_dirinfo_portion(i->second, dir_offset, dir_count);
+        return get_dirinfo_portion(*cached, dir_offset, dir_count);
     }
 
     const cromfs_inode_internal inode = read_inode_and_blocks(inonum);
+    if(inonum != 1 && !S_ISDIR(inode.mode))
+        { throw ENOTDIR; }
+
     cromfs_dirinfo result;
     
     unsigned char DirHeader[4];
@@ -902,7 +842,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
                 const int name_offs = entry_offsets[a] - entry_offsets[0];
 
                 if(name_offs < 0
-                || name_offs+9 >= name_buf.size()
+                || (unsigned)name_offs+9 >= name_buf.size()
                 ||    (a > 0 && entry_offsets[a] < entry_offsets[a-1])
                   )
                 {
@@ -942,34 +882,28 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
     
     if(dir_offset == 0 && dir_count >= num_files)
     {
-        if(READDIR_CACHE_MAX_SIZE > 0
-        && readdir_cache.size() > READDIR_CACHE_MAX_SIZE)
-        {
-            /* TODO: instead of the picking one randomly,
-             * obsolete the one which was accessed longest time ago
-             */
-            EraseRandomlyOne(readdir_cache);
-        }
-        
-        readdir_cache[inonum] = result;
+        readdir_cache.CheckAges();
+        readdir_cache.Put(inonum, result);
     }
     return result;
 }
 
 const cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
                                            const std::string& search_name)
+    throw (cromfs_exception, std::bad_alloc)
 {
-    std::map<cromfs_inodenum_t, cromfs_dirinfo>::const_iterator
-        i = readdir_cache.find(inonum);
-    if(i != readdir_cache.end())
+    cromfs_dirinfo* cached = readdir_cache.Find(inonum);
+    if(cached)
     {
-        const cromfs_dirinfo& info = i->second;
+        const cromfs_dirinfo& info = *cached;
         cromfs_dirinfo::const_iterator j = info.find(search_name);
         if(j != info.end()) return j->second;
         return 0;
     }
 
     const cromfs_inode_internal inode = read_inode_and_blocks(inonum);
+    if(inonum != 1 && !S_ISDIR(inode.mode))
+        { throw ENOTDIR; }
 
     unsigned char DirHeader[4];
     if(read_file_data(inode, 0, DirHeader, 4, "dir size") < 4)
@@ -1084,12 +1018,16 @@ const cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
     return 0;
 }
 
-cromfs::cromfs(int fild) : fd(fild)
+cromfs::cromfs(int fild)
+    throw (cromfs_exception, std::bad_alloc)
+     : fd(fild),
+       readdir_cache(READDIR_CACHE_MAX_SIZE, 0),
+       fblock_cache(FBLOCK_CACHE_MAX_SIZE, 0)
 {
     reread_superblock();
 }
 
-cromfs::~cromfs()
+cromfs::~cromfs() throw()
 {
     cromfs_alarm_obj = NULL;
 }

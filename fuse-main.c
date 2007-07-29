@@ -1,6 +1,6 @@
 /*
 cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
-Licence: GPL
+Licence: GPL3
 
 main.c: The main module. This provides the bindings for the cromfs
 operations for Fuse (struct fuse_lowlevel_ops), and the option parsing.
@@ -12,7 +12,7 @@ used to initialize the cromfs_oper struct.
 
 #define _LARGEFILE64_SOURCE
 
-#include "cromfs-ops.hh"
+#include "fuse-ops.hh"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,8 +23,6 @@ static const struct fuse_lowlevel_ops cromfs_oper =
     .statfs  = cromfs_statfs,
     
     .lookup  = cromfs_lookup,
-    
-    .readlink = cromfs_readlink,
     
     .getattr  = cromfs_getattr,
     .access  = cromfs_access,

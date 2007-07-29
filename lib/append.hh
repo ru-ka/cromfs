@@ -10,12 +10,12 @@
  */
 struct AppendInfo
 {
-    uint_fast32_t OldSize;           /* Size before appending */
-    uint_fast32_t AppendBaseOffset;  /* Where to append */
-    uint_fast32_t AppendedSize;      /* Size after appending */
+    size_t OldSize;           /* Size before appending */
+    size_t AppendBaseOffset;  /* Where to append */
+    size_t AppendedSize;      /* Size after appending */
 public:
     AppendInfo() : OldSize(0), AppendBaseOffset(0), AppendedSize(0) { }
-    void SetAppendPos(uint_fast32_t offs, uint_fast32_t datasize)
+    void SetAppendPos(size_t offs, size_t datasize)
     {
         AppendBaseOffset = offs;
         AppendedSize     = std::max(OldSize, offs + datasize);
@@ -24,11 +24,10 @@ public:
 
 const AppendInfo AnalyzeAppend(
     const BoyerMooreNeedle& needle,
-    uint_fast32_t minimum_pos,
-    long maximum_size,
-    
-    const unsigned char* data,
-    uint_fast32_t datasize
+    size_t minimum_pos,
+    size_t minimum_overlap,
+    const unsigned char* const data,
+    size_t datasize
 );
 
 #endif

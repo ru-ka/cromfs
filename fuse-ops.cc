@@ -1,6 +1,6 @@
 /*
 cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
-Licence: GPL
+Licence: GPL3
 
 cromfs-ops.cc: The filesystem access functions for Fuse. It translates
 the calls of Fuse into operations performed by the cromfs class.
@@ -12,7 +12,7 @@ the fuse_reply_err() function.
 */
 
 #include "cromfs.hh"
-#include "cromfs-ops.hh"
+#include "fuse-ops.hh"
 
 #include <cerrno>
 #include <fcntl.h>
@@ -75,7 +75,7 @@ extern "C" {
         delete fs;
     }
 
-    void cromfs_statfs(fuse_req_t req, fuse_ino_t unused_ino)
+    void cromfs_statfs(fuse_req_t req, fuse_ino_t /*unused_ino*/)
     {
         if(trace_ops) fprintf(stderr, "statfs\n");
         CROMFS_CTX(fs)
@@ -169,11 +169,11 @@ extern "C" {
     {
         if(trace_ops) fprintf(stderr, "access(%d,%d)\n", (int)ino, mask);
         
-        CROMFS_CTX(fs)
+        /*CROMFS_CTX(fs)*/
 
         REPLY_ERR(0);
         
-        CROMFS_CTX_END()
+        /*CROMFS_CTX_END()*/
     }
 
     void cromfs_readlink(fuse_req_t req, fuse_ino_t ino)
@@ -213,7 +213,7 @@ extern "C" {
     }
 
     void cromfs_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
-                     struct fuse_file_info *fi)
+                     struct fuse_file_info */*fi*/)
     {
         if(trace_ops) fprintf(stderr, "read(%d, %ld, %u)\n", (int)ino, (long)size, (unsigned)off);
         
@@ -245,7 +245,7 @@ extern "C" {
     }
 
     void cromfs_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
-                        struct fuse_file_info *fi)
+                        struct fuse_file_info */*fi*/)
     {
         if(trace_ops) fprintf(stderr, "readdir(%d)\n", (int)ino);
         

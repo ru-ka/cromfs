@@ -1,7 +1,7 @@
 Cromfs filesystem structure / format description.
 
 cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
-License: GPL
+License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 VERSION 03
@@ -67,6 +67,13 @@ In CROMFS03, the INOTAB inode contains flag bits in the inode's "mode" field:
         1 = Using MTF (move-to-front) filtering, 0 = not
       b:
         1 = Using BWT (burrows-wheeler-transform) filtering, 0 = not
+
+
+Technically, ROOTDIR could be placed into INOTAB just like all the other inodes.
+However, the reason it was not initially done so, was because ROOTDIR must have
+inode number 1, and for writing inode 1, one must know the length of the inode
+before being able to write other inodes, but in earlier versions of mkcromfs,
+the ROOTDIR contents were made aware of last.
 
 ---------------------------
 

@@ -2,12 +2,14 @@
 #define __STDC_CONSTANT_MACROS
 
 #include "../cromfs.hh"
-#include "util.hh"
+#include "lib/fadvise.hh"
+#include "lib/util.hh"
 
 #ifdef USE_HASHMAP
 # include <ext/hash_set>
 # include "hash.hh"
 #endif
+#include <set>
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -20,10 +22,13 @@
 #include "fnmatch.hh"
 #include "rangeset.hh"
 #include "rangemultimap.hh"
+#include "longfilewrite.hh"
+#include "threadfun.hh"
 
 #include <map>
 #include <set>
 
+static unsigned UseThreads = 0;
 static bool listing_mode  = false;
 static bool simgraph_mode = false;
 static bool use_sparse    = true;
@@ -63,71 +68,6 @@ static const std::string GetTargetPath(const std::string& targetdir, const std::
 
     return result;        
 }
-
-/* This object tries to merge several file writes
- * together to reduce the syscall traffic.
- */
-class FileOutputter
-{
-public:
-    explicit FileOutputter(int fild, uint_fast64_t esize)
-        : fd(fild), bufpos(0), expected_size(esize)
-    {
-    }
-    void write(const unsigned char* buf, uint_fast64_t size, uint_fast64_t offset)
-    {
-        const unsigned MaxBufSize = std::min(UINT64_C(0x80000), (uint_fast64_t)expected_size);
-
-        //goto JustWriteIt;// DEBUG
-        
-        if(offset == 0 && size == expected_size) goto JustWriteIt;
-        if(Buffer.capacity() != MaxBufSize) Buffer.reserve(MaxBufSize);
-
-        if(offset != getbufend() || Buffer.size() + size > MaxBufSize)
-        {
-            FlushBuffer();
-        }
-        
-        if(Buffer.empty()) bufpos = offset;
-        
-        if(offset == getbufend() && Buffer.size() + size <= MaxBufSize)
-        {
-            /* Append it to the buffer. */
-            Buffer.insert(Buffer.end(), buf, buf+size);
-        }
-        else
-        {
-            /* If this data does not fit into the buffer, write it at once. */
-        JustWriteIt: // arrived here also if we decided to skip buffering
-            if(use_sparse)
-                SparseWrite(fd, buf, size, offset);
-            else
-                pwrite64(fd, buf, size, offset);
-        }
-    }
-    ~FileOutputter()
-    {
-        FlushBuffer();
-        close(fd);
-    }
-private:
-    void FlushBuffer()
-    {
-        if(Buffer.empty()) return;
-        pwrite64(fd, &Buffer[0], Buffer.size(), bufpos);
-        Buffer.clear();
-    }
-    const uint_fast64_t getbufend() const { return bufpos + Buffer.size(); }
-private:
-    int fd;
-    uint_fast64_t bufpos;
-    uint_fast64_t expected_size;
-    std::vector<unsigned char> Buffer;
-private:
-    /* no copies */
-    void operator=(const FileOutputter&);
-    FileOutputter(const FileOutputter&);
-};
 
 struct cromfs_block_index
 {
@@ -351,24 +291,179 @@ public:
         ScanDirectories();
     }
     
+    struct ExtractWorkerParameter
+    {
+        mutable MutexType mutex;
+        cromfs_decoder& decoder;
+        
+        cromfs_fblocknum_t notdone_index;
+        const cromfs_fblocknum_t num_fblocks;
+        const std::string& targetdir;
+        uint_fast64_t& expect_size;
+        uint_fast64_t& total_written;
+    };
+    
+    static void* ExtractWorker(ExtractWorkerParameter& params)
+    {
+        for(;;)
+        {
+            ScopedLock lck(params.mutex);
+            const cromfs_fblocknum_t fblockno = params.notdone_index;
+            if(fblockno >= params.num_fblocks) break;
+            ++params.notdone_index;
+
+            uint_fast64_t old_expect_size=params.expect_size,
+                          old_total_written=params.total_written;
+            
+            lck.Unlock();
+            
+            uint_fast64_t expect_size=old_expect_size, total_written=old_total_written;
+            params.decoder.do_extract(fblockno, params.targetdir,
+                expect_size, total_written);
+            
+            lck.LockAgain();
+            params.expect_size   -= old_expect_size - expect_size;
+            params.total_written += total_written - old_total_written;
+            lck.Unlock();
+        }
+        return NULL;
+    }
+    
+    bool IsFirstOccuranceOfInodenum(const cromfs_inodenum_t inonum,
+                                    const std::string& entname) const
+    {
+        std::multimap<cromfs_inodenum_t, std::string>::const_iterator
+            j = inode_files.find(inonum);
+        if(j != inode_files.end())
+        {
+            if(j->second != entname)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    void FixupSymlinksAndOwnerships(const std::string& targetdir)
+    {
+        for(cromfs_dirinfo::const_iterator i = dir.begin(); i != dir.end(); ++i)
+        {
+            const cromfs_inodenum_t inonum = i->second;
+
+            if(!IsFirstOccuranceOfInodenum(inonum, i->first))
+                continue;
+
+            const cromfs_inode_internal ino = read_inode(inonum);
+            const std::string target = GetTargetPath(targetdir, i->first);
+            
+            if(S_ISLNK(ino.mode))
+            {
+                std::vector<char> buffer(ino.bytesize + 1, '\0');
+                
+                int fd = open(target.c_str(), O_RDONLY | O_LARGEFILE);
+                if(fd < 0)
+                {
+                    perror(target.c_str());
+                }
+                
+                int nread = pread64(fd, &buffer[0], ino.bytesize, 0);
+                close(fd);
+                
+                if(nread < 0 || (uint_fast64_t)nread < ino.bytesize)
+                {
+                    std::fprintf(stderr, "%s: incomplete symlink\n",
+                        target.c_str());
+                    continue;
+                }
+                
+                unlink(target.c_str());
+                
+                if(symlink(&buffer[0], target.c_str()) < 0)
+                {
+                    perror(target.c_str());
+                }
+            }
+            
+            if(use_sparse)
+            {
+                /* Ensure the entry is the right size (because we wrote sparse files) */
+                if(S_ISREG(ino.mode)
+                && truncate64( target.c_str(), ino.bytesize) < 0)
+                {
+                    perror(target.c_str());
+                }
+            }
+            
+            if(!S_ISLNK(ino.mode)
+            && chmod( target.c_str(), ino.mode & 07777) < 0)
+            {
+                perror(target.c_str());
+            }
+            
+            if(lchown( target.c_str(), ino.uid, ino.gid) < 0)
+            {
+                perror(target.c_str());
+            }
+        }
+    }
+    
+    void FixupHardlinks(const std::string& targetdir)
+    {
+        for(std::multimap<cromfs_inodenum_t, std::string>::const_iterator
+            i = inode_files.begin(); i != inode_files.end(); )
+        {
+            const cromfs_inodenum_t inonum = i->first;
+            const std::string& link_fn     = i->second;
+            
+            for(++i; i != inode_files.end() && i->first == inonum; ++i)
+            {
+                std::string oldpath = GetTargetPath(targetdir, link_fn);
+                std::string newpath = GetTargetPath(targetdir, i->second);
+                int r = link(oldpath.c_str(), newpath.c_str());
+                if(r < 0 && errno == EEXIST)
+                {
+                    unlink( newpath.c_str() );
+                    link(oldpath.c_str(), newpath.c_str());
+                }
+                if(r < 0)
+                {
+                    perror(newpath.c_str());
+                }
+            }
+        }
+    }
+    
+    void FixupModificationTimes(const std::string& targetdir)
+    {
+        /* Reverse order so that dirs are touched after the files within.
+         * This is something GNU tar can't do -- to extract modification
+         * times of directories properly.
+         */
+        for(cromfs_dirinfo::reverse_iterator i = dir.rbegin(); i != dir.rend(); ++i)
+        {
+            const cromfs_inodenum_t inonum = i->second;
+
+            if(!IsFirstOccuranceOfInodenum(inonum, i->first))
+                continue;
+
+            const cromfs_inode_internal ino = read_inode(inonum);
+            const std::string target = GetTargetPath(targetdir, i->first);
+            
+            struct utimbuf data = { ino.time, ino.time };
+            
+            /* Note: It is not possible to use utime() to change symlinks' modtime */
+            /* Note: utime() cannot change the "change time" either. */
+            if(!S_ISLNK(ino.mode)
+            && utime(target.c_str(), &data) < 0)
+                perror(target.c_str());
+        }
+    }
+    
     void do_extract(const std::string& targetdir)
     {
         cleanup();
         
         ScanDirectories();
-        
-        /*
-         * This is written as one huge function, because there is a lot
-         * of work to be done, and it is not straight-away obvious which
-         * way is the right order to do each step. For example, hardlinks
-         * could be created immediately after inodes, or after writing the
-         * files, or after fixing up the symlinks. There are lots of data
-         * that is shared between the steps (the file size counters, inode
-         * number tables), that it's easiest to keep it as one whole function.
-         * It allows keeping some liberty of reorganizing stuff around.
-         *
-         * Only the initial phase (directory scanning) is a clearly separate task.
-         */
         
         if(verbose >= 1)
         {
@@ -378,28 +473,26 @@ public:
         }
         
         uint_fast64_t expect_size = 0;
-        unsigned expect_files = 0;
-        unsigned expect_links = 0;
-        
-        std::map<cromfs_inodenum_t, std::string> seen_inodes;
-        std::set<std::string> duplicate_inodes;
+        size_t expect_files = 0;
+        size_t expect_links = 0;
+        size_t expect_inodes = 0;
         
         umask(0);
         for(cromfs_dirinfo::iterator i = dir.begin(); i != dir.end(); ++i)
         {
-            cromfs_inodenum_t inonum = i->second;
-            cromfs_inode_internal ino = read_inode(inonum);
+            const cromfs_inodenum_t inonum = i->second;
             
             std::string target = GetTargetPath(targetdir, i->first);
             
-            if(seen_inodes.find(inonum) != seen_inodes.end())
+            if(!IsFirstOccuranceOfInodenum(inonum, i->first))
             {
                 /* Don't create the inode twice */
-                duplicate_inodes.insert(i->first);
                 continue;
             }
-            seen_inodes[inonum] = i->first;
+            ++expect_inodes;
             
+            const cromfs_inode_internal ino = read_inode(inonum);
+
             int r = 0;
             if(S_ISDIR(ino.mode))
             {
@@ -461,101 +554,158 @@ public:
         {
             std::printf("Writing files... (%s in %u files and %u links)\n",
                 ReportSize(expect_size).c_str(),
-                expect_files,
-                expect_links
+                (unsigned)expect_files,
+                (unsigned)expect_links
                        );
         }
         
-        for(cromfs_fblocknum_t fblockno = 0; fblockno < fblktab.size(); ++fblockno)
+        std::vector<ThreadType> finders( std::min((size_t)UseThreads, fblktab.size()) );
+        
+        if(finders.size() > 1)
         {
-            /* Count the number of files/symlinks that require data
-             * from this particular fblock.
+            ExtractWorkerParameter params =
+                { MutexInitializer, *this, 0, fblktab.size(),
+                  targetdir, expect_size, total_written };
+            for(size_t a=0; a<finders.size(); ++a)
+                CreateThread(finders[a], ExtractWorker, params);
+            for(size_t a=0; a<finders.size(); ++a)
+                JoinThread(finders[a]);
+        }
+        else
+        {
+            for(cromfs_fblocknum_t fblockno = 0; fblockno < fblktab.size(); ++fblockno)
+            {
+                do_extract(fblockno, targetdir, expect_size, total_written);
+            }
+        }
+        
+        fblock_cache.clear(); // save RAM
+        
+        if(verbose >= 1)
+            std::printf("Total written: %s\n", ReportSize(total_written).c_str());
+        
+        if(verbose >= 1)
+            std::printf("Fixing up symlinks and ownerships\n");
+        
+        FixupSymlinksAndOwnerships(targetdir);
+        
+        if(verbose >= 1)
+        {
+            std::printf("Creating %u hardlinks...\n",
+                (unsigned) (inode_files.size() - expect_inodes)
+                       );
+        }
+
+        FixupHardlinks(targetdir);
+
+        if(verbose >= 1)
+            std::printf("Fixing up timestamps\n");
+        
+        FixupModificationTimes(targetdir);
+
+        cleanup();
+    }
+    
+    void do_extract(const cromfs_fblocknum_t fblockno,
+                    const std::string& targetdir,
+                    uint_fast64_t& expect_size,
+                    uint_fast64_t& total_written) const
+    {
+        /* Count the number of files/symlinks that require data
+         * from this particular fblock.
+         */
+        unsigned nfiles = 0;
+
+        for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::const_iterator
+            i = fblock_users.find(fblockno);
+            i != fblock_users.end() && i->first == fblockno;
+            ++i) ++nfiles;
+        
+        if(!nfiles)
+        {
+            /* This fblock only contains directories or parts of the
+             * inode table, or none of the selected files.
+             * Do not waste resources decompressing it now.
              */
-            unsigned nfiles = 0;
-
-            for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::iterator
-                i = fblock_users.find(fblockno);
-                i != fblock_users.end() && i->first == fblockno;
-                ++i) ++nfiles;
-            
-            if(!nfiles)
-            {
-                /* This fblock only contains directories or parts of the
-                 * inode table, or none of the selected files.
-                 * Do not waste resources decompressing it now.
-                 */
-                if(verbose >= 1)
-                {
-                    std::printf("fblock %u / %u: skipping\n",
-                        (unsigned)fblockno, (unsigned)fblktab.size());
-                    std::fflush(stdout);
-                }
-                continue;
-            }
-
             if(verbose >= 1)
             {
-                std::printf("fblock %u / %u: %s->",
-                    (unsigned)fblockno, (unsigned)fblktab.size(),
-                    ReportSize(fblktab[fblockno].length).c_str()
-                     );
+                std::printf("fblock %u / %u: skipping\n",
+                    (unsigned)fblockno, (unsigned)fblktab.size());
                 std::fflush(stdout);
             }
 
-            // Copy the fblock (don't create reference), because
-            // read_inode_and_blocks() may cause the fblock to be
-            // removed from the cache while it's still in use.
-            // Also, read it uncached so that we don't accidentally
-            // cause the inode-table fblocks to be removed from cache.
-            cromfs_cached_fblock fblock = read_fblock_uncached(fblockno);
+            FadviseDontNeed(fd, fblktab[fblockno].filepos,
+                                fblktab[fblockno].length);
             
-            if(verbose >= 1)
+            return;
+        }
+
+        if(verbose >= 1)
+        {
+            std::printf("fblock %u / %u: %s->",
+                (unsigned)fblockno, (unsigned)fblktab.size(),
+                ReportSize(fblktab[fblockno].length).c_str()
+                 );
+            std::fflush(stdout);
+        }
+
+        // Copy the fblock (don't create reference), because
+        // read_inode_and_blocks() may cause the fblock to be
+        // removed from the cache while it's still in use.
+        // Also, read it uncached so that we don't accidentally
+        // cause the inode-table fblocks to be removed from cache.
+        cromfs_cached_fblock fblock = read_fblock_uncached(fblockno);
+        
+        FadviseDontNeed(fd, fblktab[fblockno].filepos,
+                            fblktab[fblockno].length);
+        
+        if(fblockno+1 < fblktab.size())
+        {
+            // At background, initiate reading for the next fblock.
+            FadviseWillNeed(fd, fblktab[fblockno+1].filepos,
+                                fblktab[fblockno+1].length);
+        }
+
+        if(verbose >= 1)
+        {
+            std::printf("%s; -> %u targets... ", ReportSize(fblock.size()).c_str(), nfiles);
+            std::fflush(stdout);
+        }
+        
+        uint_fast64_t wrote_size = 0;
+
+        /* Write into each file that requires data from this fblock */
+        for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::const_iterator
+            i = fblock_users.find(fblockno);
+            i != fblock_users.end() && i->first == fblockno;
+            ++i)
+        {
+            const cromfs_inodenum_t inonum = i->second;
+            const std::string& filename = inode_files.find(inonum)->second;
+            /* ^ Find the first name. It doesn't matter which,
+             *   since if the files were hardlinked, any of them
+             *   can be written into affecting all simultaneously.
+             */
+            
+            //const cromfs_inodenum_t inonum = dir[i->second];
+            const std::string target = GetTargetPath(targetdir, filename);
+            
+            static MutexType inode_mutex = MutexInitializer;
+            ScopedLock lck(inode_mutex);
+            const cromfs_inode_internal ino =
+                (const_cast<cromfs_decoder&>(*this)).read_inode_and_blocks(inonum);
+            lck.Unlock();
+            
+            if(verbose >= 2)
             {
-                std::printf("%s; -> %u targets... ", ReportSize(fblock.size()).c_str(), nfiles);
-                std::fflush(stdout);
+                std::printf("\n\t%s",
+                    target.c_str()/*, (unsigned)fblockno*/);
             }
             
-            uint_fast64_t wrote_size = 0;
-
-            /* Write into each file that requires data from this fblock */
-            for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::iterator
-                i = fblock_users.find(fblockno);
-                i != fblock_users.end() && i->first == fblockno;
-                ++i)
+            try
             {
-                const cromfs_inodenum_t inonum = i->second;
-                const std::string& filename = inode_files.find(inonum)->second;
-                /* ^ Find the first name. It doesn't matter which,
-                 *   since if the files were hardlinked, any of them
-                 *   can be written into affecting all simultaneously.
-                 */
-                
-                //const cromfs_inodenum_t inonum = dir[i->second];
-                const std::string target = GetTargetPath(targetdir, filename);
-                const cromfs_inode_internal ino = read_inode_and_blocks(inonum);
-                
-                if(verbose >= 2)
-                {
-                    std::printf("\n\t%s",
-                        target.c_str()/*, (unsigned)fblockno*/);
-                }
-                
-                /* Use O_NOATIME for some performance gain. If your libc
-                 * does not support that flag, ignore it.
-                 */
-                int fd = open(target.c_str(), O_WRONLY | O_LARGEFILE
-#ifdef O_NOATIME
-                                                       | O_NOATIME
-#endif
-                              , 0666);
-                if(fd < 0)
-                {
-                    perror(target.c_str());
-                    continue;
-                }
-                
-                FileOutputter file(fd, ino.bytesize);
-                
+                FileOutputter file(target.c_str(), ino.bytesize);
+            
                 /* Find which blocks need this fblock */
                 for(unsigned a=0; a<ino.blocklist.size(); ++a)
                 {
@@ -574,6 +724,7 @@ public:
                     const uint_fast32_t block_fblocknum = block.get_fblocknum(BSIZE,FSIZE);
                     const uint_fast32_t block_startoffs = block.get_startoffs(BSIZE,FSIZE);
                     
+                    // Only write data from this fblock that is being handled now.
                     if(block_fblocknum != fblockno) continue;
                     
                     /* Allright, it uses data from this fblock. */
@@ -600,152 +751,37 @@ public:
                         continue;
                     }
                     
-                    /* Leave holes into the files (allowed by POSIX standard). */
-                    /* When the block consists entirely of zeroes, it does
-                     * not need to be written.
-                     */
-                    if(!use_sparse
-                    || !is_zero_block(&fblock[block_startoffs], block_size))
-                    {
-                        file.write(&fblock[block_startoffs], block_size, file_offset);
-                    }
+                    file.write(&fblock[block_startoffs], block_size, file_offset, use_sparse);
                     wrote_size += block_size;
                 }
                 
                 /* "file" goes out of scope, and hence it will be automatically closed. */
             }
-            
-            if(expect_size < wrote_size)
+            catch(int)
             {
-                std::fprintf(stderr, "corrupt data: got more data than expected\n");
+                perror(target.c_str());
             }
-            
-            expect_size -= wrote_size;
-            
-            if(verbose >= 1)
-            {
-                if(verbose >= 2) std::printf("\n... "); // newline because files were listed
-                
-                std::printf("%s extracted, %s of work remains.\n",
-                    ReportSize(wrote_size).c_str(),
-                    ReportSize(expect_size).c_str());
-            }
-            
-            total_written += wrote_size;
         }
         
-        cache_fblocks.clear(); // save RAM
+        if(expect_size < wrote_size)
+        {
+            std::fprintf(stderr, "corrupt data: got more data than expected\n");
+        }
+        
+        expect_size -= wrote_size;
         
         if(verbose >= 1)
         {
-            std::printf("Total written: %s\n", ReportSize(total_written).c_str());
-            std::printf("Fixing up symlinks and access timestamps\n");
+            if(verbose >= 2) std::printf("\n... "); // newline because files were listed
+            
+            std::printf("%s extracted, %s of work remains.\n",
+                ReportSize(wrote_size).c_str(),
+                ReportSize(expect_size).c_str());
         }
         
-        /* Reverse order so that dirs are touched after the files within.
-         * This is something GNU tar can't do -- to extract modification
-         * times of directories properly.
-         */
-        for(cromfs_dirinfo::reverse_iterator i = dir.rbegin(); i != dir.rend(); ++i)
-        {
-            if(duplicate_inodes.find(i->first) != duplicate_inodes.end()) continue;
-            
-            const cromfs_inodenum_t inonum = i->second;
-            const cromfs_inode_internal ino = read_inode(inonum);
-            const std::string target = GetTargetPath(targetdir, i->first);
-            
-            if(S_ISLNK(ino.mode))
-            {
-                std::vector<char> buffer(ino.bytesize + 1, '\0');
-                
-                int fd = open(target.c_str(), O_RDONLY | O_LARGEFILE);
-                if(fd < 0)
-                {
-                    perror(target.c_str());
-                }
-                
-                int nread = pread64(fd, &buffer[0], ino.bytesize, 0);
-                close(fd);
-                
-                if(nread < ino.bytesize)
-                {
-                    std::fprintf(stderr, "%s: incomplete symlink\n",
-                        target.c_str());
-                    continue;
-                }
-                
-                unlink(target.c_str());
-                
-                if(symlink(&buffer[0], target.c_str()) < 0)
-                {
-                    perror(target.c_str());
-                }
-            }
-            
-            if(use_sparse)
-            {
-                /* Ensure the entry is the right size (because we wrote sparse files) */
-                if(S_ISREG(ino.mode)
-                && truncate64( target.c_str(), ino.bytesize) < 0)
-                {
-                    perror(target.c_str());
-                }
-            }
-            
-            if(!S_ISLNK(ino.mode)
-            && chmod( target.c_str(), ino.mode & 07777) < 0)
-            {
-                perror(target.c_str());
-            }
-            
-            if(lchown( target.c_str(), ino.uid, ino.gid) < 0)
-            {
-                perror(target.c_str());
-            }
-
-            struct utimbuf data = { ino.time, ino.time };
-            
-            /* it is not possible to use utime() to change symlinks' modtime */
-            if(!S_ISLNK(ino.mode)
-            && utime(target.c_str(), &data) < 0)
-                perror(target.c_str());
-        }
+        total_written += wrote_size;
         
-        if(verbose >= 1)
-        {
-            std::printf("Creating %u hardlinks...\n",
-                (unsigned) (inode_files.size() - seen_inodes.size())
-                       );
-        }
-        for(std::map<cromfs_inodenum_t, std::string>::iterator
-            i = seen_inodes.begin(); i != seen_inodes.end(); ++i)
-        {
-            cromfs_inodenum_t inonum   = i->first;
-            const std::string& link_fn = i->second;
-            
-            for(std::multimap<cromfs_inodenum_t, std::string>::iterator
-                j = inode_files.find(inonum);
-                j != inode_files.end() && j->first == inonum;
-                ++j)
-            {
-                if(j->second != link_fn)
-                {
-                    std::string oldpath = GetTargetPath(targetdir, link_fn);
-                    std::string newpath = GetTargetPath(targetdir, j->second);
-                    int r = link(oldpath.c_str(), newpath.c_str());
-                    if(r < 0 && errno == EEXIST)
-                    {
-                        unlink( newpath.c_str() );
-                        link(oldpath.c_str(), newpath.c_str());
-                    }
-                    if(r < 0)
-                    {
-                        perror(newpath.c_str());
-                    }
-                }
-            }
-        }
-        cleanup();
+        FileOutputFlushAll();
     }
 
 private:
@@ -756,6 +792,7 @@ private:
 
         if(listing_mode && verbose >= 1)
         {
+            if(verbose >= 2) std::printf("inonum ");
             printf("mode #fblocks uid/gid    size        datetime       name\n");
         }
         
@@ -815,12 +852,69 @@ private:
     }
     
 private:
+    void ListingDisplayInode(
+        const std::string& entname,
+        const cromfs_inodenum_t inonum,
+        const cromfs_inode_internal& ino,
+        const std::set<cromfs_fblocknum_t>& fblist) const
+    {
+        if(verbose >= 1)
+        {
+            if(verbose >= 2) std::printf("%6u ", (unsigned)inonum);
+            std::printf("%s%3u %u/%-3u %11llu %s %s\n",
+                TranslateMode(ino.mode).c_str(),
+                (unsigned)fblist.size(),
+                (unsigned)ino.uid,
+                (unsigned)ino.gid,
+                (unsigned long long)ino.bytesize,
+                DumpTime(ino.time).c_str(),
+                entname.c_str()
+                       );
+        }
+        else if(verbose >= 0)
+            std::printf("%s\n", entname.c_str());
+    
+        if(verbose >= 4 && !ino.blocklist.empty())
+        {
+            std::printf("  [blocks:");
+            for(size_t a=0; a<ino.blocklist.size(); ++a)
+                std::printf(" %u", ino.blocklist[a]);
+            std::printf("]\n");
+        }
+        if(verbose >= 3 && !ino.blocklist.empty())
+        {
+            std::set<cromfs_fblocknum_t> fset;
+            for(size_t a=0; a<ino.blocklist.size(); ++a)
+                fset.insert(blktab[ino.blocklist[a]].fblocknum);
+            std::printf("  [fblocks accessed:");
+            for(std::set<cromfs_fblocknum_t>::const_iterator
+                i = fset.begin(); i != fset.end(); ++i)
+                std::printf(" %u", (unsigned)*i);
+            std::printf("]\n");
+        }
+    }
+
     void scan_dir_recursive(cromfs_inodenum_t root_ino,
                             const std::string& parent)
     {
         cromfs_dirinfo& target = dir;
         
         cromfs_dirinfo thisdir = read_dir(root_ino, 0, (uint_fast32_t)~0U);
+        
+        if(root_ino == 1 && listing_mode && verbose >= 0)
+        {
+            const std::string entname = "/";
+            
+            const cromfs_inodenum_t inonum = root_ino;
+            cromfs_inode_internal ino = read_inode_and_blocks(inonum);
+            std::set<cromfs_fblocknum_t> fblist;
+            for(unsigned a=0; a<ino.blocklist.size(); ++a)
+                fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+
+            ListingDisplayInode(entname, inonum, ino, fblist);
+        }
+        
+        cromfs_dirinfo subdirs;
         for(cromfs_dirinfo::iterator i = thisdir.begin(); i != thisdir.end(); ++i)
         {
             cromfs_inodenum_t inonum = i->second;
@@ -838,21 +932,10 @@ private:
 
             if(namematch && listing_mode)
             {
-                if(verbose >= 1)
-                {
-                    std::printf("%s%3u %u/%u %11llu %s %s\n",
-                        TranslateMode(ino.mode).c_str(),
-                        (unsigned)fblist.size(),
-                        (unsigned)ino.uid,
-                        (unsigned)ino.gid,
-                        (unsigned long long)ino.bytesize,
-                        DumpTime(ino.time).c_str(),
-                        entname.c_str()
-                               );
-                }
-                else if(verbose >= 0)
-                    std::printf("%s\n", entname.c_str());
+                ListingDisplayInode(entname, inonum, ino, fblist);
             }
+            
+            if(inonum == 1) continue;
             
             if(!namematch)
             {
@@ -883,7 +966,7 @@ private:
             
             if(S_ISDIR(ino.mode))
             {
-                scan_dir_recursive(inonum, entname + "/");
+                subdirs[entname + "/"] = inonum;
             }
             else if(S_ISLNK(ino.mode) /* only symlinks and regular files have content */
                  || S_ISREG(ino.mode)) // to limit extraction to certain type
@@ -893,6 +976,10 @@ private:
                     /* List the fblocks needed by this file, but only
                      * for the first occurance to prevent duplicate
                      * writes into hardlinked files.
+                     *
+                     * Also, S_ISDIR is excluded here, because directories
+                     * are already being handled; they won't be extracted
+                     * with the sparse completion algorithm.
                      */
                     
                     for(std::set<cromfs_fblocknum_t>::iterator
@@ -912,9 +999,13 @@ private:
                     (unsigned long long)ino.bytesize);
             }
         }
+        thisdir.clear();
+        
+        for(cromfs_dirinfo::const_iterator i = subdirs.begin(); i != subdirs.end(); ++i)
+            scan_dir_recursive(i->second, i->first);
     }
     
-    rangeset<cromfs_block_index>
+    const rangeset<cromfs_block_index>
     create_rangeset(cromfs_inodenum_t inonum)
     {
         rangeset<cromfs_block_index> result;
@@ -981,6 +1072,7 @@ int main(int argc, char** argv)
             {"simgraph",    0, 0,10001},
             {"verbose",     0, 0,'v'},
             {"flat",        0, 0,'f'},
+            {"threads",     1, 0,4003},
             {0,0,0,0}
         };
         int c = getopt_long(argc, argv, "hVlsx:X:vf", long_options, &option_index);
@@ -1013,6 +1105,9 @@ int main(int argc, char** argv)
                     " --verbose, -v      Increase verbosity\n"
                     " --flat, -f         Do not extract with paths\n"
                     "                    (Watch out for identical filenames)\n"
+                    " --threads <value>  Use the given number of threads.\n"
+                    "                    The threads will be used when extracting files.\n"
+                    "                    Use 0 or 1 to disable threads. (Default)\n"
                     "\n");
                 return 0;
             }
@@ -1051,6 +1146,19 @@ int main(int argc, char** argv)
             {
                 simgraph_mode = true;
                 should_create_output = false;
+                break;
+            }
+            case 4003: // threads
+            {
+                char* arg = optarg;
+                long size = strtol(arg, &arg, 10);
+                if(size < 0 || size > 50)
+                {
+                    std::fprintf(stderr, "mkcromfs: Threads value may be 0..50. You gave %ld%s.\n", size,arg);
+                    return -1;
+                }
+                if(size == 1) size = 0; // 1 thread is the same as no threads.
+                UseThreads = size;
                 break;
             }
         }
