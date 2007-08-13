@@ -169,11 +169,12 @@ public:
     {
         if(unlikely(nlen > hlen)) return hlen;
 
-        InterruptableContext make_interruptable;
+        InterruptibleContext make_interruptible;
         
         if(unlikely(nlen == 1))
         {
-            const unsigned char* result = (const unsigned char*)std::memchr(haystack, *needle, hlen);
+            const unsigned char* result =
+                (const unsigned char*)std::memchr(haystack, *needle, hlen);
             return result ? result-haystack : hlen;
         }
         
@@ -229,28 +230,52 @@ public:
         return SearchInHorspool(haystack,hlen, occ, needle, nlen);
     }
     size_t SearchInWithAppend(const std::vector<unsigned char>& haystack,
-                              const size_t minimum_overlap = 0) const
+                              const size_t minimum_overlap = 0,
+                              const size_t overlap_granularity = 1) const
     {
-        return SearchInWithAppend(&haystack[0], haystack.size(), minimum_overlap);
+        return SearchInWithAppend(&haystack[0], haystack.size(),
+            minimum_overlap, overlap_granularity);
     }
     size_t SearchInWithAppend(const unsigned char* haystack, const size_t hlen,
-                              const size_t minimum_overlap = 0) const
+                              const size_t minimum_overlap = 0,
+                              const size_t overlap_granularity = 1) const
     {
         size_t result = SearchIn(haystack, hlen);
         if(result != hlen) return result;
-        
-        return SearchInWithAppendOnly(haystack, hlen, minimum_overlap);
+        if(unlikely(overlap_granularity == 0)) return hlen;
+        return SearchInWithAppendOnly(haystack, hlen, minimum_overlap, overlap_granularity);
     }
 
     size_t SearchInWithAppendOnly(const std::vector<unsigned char>& haystack,
-                                  const size_t minimum_overlap = 0) const
+                                  const size_t minimum_overlap = 0,
+                                  const size_t overlap_granularity = 1) const
     {
-        return SearchInWithAppendOnly(&haystack[0], haystack.size(), minimum_overlap);
+        return SearchInWithAppendOnly(&haystack[0], haystack.size(), minimum_overlap, overlap_granularity);
     }
-    virtual size_t SearchInWithAppendOnly(const unsigned char* haystack, const size_t hlen,
-                                          const size_t minimum_overlap = 0) const
+    
+    static const unsigned char* ScanByte(
+        const unsigned char* begin,
+        const unsigned char byte,
+        size_t n_bytes,
+        const size_t granularity = 1)
     {
-        InterruptableContext make_interruptable;
+        if(granularity == 1)
+            return (const unsigned char*)std::memchr(begin, byte, n_bytes);
+
+        while(n_bytes > 0 && n_bytes >= granularity)
+        {
+            if(*begin == byte) return begin;
+            begin += granularity;
+            n_bytes -= granularity;
+        }
+        return 0;
+    }
+    
+    virtual size_t SearchInWithAppendOnly(const unsigned char* haystack, const size_t hlen,
+                                          const size_t minimum_overlap = 0,
+                                          const size_t overlap_granularity = 1) const
+    {
+        InterruptibleContext make_interruptible;
         
         /* Disappointingly, this is faster after all -- reason being
          * that creating the occ[] table requires scanning through
@@ -264,15 +289,16 @@ public:
             while(remain > minimum_overlap)
             {
                 const unsigned char* searchptr = haystack + hlen - remain;
-                const unsigned char* leftptr = (const unsigned char*)
-                    std::memchr(searchptr, *needle, remain-minimum_overlap);
+                const unsigned char* leftptr =
+                    ScanByte(searchptr, *needle, remain-minimum_overlap, overlap_granularity);
                 if(!leftptr) break;
                 size_t remainhere = haystack+hlen - leftptr;
                 if(std::memcmp(leftptr+1, needle+1, remainhere-1) == 0)
                 {
                     return (leftptr-haystack);
                 }
-                remain = remainhere-1;
+                if(unlikely(remainhere < overlap_granularity)) break;
+                remain = remainhere-overlap_granularity;
             }
         }
         return hlen;
@@ -298,6 +324,7 @@ protected:
 };
 
 /* A version of boyer-moore needle that is specialized for append-searches */
+/* For now, there is no specialized algorithm. */
 class BoyerMooreNeedleWithAppend: public BoyerMooreNeedle
 {
 public:
@@ -311,66 +338,6 @@ public:
         : BoyerMooreNeedle(n, nl), sub_occ() { }
 
     virtual ~BoyerMooreNeedleWithAppend() { }
-
-    virtual size_t SearchInWithAppendOnly(const unsigned char* haystack, const size_t hlen,
-                                          const size_t minimum_overlap = 0) const
-    {
-        return BoyerMooreNeedle::SearchInWithAppendOnly(haystack, hlen, minimum_overlap);
-        
-        InterruptableContext make_interruptable;
-        
-        /* FIXME: Implement minimum_overlap */
-        
-        // Note: This is still buggy. It doesn't pass all test cases.
-        // Therefore, the above line uses the version that _works_.
-        
-        /* For the tail part, we'll search for the first part of the needle,
-         * first half of it, then half of that half, halving the amount
-         * until a singlebyte needle is being searched...
-         *
-         * And, using the Horspool algorithm. The skip[] initialization
-         * costs too much resources when the results are only being used
-         * once.
-         */
-        size_t first_begin_pos = hlen - nlen;
-        
-        size_t sublen = std::min((nlen+1)/2, (hlen+1)/2);
-        
-        for(; sublen > 0; sublen /= 2)
-        {
-            const size_t occ_entries_before = sub_occ.size();
-            occtable_type& tabref = sub_occ[sublen];
-            if(sub_occ.size()  != occ_entries_before) // if this table is uninitialized?
-                InitOcc(tabref, needle, sublen);
-            
-            size_t begin_pos = first_begin_pos;
-            while(begin_pos < hlen)
-            {
-                //fprintf(stderr, "subneedle check %u from %u\n", sublen, begin_pos);
-                size_t trial_pos =
-                    begin_pos + SearchInHorspool(
-                        haystack+begin_pos, hlen-begin_pos,
-                        tabref,
-                        needle,
-                        sublen
-                    );
-                if(trial_pos >= hlen) break;
-                //fprintf(stderr, "found at %u, test...\n", trial_pos);
-                
-                size_t check_pos  = trial_pos + sublen;
-                const unsigned char* needle_pos = needle + sublen;
-                size_t needle_remain = nlen - sublen;
-                
-                if(std::memcmp(haystack + check_pos,
-                               needle_pos,
-                               std::min(needle_remain, hlen - check_pos)
-                              ) == 0) return trial_pos;
-                begin_pos = trial_pos + 1;
-            }
-            first_begin_pos += sublen;
-        }
-        return hlen;
-    }
 private:
     mutable std::map<size_t, occtable_type> sub_occ;
 };

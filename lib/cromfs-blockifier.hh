@@ -41,15 +41,16 @@ private:
     public:
         bool success;
         cromfs_blocknum_t blocknum;
-        mkcromfs_block_location block;
+        cromfs_block_internal block;
         crc32_t crc;
     public:
         ReusingPlan(bool) : success(false),blocknum(NO_BLOCK),block(),crc(0) { }
         
-        ReusingPlan(crc32_t c,
-                    const mkcromfs_block_location& b,
-                    cromfs_blocknum_t bn)
-            : success(true),blocknum(bn),block(b),crc(c) { }
+        ReusingPlan(crc32_t c, cromfs_blocknum_t bn)
+            : success(true),blocknum(bn),block(),crc(c) { }
+        
+        ReusingPlan(crc32_t c, const cromfs_block_internal& b)
+            : success(true),blocknum(NO_BLOCK),block(b),crc(c) { }
         
         operator bool() const { return success; }
     };
@@ -98,26 +99,34 @@ private:
         uint_fast32_t old_raw_size,
         uint_fast32_t new_raw_size);
 
-    bool block_is(const mkcromfs_block_location& block,
+    bool block_is(const cromfs_block_internal& block,
                   const std::vector<unsigned char>& data) const
     {
         return block_is(block, &data[0], data.size());
     }
 
-    bool block_is(const mkcromfs_block_location& block,
+    bool block_is(const cromfs_block_internal& block,
                   const unsigned char* data,
                   uint_fast32_t data_size) const;
+
+    bool block_is(const cromfs_blocknum_t blocknum,
+                  const std::vector<unsigned char>& data) const
+    {
+        return block_is(blocks[blocknum], &data[0], data.size());
+    }
+
+    bool block_is(const cromfs_blocknum_t blocknum,
+                  const unsigned char* data,
+                  uint_fast32_t data_size) const
+    {
+        return block_is(blocks[blocknum], data, data_size);
+    }
 
     cromfs_blocknum_t CreateNewBlock(const cromfs_block_internal& block)
     {
         cromfs_blocknum_t blocknum = blocks.size();
         blocks.push_back(block);
         return blocknum;
-    }
-
-    cromfs_blocknum_t CreateNewBlock(const mkcromfs_block_location& info)
-    {
-        return CreateNewBlock( cromfs_block_internal( info ) );
     }
 
     /* An order is a concept which appends data (block) into some
@@ -259,6 +268,7 @@ public:
     
     // The fblocks written into filesystem. Indexed by data locators.
     mkcromfs_fblockset fblocks;
+    std::vector<size_t> last_autoindex_length;
     
     // This is the index used for two purposes:
     //   Discovering identical blocks (reuse of the data locator)

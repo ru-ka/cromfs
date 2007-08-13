@@ -23,7 +23,7 @@
 #include "rangeset.hh"
 #include "rangemultimap.hh"
 #include "longfilewrite.hh"
-#include "threadfun.hh"
+#include "threadworkengine.hh"
 
 #include <map>
 #include <set>
@@ -293,40 +293,35 @@ public:
     
     struct ExtractWorkerParameter
     {
-        mutable MutexType mutex;
         cromfs_decoder& decoder;
         
-        cromfs_fblocknum_t notdone_index;
-        const cromfs_fblocknum_t num_fblocks;
         const std::string& targetdir;
         uint_fast64_t& expect_size;
         uint_fast64_t& total_written;
+
+        mutable MutexType mutex;
     };
     
-    static void* ExtractWorker(ExtractWorkerParameter& params)
+    static bool ExtractWorker(size_t index, ExtractWorkerParameter& params)
     {
-        for(;;)
-        {
-            ScopedLock lck(params.mutex);
-            const cromfs_fblocknum_t fblockno = params.notdone_index;
-            if(fblockno >= params.num_fblocks) break;
-            ++params.notdone_index;
+        const cromfs_fblocknum_t fblockno = index;
+        
+        ScopedLock lck(params.mutex);
 
-            uint_fast64_t old_expect_size=params.expect_size,
-                          old_total_written=params.total_written;
-            
-            lck.Unlock();
-            
-            uint_fast64_t expect_size=old_expect_size, total_written=old_total_written;
-            params.decoder.do_extract(fblockno, params.targetdir,
-                expect_size, total_written);
-            
-            lck.LockAgain();
-            params.expect_size   -= old_expect_size - expect_size;
-            params.total_written += total_written - old_total_written;
-            lck.Unlock();
-        }
-        return NULL;
+        uint_fast64_t old_expect_size=params.expect_size,
+                      old_total_written=params.total_written;
+        
+        lck.Unlock();
+        
+        uint_fast64_t expect_size=old_expect_size, total_written=old_total_written;
+        params.decoder.do_extract(fblockno, params.targetdir,
+            expect_size, total_written);
+        
+        lck.LockAgain();
+        params.expect_size   -= old_expect_size - expect_size;
+        params.total_written += total_written - old_total_written;
+        
+        return false;
     }
     
     bool IsFirstOccuranceOfInodenum(const cromfs_inodenum_t inonum,
@@ -559,25 +554,11 @@ public:
                        );
         }
         
-        std::vector<ThreadType> finders( std::min((size_t)UseThreads, fblktab.size()) );
-        
-        if(finders.size() > 1)
-        {
-            ExtractWorkerParameter params =
-                { MutexInitializer, *this, 0, fblktab.size(),
-                  targetdir, expect_size, total_written };
-            for(size_t a=0; a<finders.size(); ++a)
-                CreateThread(finders[a], ExtractWorker, params);
-            for(size_t a=0; a<finders.size(); ++a)
-                JoinThread(finders[a]);
-        }
-        else
-        {
-            for(cromfs_fblocknum_t fblockno = 0; fblockno < fblktab.size(); ++fblockno)
-            {
-                do_extract(fblockno, targetdir, expect_size, total_written);
-            }
-        }
+        { ExtractWorkerParameter params =
+            { *this, targetdir, expect_size, total_written };
+        { ThreadWorkEngine<ExtractWorkerParameter> engine;
+        engine.RunTasks(UseThreads, fblktab.size(), params, ExtractWorker);
+        } }
         
         fblock_cache.clear(); // save RAM
         
@@ -690,7 +671,7 @@ public:
             //const cromfs_inodenum_t inonum = dir[i->second];
             const std::string target = GetTargetPath(targetdir, filename);
             
-            static MutexType inode_mutex = MutexInitializer;
+            static MutexType inode_mutex;
             ScopedLock lck(inode_mutex);
             const cromfs_inode_internal ino =
                 (const_cast<cromfs_decoder&>(*this)).read_inode_and_blocks(inonum);

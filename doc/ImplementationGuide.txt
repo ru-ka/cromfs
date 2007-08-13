@@ -5,7 +5,7 @@ License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 cromfs implementation help. If you want to implement
-a kernel-level cromfs driver.
+a kernel-level cromfs driver without using cromfs.cc
 --------------------------------
 Use doc/FORMAT as reference.
 --------------------------------

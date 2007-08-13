@@ -5,26 +5,18 @@
 #include <vector>
 #include <algorithm>
 
-//#define BUCKET_USE_ROPE
 //#define BUCKET_USE_HASHMAP
 
 #ifdef BUCKET_USE_HASHMAP
 # include <ext/hash_map>
 # include "hash.hh"
 #endif
-#ifdef BUCKET_USE_ROPE
-# include <ext/rope>
-#endif
 
 template<typename DataType, typename IntType = uint_fast32_t>
 class BucketContainer
 {
 private:
-#ifdef BUCKET_USE_ROPE
-    static const IntType SplitOff = 0x1000000;
-#else
     static const IntType SplitOff = 0x10000;
-#endif
 private:
     struct BucketData
     {
@@ -42,11 +34,7 @@ private:
     }   __attribute__((packed));
     
 private:
-#ifdef BUCKET_USE_ROPE
-    typedef __gnu_cxx::rope<BucketData> bucketlist_t;
-#else
     typedef std::vector<BucketData> bucketlist_t;
-#endif
 #ifdef BUCKET_USE_HASHMAP
     typedef __gnu_cxx::hash_map<uint_least16_t, bucketlist_t> buckets_t;
 #else
@@ -141,18 +129,39 @@ public:
         
         bucketlist_t& bucket = buckets[data_hi];
 
-#ifdef BUCKET_USE_ROPE
-        typename bucketlist_t::iterator j =
-            std::lower_bound(bucket.mutable_begin(), bucket.mutable_end(),
-                data_lo,
-                std::mem_fun_ref(&BucketData::CompareValue) );
-#else
         typename bucketlist_t::iterator j =
             std::lower_bound(bucket.begin(), bucket.end(),
                 data_lo,
                 std::mem_fun_ref(&BucketData::CompareValue) );
-#endif
+
+        /* Aiee, this is slow. */
         bucket.insert(j, BucketData(data.second, data_lo) );
         ++count;
+    }
+    
+    template<typename TempIntType>
+    void erase(const std::pair<TempIntType, DataType>& data)
+    {
+        const uint_fast16_t data_hi = data.first / SplitOff;
+        const uint_fast16_t data_lo = data.first % SplitOff;
+        
+        bucketlist_t& bucket = buckets[data_hi];
+
+        typename bucketlist_t::iterator j =
+            std::lower_bound(bucket.begin(), bucket.end(),
+                data_lo,
+                std::mem_fun_ref(&BucketData::CompareValue) );
+
+        while(!(j == bucket.end()))
+        {
+            if( (*j).lo_index != data_lo ) return;
+            if( (*j).data == data.second ) break;
+            ++j;
+        }
+        if(j != bucket.end())
+        {
+            bucket.erase(j);
+            --count;
+        }
     }
 };

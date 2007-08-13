@@ -6,7 +6,7 @@
 #include "cromfs-blockifier.hh"
 #include "cromfs-inodefun.hh"    // for CalcSizeInBlocks
 #include "superstringfinder.hh"
-#include "threadfun.hh"
+#include "threadworkengine.hh"
 #include "append.hh"
 
 #include <algorithm>
@@ -44,26 +44,36 @@ const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
     const crc32_t crc)
 {
     /* Use CRC32 to find the identical block. */
-    mkcromfs_block_location match;
-    for(size_t matchcount=0; block_index.FindByCRC(crc, match, matchcount); ++matchcount)
+    if(true)
     {
-        /* Identical CRC was found */
-        /* It may be found more than once, and the finds may be
-         * false positives. Hence, we must verify each instance.
-         */
-        cromfs_blocknum_t& blocknum = match.blocknum;
-        const mkcromfs_block_location& block = match;
-        
-        /*
-        fprintf(stderr, "Testing block: [%u @ %u] (%u)\n",
-            (unsigned)block.fblocknum,
-            (unsigned)block.startoffs,
-            (unsigned)block.blocknum);*/
-        
-        if(block_is(block, data))
+        cromfs_blocknum_t match;
+        for(size_t matchcount=0; block_index.FindRealIndex(crc, match, matchcount); ++matchcount)
         {
-            /* Match! */
-            return ReusingPlan(crc, block, blocknum);
+            /* Identical CRC was found */
+            /* It may be found more than once, and the finds may be
+             * false positives. Hence, we must verify each instance.
+             */
+            if(block_is(match, data))
+            {
+                /* Match! */
+                return ReusingPlan(crc, match);
+            }
+        }
+    }
+    if(true)
+    {
+        cromfs_block_internal match;
+        for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
+        {
+            /* Identical CRC was found */
+            /* It may be found more than once, and the finds may be
+             * false positives. Hence, we must verify each instance.
+             */
+            if(block_is(match, data))
+            {
+                /* Match! */
+                return ReusingPlan(crc, match);
+            }
         }
     }
     /* Didn't find match. */
@@ -72,8 +82,6 @@ const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
 
 struct SmallestInfo
 {
-    mutable MutexType    mutex;
-    
     int                found; // 0=no, 1=yes, 2=full_overlap
     cromfs_fblocknum_t fblocknum;
     uint_fast32_t      adds;
@@ -84,6 +92,13 @@ struct SmallestInfo
         ScopedLock lck(mutex);
         return found;
     }
+    void reset()
+    {
+        ScopedLock lck(mutex);
+        found=0; fblocknum=0; adds=0; appended=AppendInfo();
+    }
+
+    mutable MutexType    mutex;
 };
 
 static void FindOverlap(
@@ -105,7 +120,7 @@ static void FindOverlap(
     long minimum_overlap = std::max(0l, MaxFblockSize - FblockSize);
     
     AppendInfo appended = AnalyzeAppend(
-        data, minimum_pos, minimum_overlap,
+        data, minimum_pos, minimum_overlap, OverlapGranularity,
         Buffer.Buffer, FblockSize);
     
     minimum_test_pos = appended.AppendBaseOffset;
@@ -140,59 +155,48 @@ static void FindOverlap(
 
 struct OverlapFinderParameter
 {
-    mutable MutexType    mutex;
-
-    size_t notdone_index;
+    // ref ok
     const mkcromfs_fblockset& fblocks;
-    const std::vector<cromfs_fblocknum_t>& candidates;
+    // ref not ok
     const BoyerMooreNeedleWithAppend& data;
+    // ref not ok
     cromfs_blockifier::overlaptest_history_t& minimum_tested_positions;
-    SmallestInfo& smallest;
+
+    // actual value:
+    SmallestInfo smallest;
+
+    // actual value:
+    std::vector<cromfs_fblocknum_t> candidates;
+
+    mutable MutexType       mutex;
 };
 
-static void* OverlapFindWorker(OverlapFinderParameter& params)
+static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
 {
-    /* A peculiar crashing problem seems to occur, where the
-     * program terminates with a
-     * "terminate called without an active exception" message
-     * when an asynchronous cancel is delivered.
-     *
-     * Quirks in the style of this function may be caused by
-     * trying to work around that.
-     */
-    SetCancellableThread();
+    ScopedLock lck(params.mutex);
     
-    for(;;)
-    {
-        TestThreadCancel();
-        
-        ScopedLock lck(params.mutex);
-        
-        /* Check the next available candidate */
-        const size_t a = params.notdone_index;
-        const int necessarity = a < MaxFblockCountForBruteForce ? 2 : 1;
-        
-        if(a >= params.candidates.size()) break;
+    const int necessarity = a < MaxFblockCountForBruteForce ? 2 : 1;
 
-        bool is_necessary = necessarity > params.smallest.get_found();
-        if(!is_necessary) break;
-        
-        const cromfs_fblocknum_t fblocknum = params.candidates[a];
-        size_t& minimum_tested_pos = params.minimum_tested_positions[fblocknum];
-        
-        /* And move on to next */
-        ++params.notdone_index;
-        
-        lck.Unlock();
-        
-        const mkcromfs_fblock& fblock = params.fblocks[fblocknum];
-        FindOverlap(params.data,
-                    fblocknum,
-                    fblock,
-                    minimum_tested_pos,
-                    params.smallest);
-    }
-    return NULL;
+    const int found = params.smallest.get_found();
+    if(found == 2) return true; // cancel all
+    
+    const bool is_necessary = necessarity > params.smallest.get_found();
+    if(!is_necessary) return false;
+                            
+    const cromfs_fblocknum_t fblocknum = params.candidates[a];
+    size_t& minimum_tested_pos = params.minimum_tested_positions[fblocknum];
+
+    lck.Unlock();
+            
+    const mkcromfs_fblock& fblock = params.fblocks[fblocknum];
+
+    FindOverlap(params.data,
+                fblocknum,
+                fblock,
+                minimum_tested_pos,
+                params.smallest);
+
+    return params.smallest.get_found() >= 2;
 }
 
 const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
@@ -202,7 +206,13 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
     /* First check if we can write into an existing fblock. */
     if(true)
     {
-        std::vector<cromfs_fblocknum_t> candidates;
+        OverlapFinderParameter params = 
+        {
+            fblocks, data, minimum_tested_positions,
+            { 0, 0, 0, AppendInfo() }
+        };
+        
+        std::vector<cromfs_fblocknum_t>& candidates = params.candidates;
         candidates.reserve(fblocks.size());
         
         unsigned priority_candidates = 0;
@@ -241,64 +251,24 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         /* Randomly shuffle the non-priority candidates */
         std::random_shuffle(candidates.begin()+priority_candidates, candidates.end());
         
-        SmallestInfo smallest = { MutexInitializer, 0, 0, 0, AppendInfo() };
-
-        /* Check each candidate (up to MaxFblockCountForBruteForce)
+        /* Task description:
+         * Check each candidate (up to MaxFblockCountForBruteForce)
          * for the fit which reuses the maximum amount of data.
-         *
-         * If threads are enabled, parallelly check all candidate fblocks.
          */
         
-        std::vector<ThreadType> finders(std::min((size_t)UseThreads, candidates.size()));
-        if(finders.size() > 1)
-        {
-            OverlapFinderParameter params =
-                { MutexInitializer, 0, fblocks, candidates,
-                  data, minimum_tested_positions, smallest };
-            
-            for(size_t a=0; a<candidates.size(); ++a)
-                fblocks[candidates[a]].EnsureMMapped();
-            
-            for(size_t a=0; a<finders.size(); ++a)
-                CreateThread(finders[a], OverlapFindWorker, params);
-            
-            bool perfect_found = false, perfect_found_iknow = false;
-            for(size_t a=0; a<finders.size(); ++a)
-            {
-                if(smallest.get_found() >= 2) perfect_found = true;
-                if(perfect_found && !perfect_found_iknow)
-                {
-                    for(size_t b=a; b<finders.size(); ++b)
-                        CancelThread(finders[b]);
-                    perfect_found_iknow = true;
-                }
-                JoinThread(finders[a]);
-            }
-        }
-        else
-        {
-            for(size_t a=0; a<candidates.size(); ++a)
-            {
-                const int necessarity = a < MaxFblockCountForBruteForce ? 2 : 1;
-                const cromfs_fblocknum_t fblocknum = candidates[a];
-                const mkcromfs_fblock& fblock = fblocks[fblocknum];
-                if(necessarity <= smallest.get_found()) break;
-                FindOverlap(
-                    data, fblocknum, fblock,
-                    minimum_tested_positions[fblocknum],
-                    smallest);
-            }
-        }
-        finders.clear();
+        static ThreadWorkEngine<OverlapFinderParameter> engine;
+        engine.RunTasks(UseThreads, candidates.size(),
+                        params,
+                        OverlapFindWorker);
         
         /* Utilize the finding, if it's an overlap,
          * or it's an appension into a fblock that still has
          * so much room that it doesn't conflict with MinimumFreeSpace.
          * */
-        if(smallest.found)
+        if(params.smallest.found)
         {
-            const cromfs_fblocknum_t fblocknum = smallest.fblocknum;
-            AppendInfo appended = smallest.appended;
+            const cromfs_fblocknum_t fblocknum = params.smallest.fblocknum;
+            AppendInfo appended = params.smallest.appended;
             
             /* This is the plan. */
             return WritePlan(fblocknum, appended, data, crc);
@@ -317,36 +287,41 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
 cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan)
 {
     cromfs_blocknum_t blocknum = plan.blocknum;
-    const mkcromfs_block_location& block = plan.block;
-    
-    const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
-    const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
-    
-    /* If this match didn't have a real block yet, create one */
-    if(blocknum == NO_BLOCK)
-    {
-        blocknum = CreateNewBlock(block);
-        if(DisplayBlockSelections)
-        {
-            std::printf("block %u => [%u @ %u] (autoindex hit) (overlap fully)\n",
-                (unsigned)blocknum,
-                (unsigned)fblocknum,
-                (unsigned)startoffs);
-        }
-        
-        /* Assign a real blocknumber to the autoindex */
-        block_index.Update(plan.crc, fblocknum, startoffs, blocknum);
-    }
-    else
+    if(blocknum != NO_BLOCK)
     {
         if(DisplayBlockSelections)
         {
+            const cromfs_block_internal& block = blocks[blocknum];
+            
+            const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
+            const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
+
             std::printf("block %u == [%u @ %u] (reused block)\n",
                 (unsigned)blocknum,
                 (unsigned)fblocknum,
                 (unsigned)startoffs);
         }
+        return blocknum;
     }
+    
+    const cromfs_block_internal& block = plan.block;
+    
+    const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
+    const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
+    
+    /* If this match didn't have a real block yet, create one */
+    blocknum = CreateNewBlock(block);
+    if(DisplayBlockSelections)
+    {
+        std::printf("block %u => [%u @ %u] (autoindex hit) (overlap fully)\n",
+            (unsigned)blocknum,
+            (unsigned)fblocknum,
+            (unsigned)startoffs);
+    }
+    
+    /* Assign a real blocknumber to the autoindex */
+    block_index.DelAutoIndex(plan.crc, block);
+    block_index.AddRealIndex(plan.crc, blocknum);
     return blocknum;
 }
 
@@ -373,15 +348,17 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     {
         if(new_data_offset + plan.data.size() <= old_raw_size)
         {
-            std::printf("block %u => [%u @ %u] (overlap fully)",
+            std::printf("block %u => (%u) [%u @ %u] (overlap fully)",
                 (unsigned)blocks.size(),
+                (unsigned)plan.data.size(),
                 (unsigned)fblocknum,
                 (unsigned)new_data_offset);
         }
         else
         {
-            std::printf("block %u => [%u @ %u] size now %u, remain %d",
+            std::printf("block %u => (%u) [%u @ %u] size now %u, remain %d",
                 (unsigned)blocks.size(),
+                (unsigned)plan.data.size(),
                 (unsigned)fblocknum,
                 (unsigned)new_data_offset,
                 (unsigned)new_raw_size,
@@ -402,7 +379,17 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     
     if(DoUpdateBlockIndex)
     {
-        AutoIndex(fblocknum, old_raw_size, new_raw_size);
+        if(last_autoindex_length.size() <= fblocknum)
+            last_autoindex_length.resize(fblocknum+1);
+        
+        size_t& last_raw_size = last_autoindex_length[fblocknum];
+        
+        if(new_raw_size - last_raw_size >= 1024*256
+        || new_raw_size >= FSIZE-MinimumFreeSpace-BSIZE)
+        {
+            AutoIndex(fblocknum, last_raw_size, new_raw_size);
+            last_raw_size = new_raw_size;
+        }
     }
     
     if(DisplayBlockSelections)
@@ -428,7 +415,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     const cromfs_blocknum_t blocknum = CreateNewBlock(block);
     if(DoUpdateBlockIndex)
     {
-        block_index.Add(plan.crc, block.fblocknum, block.startoffs, blocknum);
+        block_index.AddRealIndex(plan.crc, blocknum);
     }
     return blocknum;
 }
@@ -436,7 +423,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
 ///////////////////////////////////////////////
 
 bool cromfs_blockifier::block_is(
-    const mkcromfs_block_location& block,
+    const cromfs_block_internal& block,
     const unsigned char* data,
     uint_fast32_t data_size) const
 {
@@ -493,12 +480,13 @@ void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
             const crc32_t crc = crc32_calc(ptr, BSIZE);
             
             /* Check if this checksum has already been indexed */
-            mkcromfs_block_location match;
-            for(size_t matchcount=0; block_index.FindByCRC(crc, match, matchcount); ++matchcount)
+            cromfs_block_internal match;
+            for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
             {
                 if(block_is(match, ptr, BSIZE)) goto dont_add_crc;
             }
-            block_index.Add(crc, fblocknum, startoffs, NO_BLOCK);
+            match.define(fblocknum, startoffs);
+            block_index.AddAutoIndex(crc, match);
           dont_add_crc: ;
         }
     }
@@ -516,6 +504,7 @@ void cromfs_blockifier::AddOrder(
     
     order.badness = offset; // a dummy sorting rule at first
     
+    std::fflush(stdout); std::fflush(stderr);
     const ReusingPlan plan1 = CreateReusingPlan(order.data, order.crc);
     if(plan1)
     {
@@ -563,6 +552,8 @@ ReEvaluate:
     {
         j = i; ++j;
         individual_order& order = *i;
+
+        std::fflush(stdout); std::fflush(stderr);
 
         // Find the fblock that contains this given data, or if that's
         // not possible, find out which fblock to append to, or whether

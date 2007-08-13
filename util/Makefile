@@ -1,4 +1,4 @@
-VERSION=1.5.0
+VERSION=1.5.1
 
 include Makefile.sets
 
@@ -75,7 +75,12 @@ wfc_test: wfc_test.o ../lib/wfc.o
 st4_test: st4_test.o ../lib/st4.o
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDLIBS)
 
+.libdepend: ../lib/.depend
+	perl -pe 's@([-+a-zA-Z0-9._/]+)@../lib/$$1@g' < "$<" > "$@"
+../lib/.depend:
+	make -C ../lib depend
 include depfun.mak
+include .libdepend
 
 clean:
 	rm -f $(OBJS_MK) $(OBJS_UN)

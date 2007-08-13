@@ -180,9 +180,8 @@ extern "C" {
     {
         CROMFS_CTX(fs)
 
-        const cromfs_inode_internal i = fs.read_inode_and_blocks(ino);
         char Buf[65536];
-        int nread = fs.read_file_data(i, 0, (unsigned char*)Buf, sizeof(Buf)-1, "readlink");
+        int nread = fs.read_file_data(ino, 0, (unsigned char*)Buf, sizeof(Buf)-1, "readlink");
         if(nread < 0)
         {
             REPLY_ERR(nread);
@@ -219,11 +218,9 @@ extern "C" {
         
         CROMFS_CTX(fs)
         
-        const cromfs_inode_internal i = fs.read_inode_and_blocks(ino);
-
         std::vector<unsigned char> Buf(size);
         
-        int_fast64_t result = fs.read_file_data(i, off, &Buf[0], size, "fileread");
+        int_fast64_t result = fs.read_file_data(ino, off, &Buf[0], size, "fileread");
         fuse_reply_buf(req, (const char*)&Buf[0], result);
         
         CROMFS_CTX_END()

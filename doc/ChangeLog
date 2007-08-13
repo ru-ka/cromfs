@@ -4,6 +4,18 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.1	2007-08-13 Joel Yliluoma <bisqwit@iki.fi>
+- mkfromfs: The memory efficiency of the block index was further
+  improved, enabling the use of a slightly shorter autoindex period
+  if one so chooses.
+- mkcromfs, unmkcromfs: Improved threading performance by introducing 
+  a concept of permanent worker threads, instead of threads deleted
+  and recreated at every request.
+- mkcromfs: Added --overlapgranularity (-g) option. It is experimental,
+  and in theory improves reuse rate on periodical data. It restricts
+  partial overlap into numbers that are evenly divisible with the given
+  value.
+
 1.5.0	2007-07-29 Joel Yliluoma <bisqwit@iki.fi>
 - License change: Now it is under GPL3. (Previously GPL2.)
 - mkcromfs: Changed the order in which inode numbers are assigned,

@@ -250,6 +250,7 @@ void cromfs::reread_fblktab()
     for(;;)
     {
         unsigned char Buf[17];
+        /* TODO: LongFileRead here... but catch EOF somehow? */
         ssize_t r = pread64(fd, Buf, 17, startpos);
         if(r == 0) break;
         if(r < 0) throw errno;
@@ -455,6 +456,7 @@ const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
 #endif
         return rootdir;
     }
+    if(unlikely(inodenum < 1)) throw EBADF;
 
     unsigned char Buf[0x18];
     read_file_data(inotab, GetInodeOffset(inodenum), Buf, 0x18, "inode");
@@ -578,6 +580,18 @@ cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t fblocknum) 
     if(storage_opts & CROMFS_OPT_USE_MTF) result = MTF_decode(result);
     if(storage_opts & CROMFS_OPT_USE_BWT) result = BWT_decode_embedindex(result);
     return result;
+}
+
+int_fast64_t cromfs::read_file_data(
+    cromfs_inodenum_t inonum,
+    uint_fast64_t offset,
+    unsigned char* target, uint_fast64_t size,
+    const char*purpose)
+    throw (cromfs_exception, std::bad_alloc)
+{
+    return read_file_data(
+        inonum==1 ? get_root_inode () : read_inode_and_blocks(inonum),
+        offset, target, size, purpose);
 }
 
 int_fast64_t cromfs::read_file_data(

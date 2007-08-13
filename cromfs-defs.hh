@@ -83,6 +83,10 @@ public:
     {
         return fblocknum;
     }
+    bool operator==(const cromfs_block_internal& b) const
+    {
+        return fblocknum == b.fblocknum && startoffs == b.startoffs;
+    }
 } __attribute__((packed));
 
 struct cromfs_superblock_internal

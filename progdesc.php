@@ -244,7 +244,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Fragmentation<br />(good for compression, bad for access speed)</th>
-   <td class=hmm>Abundant</th>
+   <td class=good>Depends on compression settings</th>
    <td class=hmm>None</td>
    <td class=good>File tails only</td>
    <td class=hmm>Depends on slave filesystem</td>
@@ -915,7 +915,17 @@ to this package.
  </ul></li>
  <li>Topic: Portability
   <ul>
-   <li>Write a Windows filesystem driver?</li>
+   <li>Write a Windows filesystem driver? (See
+    <a href=\"http://bisqwit.iki.fi/src/cromfs-writingfrontends.txt\"
+    >doc/WritingFrontends.txt</a> for instructions.)
+     <p>
+    I would do it myself, but the
+    <a href=\"http://www.microsoft.com/whdc/DevTools/IFSKit/IFSKit_About.mspx\"
+    >Microsoft Installable Filesystem Kit</a> is not free. It requires (a lot of) money,
+    <a href=\"http://www.microsoft.com/whdc/devtools/ifskit/ServerIFSKitOrderfaq.mspx\"
+    >no discounts</a>. Interoperability is not really a thing for Microsoft.<br>
+    And, I have no experience on Windows kernel mode programming.
+  </li>
    <li>Test on big-endian system</li>
  </ul></li>
  <li>Topic: Increasing compression power

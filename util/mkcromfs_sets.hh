@@ -8,6 +8,7 @@ extern uint_fast32_t MinimumFreeSpace;
 extern uint_fast32_t AutoIndexPeriod;
 extern uint_fast32_t MaxFblockCountForBruteForce;
 extern unsigned UseThreads;
+extern uint_fast32_t OverlapGranularity;
 
 extern long FSIZE;
 extern long BSIZE;

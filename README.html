@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.5.0.
+  This is the documentation of cromfs-1.5.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlist">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -256,7 +256,7 @@ and by no means a scientific study, but here goes:
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Fragmentation<br />(good for compression, bad for access speed)</th>
-   <td class=hmm>Abundant</th>
+   <td class=good>Depends on compression settings</th>
    <td class=hmm>None</td>
    <td class=good>File tails only</td>
    <td class=hmm>Depends on slave filesystem</td>
@@ -886,8 +886,8 @@ The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml31><b id=eml17 class=nonmail>eruZ2i.</b><span id=eml18 class=ismail>Joel</span><span id=eml19 class=nonmail><b>a@Snze.</b></span><span id=eml20 class=ismail> Yli</span><b id=eml21 class=nonmail>nx</b><span id=eml22 class=ismail>luom</span><span id=eml23 class=nonmail><b>di0MV</b></span><span id=eml24 class=ismail>a &lt;bi</span><b id=eml25 class=nonmail>vtkg@Tl</b><span id=eml26 class=ismail>sqwi</span><span id=eml27 class=nonmail><b>o@j/n@o</b></span><span id=eml28 class=ismail>t@ik</span><b id=eml29 class=nonmail>o.</b><span id=eml30 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=17;i<31;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml19><b id=eml5 class=nonmail>/</b><span id=eml6 class=ismail>Joel</span><span id=eml7 class=nonmail><b>p/0b@A@@wg</b></span><span id=eml8 class=ismail> Yli</span><b id=eml9 class=nonmail>3@j</b><span id=eml10 class=ismail>luom</span><span id=eml11 class=nonmail><b>qy0ed@s</b></span><span id=eml12 class=ismail>a &lt;bi</span><b id=eml13 class=nonmail>Zni@</b><span id=eml14 class=ismail>sqwi</span><span id=eml15 class=nonmail><b>@jX7p/5py</b></span><span id=eml16 class=ismail>t@ik</span><b id=eml17 class=nonmail>t3seoh69/</b><span id=eml18 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=5;i<19;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -929,7 +929,17 @@ to this package.
  </ul></li>
  <li>Topic: Portability
   <ul>
-   <li>Write a Windows filesystem driver?</li>
+   <li>Write a Windows filesystem driver? (See
+    <a href="http://bisqwit.iki.fi/src/cromfs-writingfrontends.txt"
+    >doc/WritingFrontends.txt</a> for instructions.)
+     <p>
+    I would do it myself, but the
+    <a href="http://www.microsoft.com/whdc/DevTools/IFSKit/IFSKit_About.mspx"
+    >Microsoft Installable Filesystem Kit</a> is not free. It requires (a lot of) money,
+    <a href="http://www.microsoft.com/whdc/devtools/ifskit/ServerIFSKitOrderfaq.mspx"
+    >no discounts</a>. Interoperability is not really a thing for Microsoft.<br>
+    And, I have no experience on Windows kernel mode programming.
+  </li>
    <li>Test on big-endian system</li>
  </ul></li>
  <li>Topic: Increasing compression power
@@ -980,9 +990,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Sun, 29 Jul 2007 23:16:29 +0300)<br>
+       <tt>progdesc.php</tt> (last updated: Wed, 01 Aug 2007 14:00:18 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Sun, 29 Jul 2007 23:16:31 +0300</small>
+  at Mon, 13 Aug 2007 19:21:59 +0300</small>
  </p>
 </body>
 </html>

@@ -5,6 +5,7 @@ const AppendInfo AnalyzeAppend
     const BoyerMooreNeedle& needle,
     size_t minimum_pos,
     size_t minimum_overlap,
+    size_t overlap_granularity,
     
     const unsigned char* const haystack,
     size_t hlen
@@ -22,7 +23,9 @@ const AppendInfo AnalyzeAppend
             needle.SearchInWithAppend(
                 haystack + minimum_pos,
                 hlen - minimum_pos,
-                minimum_overlap) + minimum_pos;
+                minimum_overlap,
+                overlap_granularity) + minimum_pos;
+
         append.SetAppendPos(result, needle.size());
     }
     return append;

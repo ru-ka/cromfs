@@ -52,17 +52,15 @@ public:
      */
     const cromfs_inode_internal&      get_root_inode() { return rootdir; }
 
-    /* Reads data from the file denoted by the inode. The inode
+    /* Reads data from the file denoted by the inode number. The inode
      * may also point to a directory or a symlink; this is not an error.
-     * Note: The inode passed to this function must contain the block
-     * table (i.e. it must be the result of read_inode_and_blocks().
      */
-    int_fast64_t read_file_data(const cromfs_inode_internal& inode,
+    int_fast64_t read_file_data(const cromfs_inodenum_t inonum,
                                 uint_fast64_t offset,
                                 unsigned char* target, uint_fast64_t size,
                                 const char* purpose)
         throw (cromfs_exception, std::bad_alloc);
-
+    
     /* Reads the inode based on inode number. */
     /* It only reads the inode header, useful for returning data
      * for stat(), but cannot be used by read_file_data().
@@ -103,6 +101,19 @@ public:
     // debugging...
     void forget_blktab(); // frees some RAM, use if cromfs is going to be idle for a while
     const std::string DumpBlock(const cromfs_block_internal& block) const;
+
+    /*
+     * A variant of read_file_data that takes the inode instead of the
+     * inode number.
+     * Note: The inode passed to this function must contain the block
+     * table (i.e. it must be the result of read_inode_and_blocks().
+     */
+    int_fast64_t read_file_data(const cromfs_inode_internal& inode,
+                                uint_fast64_t offset,
+                                unsigned char* target, uint_fast64_t size,
+                                const char* purpose)
+        throw (cromfs_exception, std::bad_alloc);
+
 
 protected:
     void reread_superblock()

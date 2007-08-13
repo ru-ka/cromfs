@@ -1,4 +1,4 @@
-VERSION=1.5.0
+VERSION=1.5.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -40,6 +40,7 @@ ARCHFILES=\
 	lib/endian.hh \
 	lib/hash.hh \
 	lib/threadfun.hh \
+	lib/threadworkengine.hh lib/threadworkengine.tcc \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
 	lib/autoclosefd.hh \
@@ -193,6 +194,11 @@ install: $(PROGS) FORCE
 test: $(PROGS) FORCE
 	cd tests && ./run.sh
 
+.libdepend: lib/.depend
+	perl -pe 's@([-+a-zA-Z0-9._/]+)@lib/$$1@g' < "$<" > "$@"
+lib/.depend:
+	make -C lib depend
 include depfun.mak
+include .libdepend
 
 FORCE: ;

@@ -24,7 +24,7 @@
 
 #include "mkcromfs_sets.hh"
 #include "sparsewrite.hh"
-#include "threadfun.hh"
+#include "threadworkengine.hh"
 
 #include "lzma.hh"
 #include "datasource.hh"
@@ -46,6 +46,7 @@ unsigned RandomCompressPeriod = 20;
 uint_fast32_t MinimumFreeSpace = 16;
 uint_fast32_t AutoIndexPeriod = 256; // once every 256 bytes
 uint_fast32_t MaxFblockCountForBruteForce = 2;
+uint_fast32_t OverlapGranularity = 1;
 bool MayPackBlocks = true;
 bool MayAutochooseBlocknumSize = true;
 bool MaySuggestDecompression = true;
@@ -94,22 +95,26 @@ uint_fast32_t storage_opts = 0x00000000;
 
 typedef std::pair<dev_t,ino_t> hardlinkdata;
 
-static void FinalCompressFblock(
-    int index,
-    mkcromfs_fblock& fblock,
-    uint_fast64_t& compressed_total,
-    uint_fast64_t& uncompressed_total)
+struct CompressorParams
 {
+    mkcromfs_fblockset& fblocks;
+    uint_fast64_t compressed_total;
+    uint_fast64_t uncompressed_total;
+    
+    MutexType mut;
+};
+static bool FinalCompressFblock(size_t index, CompressorParams& params)
+{
+    mkcromfs_fblock& fblock = params.fblocks[index];
+
     std::vector<unsigned char> fblock_lzma, fblock_raw;
     
     fblock_raw = fblock_lzma = fblock.get_raw();
 
-    uncompressed_total += fblock_raw.size();
-    
     if(storage_opts & CROMFS_OPT_USE_BWT)
     {
         // I don't know whether BWT is thread-safe, so use mutex just in case.
-        static MutexType bwt_mutex = MutexInitializer;
+        static MutexType bwt_mutex;
         ScopedLock lck(bwt_mutex);
         fblock_lzma = BWT_encode_embedindex(fblock_lzma);
     }
@@ -124,25 +129,17 @@ static void FinalCompressFblock(
     if(DisplayEndProcess)
     {
         std::printf(" [%d] %u -> %u\n",
-            index,
+            (int)index,
             (unsigned)fblock_raw.size(),
             (unsigned)fblock_lzma.size());
         std::fflush(stdout);
     }
 
-    compressed_total   += fblock_lzma.size();
-}
-struct CompressorParams
-{
-    int index;
-    mkcromfs_fblock* fblock;
-    uint_fast64_t ct;
-    uint_fast64_t ut;
-};
-static void* DoFinalFblockCompress(CompressorParams& params)
-{
-    FinalCompressFblock(params.index, *params.fblock, params.ct, params.ut);
-    return NULL;
+    { ScopedLock lck(params.mut); 
+    params.uncompressed_total += fblock_raw.size();
+    params.compressed_total += fblock_lzma.size(); }
+    
+    return false;
 }
 
 namespace cromfs_creator
@@ -760,9 +757,6 @@ namespace cromfs_creator
 
         SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs);
         
-        uint_fast64_t compressed_total = 0;
-        uint_fast64_t uncompressed_total = 0;
-        
         lseek64(out_fd, sblock.fblktab_offs, SEEK_SET);
         
         if(DisplayEndProcess)
@@ -772,43 +766,15 @@ namespace cromfs_creator
             std::fflush(stdout);
         }
         
-        std::vector<std::pair<ThreadType, CompressorParams> >
-            compressors(fblocks.size());
-        
-        unsigned ThreadsEnded=0;
-        for(size_t a=0; a<fblocks.size(); ++a)
-        {
-            if(UseThreads)
-            {
-                compressors[a].second.index = a;
-                compressors[a].second.fblock = &fblocks[a];
-                compressors[a].second.ct = 0;
-                compressors[a].second.ut = 0;
-                
-                CreateThread(compressors[a].first, DoFinalFblockCompress,
-                    compressors[a].second);
+        uint_fast64_t compressed_total = 0;
+        uint_fast64_t uncompressed_total = 0;
 
-                const size_t ThreadsCreated = a+1;
-                while(ThreadsCreated - ThreadsEnded >= UseThreads)
-                    JoinThread(compressors[ThreadsEnded++].first);
-            }
-            else
-            {
-                FinalCompressFblock(a, fblocks[a], compressed_total, uncompressed_total);
-            }
-        }
-
-        if(UseThreads)
-        {
-            while(ThreadsEnded < fblocks.size())
-                JoinThread(compressors[ThreadsEnded++].first);
+        { CompressorParams params = { fblocks, 0, 0 };
+        { ThreadWorkEngine<CompressorParams> engine;
+        engine.RunTasks(UseThreads, fblocks.size(), params, FinalCompressFblock); }
         
-            for(size_t a=0; a<fblocks.size(); ++a)
-            {
-                compressed_total   += compressors[a].second.ct;
-                uncompressed_total += compressors[a].second.ut;
-            }
-        }
+        compressed_total   += params.compressed_total;
+        uncompressed_total += params.uncompressed_total; }
         
         if(DisplayEndProcess)
         {
@@ -1111,9 +1077,10 @@ int main(int argc, char** argv)
             {"dirparseorder",           1,0,5002},
             {"bwt",                     0,0,2001},
             {"mtf",                     0,0,2002},
+            {"overlapgranularity",      1,0,'g'},
             {0,0,0,0}
         };
-        int c = getopt_long(argc, argv, "hVvf:b:er:s:a:A:c:qx:X:lS:432", long_options, &option_index);
+        int c = getopt_long(argc, argv, "hVvf:b:er:s:a:A:c:qx:X:lS:432g:", long_options, &option_index);
         if(c==-1) break;
         switch(c)
         {
@@ -1271,6 +1238,10 @@ int main(int argc, char** argv)
                     "     Specifies the priorities for storing different types of elements\n"
                     "     in directories. Default:  dir=1,link=2,other=3\n"
                     "     Changing it may affect compressibility.\n"
+                    " --overlapgranularity <value>\n"
+                    "     Forbids overlap lengths that are not divisible by <value>.\n"
+                    "     Use for periodic data.\n"
+                    "     Default: 1\n"
                     "\n");
                 return 0;
             }
@@ -1301,6 +1272,18 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: The minimum allowed bsize is 8. You gave %ld%s.\n", BSIZE, arg);
                     return -1;
                 }
+                break;
+            }
+            case 'g':
+            {
+                char* arg = optarg;
+                long value = strtol(arg, &arg, 10);
+                if(value < 1)
+                {
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed overlap granularity is 1. You gave %ld%s.\n", BSIZE, arg);
+                    return -1;
+                }
+                OverlapGranularity = value;
                 break;
             }
             case 'e':
@@ -1654,6 +1637,14 @@ int main(int argc, char** argv)
             "  Cannot comply.\n",
             (long)MinimumFreeSpace, (long)FSIZE);
         return -1;
+    }
+    if((long)OverlapGranularity >= BSIZE)
+    {
+        std::fprintf(stderr,
+            "mkcromfs: Warning: Your overlap granularity %ld is not smaller than your\n"
+            "  bsize %ld. This completely disables partial overlaps.\n",
+            (long)OverlapGranularity, (long)BSIZE);
+        OverlapGranularity = 0;
     }
     
     if(AutoIndexRatio > 0)

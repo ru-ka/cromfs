@@ -5,6 +5,8 @@
 
 #define USE_PTHREADS
 
+#define THREAD_DEBUG 0
+
 #if defined(USE_PTHREADS) /* posix threads */
 
 /***************************************************/
@@ -12,38 +14,125 @@
 
 #include <pthread.h>
 
-typedef pthread_mutex_t MutexType;
-#define MutexInitializer PTHREAD_MUTEX_INITIALIZER
+struct MutexType
+{
+public:
+    MutexType()
+    {
+#if THREAD_DEBUG >= 1
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK_NP);
+        pthread_mutex_init(&mut, &attr);
+#else
+        pthread_mutex_init(&mut, NULL);
+#endif
+    }
+    ~MutexType() {
+        //Unlock(); // FIXME: should Unlock() be called in destructor or not?
+        pthread_mutex_destroy(&mut);
+    }
+    void Lock() {
+#if THREAD_DEBUG >= 1
+        int res = pthread_mutex_lock(&mut);
+        //{char tmp;fprintf(stderr, "- mutex locking by %p\n", &tmp); fflush(stderr);}
+        if(res != 0)
+            { fprintf(stderr, "- mutex locking failed: %d\n", res); fflush(stderr); throw this; }
+#else
+        pthread_mutex_lock(&mut);
+#endif
+    }
+    void Unlock() {
+#if THREAD_DEBUG >= 1
+        int res = pthread_mutex_unlock(&mut); 
+        //{char tmp;fprintf(stderr, "- mutex unlocking by %p\n", &tmp); fflush(stderr);}
+        if(res != 0)
+            { fprintf(stderr, "- mutex unlocking failed: %d\n", res); fflush(stderr); throw this; }
+#else
+        pthread_mutex_unlock(&mut); 
+#endif
+    }
+    pthread_mutex_t& Get() { return mut; }
+private:
+    pthread_mutex_t mut;
+};
 
 struct ScopedLock
 {
-    explicit ScopedLock(MutexType& m)
-        : mut(m), locked(true)
-        { pthread_mutex_lock(&mut); }
+    explicit ScopedLock(MutexType& m) : mut(m), locked(true) { mut.Lock(); }
     ~ScopedLock() { Unlock(); }
-    void Unlock() { if(locked) { pthread_mutex_unlock(&mut); locked=false; } }
-    void LockAgain() { if(!locked) { pthread_mutex_lock(&mut); locked=true; } }
+    void Unlock() { if(!locked) return; locked=false; mut.Unlock(); }
+    void LockAgain() { if(locked) return; mut.Lock(); locked=true; }
 private:
     MutexType& mut;
     bool locked;
 };
 
-typedef pthread_t ThreadType;
+struct ThreadCondition
+{
+public:
+    ThreadCondition() {
+      int res =  pthread_cond_init(&cond, NULL);
+#if THREAD_DEBUG >= 1
+      if(res != 0) fprintf(stderr, "- cond init(%p):%d\n", &cond, res); fflush(stderr);
+#endif
+    }
+    ~ThreadCondition() { pthread_cond_destroy(&cond); }
+    
+    void Wait() { MutexType mut; ScopedLock lck(mut); Wait(mut); }
+    void Wait(MutexType& mut)
+        { 
+#if THREAD_DEBUG >= 2
+          fprintf(stderr, "- waiting(%p)\n", &cond); fflush(stderr);
+#endif
+          int res =  pthread_cond_wait(&cond, &mut.Get());
+#if THREAD_DEBUG >= 1
+          if(res != 0) fprintf(stderr, "- wait(%p):%d\n", &cond, res); fflush(stderr);
+#endif
+        }
+    void Signal() { int res =  pthread_cond_signal(&cond);
+#if THREAD_DEBUG >= 1
+                    if(res != 0) fprintf(stderr, "- signal(%p):%d\n", &cond, res); fflush(stderr);
+#endif
+                  }
+    void Broadcast() { int res =  pthread_cond_broadcast(&cond);
+#if THREAD_DEBUG >= 1
+                       if(res != 0) fprintf(stderr, "- bcast(%p):%d\n", &cond, res); fflush(stderr);
+#endif
+                  }
+private:
+    pthread_cond_t cond;
+};
 
-template<typename T>
-static inline void CreateThread(ThreadType& t, void*(*prog)(T& ), T& param)
-    { pthread_create(&t, NULL, (void*(*)(void*)) prog, (void*)&param); }
-static inline void CancelThread(ThreadType& t)
-    { pthread_cancel(t); }
-static inline void JoinThread(ThreadType& t)
-    { pthread_join(t, NULL); }
+struct ThreadType
+{
+private:
+    pthread_t t; bool inited;
+public:
+    ThreadType(): t(), inited(false) { }
+    template<typename Rt,typename T>
+    void Init(Rt*(*prog)(T& ), T& param)
+        { if(inited) End();
+          pthread_create(&t, NULL, (void*(*)(void*)) prog, (void*)&param);
+          inited=true; }
+    void Cancel() { if(inited) { pthread_cancel(t); } }
+    void End()    { if(inited) { pthread_join(t,NULL); inited=false; } }
+    ~ThreadType() { Cancel(); End(); }
+};
+
+template<typename Rt,typename T>
+static inline void CreateThread(ThreadType& t, Rt*(*prog)(T& ), T& param)
+    { t.Init(prog, param); }
+static inline void CancelThread(ThreadType& t) { t.Cancel(); }
+static inline void JoinThread(ThreadType& t) { t.End(); }
 static inline void TestThreadCancel() { pthread_testcancel(); }
+static inline void ForceSwitchThread() { sched_yield(); }
 
 /* Note: Because using asynchronous cancelling is very hazardous
  * in C++ -- it may cause the program to terminate with a
  * "terminate called without an active exception" message, --
  * you should use deferred cancelling instead, and explicitly use
- * InterruptableContext where there's no way any destructors are
+ * InterruptibleContext where there's no way any destructors are
  * going to be called.
  */
 static inline void SetCancellableThread(bool async = false)
@@ -56,11 +145,11 @@ static inline void SetCancellableThread(bool async = false)
  * pthread_cancel() won't hurt (i.e. there are no destructors
  * that may be called in it).
  */
-struct InterruptableContext
+struct InterruptibleContext
 {
-    InterruptableContext() : disabled(false)
+    InterruptibleContext() : disabled(false)
         { pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0); }
-    ~InterruptableContext() { Disable(); }
+    ~InterruptibleContext() { Disable(); }
     void Disable() { if(disabled)return;
       pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, 0); disabled=true; }
     void Enable() { if(!disabled)return;
@@ -76,32 +165,52 @@ private:
 /***************************************************/
 /* Dummy non-threading interface for threads. */
 
-struct MutexType { };
-#define MutexInitializer {}
+struct MutexType
+{
+    inline void Lock() { }
+    inline void Unlock() { }
+    bool IsLocked() const { return false; }
+};
 struct ScopedLock
 {
     explicit ScopedLock(MutexType& ) { }
     inline void Unlock() { }
     inline void LockAgain() { }
 };
-struct ThreadType { };
-
+struct ThreadType
+{
+public:
+    template<typename Rt,typename T>
+    static void Init(Rt*(*prog)(T& ), T& param) { prog(param); }
+    static void Cancel() { }
+    static void End()    { }
+};
 template<typename T>
 static inline void CreateThread(ThreadType& , void*(*prog)(T& ), T& param) { prog(param); }
 static inline void CancelThread(ThreadType& ) { }
 static inline void JoinThread(ThreadType& )  { }
 static inline void TestThreadCancel() { }
 static inline void SetCancellableThread(bool)  { }
+static inline void ForceSwitchThread() { sched_yield(); }
 
 /* Instantiate this object in a context where an asynchronous
  * pthread_cancel() won't hurt (i.e. there are no destructors
  * that may be called in it).
  */
-struct InterruptableContext
+struct InterruptibleContext
 {
     inline void Disable() { }
     inline void Enable() { }
 };
+
+struct ThreadCondition
+{
+    inline void Wait() { }
+    inline void Wait(MutexType&) { }
+    inline void Signal() { }
+    inline void Broadcast() { }
+};
+
 
 /***************************************************/
 
