@@ -104,21 +104,39 @@ private:
     pthread_cond_t cond;
 };
 
+#ifdef linux
+#include <sched.h>
+#endif
+inline void* ThreadStarter(void*);
 struct ThreadType
 {
 private:
     pthread_t t; bool inited;
+    void*(*prog)(void*); void*param;
 public:
     ThreadType(): t(), inited(false) { }
     template<typename Rt,typename T>
-    void Init(Rt*(*prog)(T& ), T& param)
+    void Init(Rt*(*pg)(T& ), T& pr)
         { if(inited) End();
-          pthread_create(&t, NULL, (void*(*)(void*)) prog, (void*)&param);
+          prog  = (void*(*)(void*)) pg;
+          param = (void*)&pr;
+          pthread_create(&t, NULL, ThreadStarter, (void*)this);
           inited=true; }
     void Cancel() { if(inited) { pthread_cancel(t); } }
     void End()    { if(inited) { pthread_join(t,NULL); inited=false; } }
     ~ThreadType() { Cancel(); End(); }
+    void* PvtRun() {
+#ifdef linux
+    //    unshare(CLONE_FILES);
+#endif
+        return prog(param);
+    }
 };
+inline void* ThreadStarter(void*param)
+{
+    ThreadType& t = *(ThreadType*)param;
+    return t.PvtRun();
+}
 
 template<typename Rt,typename T>
 static inline void CreateThread(ThreadType& t, Rt*(*prog)(T& ), T& param)

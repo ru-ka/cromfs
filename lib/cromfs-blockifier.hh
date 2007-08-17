@@ -6,6 +6,7 @@
 #include "autoptr"
 
 #include <list>
+#include <deque>
 
 /****************************************************/
 /* Block scheduler. It stores the scattered requests *
@@ -260,7 +261,7 @@ private:
         SchedulerDataClass dataclass;
     };
 
-    std::vector<schedule_item> schedule;
+    std::deque<schedule_item> schedule;
     
 public:
     // Data locators written into filesystem. Indexed by block number.

@@ -44,10 +44,12 @@ private:
 
 struct datasource_file: public datasource_t
 {
+private:
+    static const size_t BufSize = 1024*256;
 protected:
-    datasource_file(int fild, uint_fast64_t s): fd(fild),siz(s) { }
+    datasource_file(int fild, uint_fast64_t s): fd(fild),siz(s), buffer(),bufpos(0) { }
 public:
-    datasource_file(int fild) : fd(fild), siz(stat_get_size(fild))
+    datasource_file(int fild) : fd(fild), siz(stat_get_size(fild)), buffer(),bufpos(0)
     {
         FadviseSequential(fd, 0, siz);
     }
@@ -55,13 +57,40 @@ public:
     virtual const std::vector<unsigned char> read(uint_fast64_t n)
     {
         std::vector<unsigned char> result(n);
-        int res = ::read(fd, &result[0], n);
-        if(res < 0) std::perror(getname().c_str());
-        else if( (uint_fast64_t) res != n)
-            fprintf(stderr, "%s: short read (%d, %u)", getname().c_str(), res, (unsigned)n);
+        uint_fast64_t result_pos    = 0;
+        uint_fast64_t result_remain = n;
+        while(result_remain > 0)
+        {
+            const size_t buf_remain = buffer.size() - bufpos;
+            if(buf_remain > 0)
+            {
+                size_t buf_consume = buf_remain;
+                if(buf_consume > result_remain) buf_consume = result_remain;
+                std::memcpy(&result[result_pos], &buffer[bufpos], buf_consume);
+                bufpos     += buf_consume;
+                result_pos += buf_consume;
+                result_remain -= buf_consume;
+            }
+            else
+            {
+                bufpos = 0;
+                buffer.resize(BufSize);
+                int res = ::read(fd, &buffer[0], BufSize);
+                if(res < 0) { std::perror(getname().c_str()); break; }
+                if(res == 0) break;
+                buffer.resize(res);
+            }
+        }
+        result.resize(result_pos);
+        if(result_remain > 0)
+        {
+            fprintf(stderr, "%s: short read (%u, %u)", getname().c_str(),
+                (unsigned)result_pos, (unsigned)n);
+        }
         return result;
     }
     virtual const uint_fast64_t size() const { return siz; }
+    virtual void close() { buffer = std::vector<unsigned char> (); bufpos = 0; }
 protected:
     static uint_fast64_t stat_get_size(int fild)
     {
@@ -78,6 +107,7 @@ protected:
 protected:
     int fd;
     uint_fast64_t siz;
+    std::vector<unsigned char> buffer; size_t bufpos;
 };
 
 struct datasource_file_name: public datasource_file
@@ -96,6 +126,7 @@ struct datasource_file_name: public datasource_file
     }
     virtual void close()
     {
+        datasource_file::close();
         if(fd >= 0) { ::close(fd); fd = -1; }
     }
     virtual ~datasource_file_name()

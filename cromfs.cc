@@ -34,6 +34,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include "lib/longfileread.hh"
 #include "lib/cromfs-inodefun.hh"
 #include "lib/fadvise.hh"
+#include "lib/util.hh"
 #include "cromfs.hh"
 
 #define CROMFS_FSIZE  (sblock.fsize)
@@ -454,6 +455,7 @@ const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
 #if INODE_DEBUG
         fprintf(stderr, "returning rootdir: %s\n", DumpInode(rootdir).c_str());
 #endif
+        DumpRAMusage();
         return rootdir;
     }
     if(unlikely(inodenum < 1)) throw EBADF;
@@ -559,7 +561,7 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t fblocknum)
 {
     cromfs_cached_fblock* result = fblock_cache.Find(fblocknum);
     if(result) return *result;
-    fblock_cache.CheckAges();
+    fblock_cache.CheckAges(-1);
     return fblock_cache.Put(fblocknum, read_fblock_uncached(fblocknum));
 }
 
@@ -896,7 +898,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
     
     if(dir_offset == 0 && dir_count >= num_files)
     {
-        readdir_cache.CheckAges();
+        readdir_cache.CheckAges(-1);
         readdir_cache.Put(inonum, result);
     }
     return result;
@@ -1030,6 +1032,31 @@ const cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
             len = half;
     }
     return 0;
+}
+
+void cromfs::DumpRAMusage() const
+{
+    fprintf(stderr,
+        "-- cromfs RAM use report --\n"
+        "rootdir inode size: %s (%u blocks)\n"
+        "inotab inode size: %s (%u blocks)\n"
+        "fblktab size: %s (%u fblock locators)\n"
+        "blktab size: %s (%u data locators)\n"
+        "readdir cache size: %s (estimate, %u directories)\n"
+        "fblock cache size: %s (estimate, %u fblocks)\n",
+        ReportSize( sizeof(rootdir) + rootdir.blocklist.size() * sizeof(cromfs_blocknum_t) ).c_str(),
+        (unsigned)rootdir.blocklist.size(),
+        ReportSize( sizeof(inotab) + inotab.blocklist.size() * sizeof(cromfs_blocknum_t) ).c_str(),
+        (unsigned)inotab.blocklist.size(),
+        ReportSize( fblktab.size() * sizeof(fblktab[0]) ).c_str(),
+        (unsigned)fblktab.size(),
+        ReportSize( blktab.size() * sizeof(blktab[0]) ).c_str(),
+        (unsigned)blktab.size(),
+        ReportSize( 20000 * readdir_cache.num_entries() ).c_str(),
+        (unsigned)readdir_cache.num_entries(),
+        ReportSize( CROMFS_FSIZE * fblock_cache.num_entries() ).c_str(),
+        (unsigned)fblock_cache.num_entries()
+    );
 }
 
 cromfs::cromfs(int fild)

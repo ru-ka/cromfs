@@ -98,7 +98,7 @@ extern "C" {
         CROMFS_CTX_END()
     }
     
-    void stat_inode(struct stat& attr, fuse_ino_t ino, const cromfs_inode_internal& i)
+    static void stat_inode(struct stat& attr, fuse_ino_t ino, const cromfs_inode_internal& i)
     {
         memset(&attr, 0, sizeof(attr));
         attr.st_dev     = 0;
@@ -126,10 +126,6 @@ extern "C" {
         if(trace_ops) fprintf(stderr, "lookup(%d,%s)\n", (int)parent, name);
         
         CROMFS_CTX(fs)
-        
-        /* doc/FORMAT speaks of fast implementation of lookup()
-         * using binary search. Such method is now used by fs.dir_lookup().
-         */
         
         cromfs_inodenum_t inonum = fs.dir_lookup(parent, name);
         fuse_entry_param pa;

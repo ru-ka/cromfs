@@ -1,4 +1,4 @@
-VERSION=1.5.1
+VERSION=1.5.2
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -141,7 +141,7 @@ OBJS=\
 	cromfs.o fuse-ops.o fuse-main.o \
 	lib/bwt.o lib/mtf.o \
 	lib/cromfs-inodefun.o \
-	lib/fadvise.o
+	lib/fadvise.o lib/util.o
 
 LDLIBS += -lfuse -ldl
 # Added -ldl because fuse 2.7.x depends on it,

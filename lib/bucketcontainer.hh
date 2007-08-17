@@ -109,7 +109,7 @@ public:
         
         const bucketlist_t& bucket = i->second;
         
-        MadviseRandom(&bucket[0], bucket.size() * sizeof(bucket[0]));
+        //MadviseRandom(&bucket[0], bucket.size() * sizeof(bucket[0]));
         
         typename bucketlist_t::const_iterator j =
             std::lower_bound(bucket.begin(), bucket.end(),

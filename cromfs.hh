@@ -101,6 +101,7 @@ public:
     // debugging...
     void forget_blktab(); // frees some RAM, use if cromfs is going to be idle for a while
     const std::string DumpBlock(const cromfs_block_internal& block) const;
+    void DumpRAMusage() const;
 
     /*
      * A variant of read_file_data that takes the inode instead of the

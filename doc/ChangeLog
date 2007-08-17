@@ -4,6 +4,19 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.2	2007-08-17 Joel Yliluoma <bisqwit@iki.fi>
+- Added buffering in datasource, improving mkcromfs performance when
+  the files are read from a slow filesystem (such as another cromfs mount)
+- Fixed error where every fblock would be mmapped at the same time
+  whenever a new one must be started, overriding the bruteforcelimit setting.
+  Thanks to "symmo" for reporting the error.
+- Fixed a bug that caused cromfs-driver to disregard the limits for
+  cache maximum size, thereby consuming way more memory than it should.
+  Thanks to "symmo" for reporting the error.
+- Added memory usage debugging in cromfs-driver. Invoke cromfs-driver
+  with the -f option, and stat the mountpoint to make the driver output
+  statistics.
+
 1.5.1	2007-08-13 Joel Yliluoma <bisqwit@iki.fi>
 - mkfromfs: The memory efficiency of the block index was further
   improved, enabling the use of a slightly shorter autoindex period

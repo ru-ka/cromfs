@@ -9,8 +9,11 @@
 #include "lzma.hh"
 
 #include <cstdlib>
+#include <sys/time.h>
 
 using namespace fblock_private;
+
+static const double FblockMaxAccessAgeBeforeDealloc = 10.0;
 
 const char* GetTempDir()
 {
@@ -48,6 +51,8 @@ void fblock_storage::put_raw(const std::vector<unsigned char>& raw)
         put_compressed(LZMACompress(raw));
     }
     /* Remap(); */
+
+    last_access = std::time(NULL);
 }
 
 void fblock_storage::put_compressed(const std::vector<unsigned char>& compressed)
@@ -59,11 +64,15 @@ void fblock_storage::put_compressed(const std::vector<unsigned char>& compressed
     
     autoclosefp fp = std::fopen(getfn().c_str(), "wb");
     std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
+
+    last_access = std::time(NULL);
 }
 
 void fblock_storage::get(std::vector<unsigned char>* raw,
                          std::vector<unsigned char>* compressed)
 {
+    last_access = std::time(NULL);
+
     /* Is our data currently non-compressed? */
     if(!is_compressed)
     {
@@ -154,6 +163,8 @@ void fblock_storage::put_appended_raw(
     const unsigned char* data,
     const uint_fast32_t datasize)
 {
+    last_access = std::time(NULL);
+
     Unmap();
     
     const uint32_t cap = append.AppendBaseOffset + datasize;
@@ -179,7 +190,8 @@ void fblock_storage::put_appended_raw(
         /* We cannot append into compressed data. Must decompress it first. */
         
         std::vector<unsigned char> buf = get_raw();
-        autoclosefd fd = open(getfn().c_str(), O_RDWR | O_CREAT | O_LARGEFILE, 0644);
+        int open_flags = O_RDWR /*| O_CREAT*/ | O_LARGEFILE;
+        autoclosefd fd = open(getfn().c_str(), open_flags, 0644);
         if(fd < 0) { std::perror(getfn().c_str()); return; }
 
         is_compressed = false;
@@ -189,7 +201,7 @@ void fblock_storage::put_appended_raw(
         assert(buf.size() >= append.AppendBaseOffset);
         assertflush();
         
-        // Write precending part:
+        // Write preceding part:
         if(!buf.empty()) write(fd, &buf[0], append.AppendBaseOffset);
         // Write appended part:
         if(datasize > 0) write(fd, &data[0], datasize);
@@ -210,7 +222,9 @@ void fblock_storage::put_appended_raw(
     /* not truncating */
     const uint32_t added_length = append.AppendedSize - append.OldSize;
     
-    autoclosefd fd = open(getfn().c_str(), O_RDWR | O_CREAT | O_LARGEFILE, 0644);
+    int open_flags = O_RDWR | O_LARGEFILE;
+    if(append.OldSize == 0) open_flags |= O_CREAT;
+    autoclosefd fd = open(getfn().c_str(), open_flags, 0644);
     if(fd < 0) { std::perror(getfn().c_str()); return; }
     
     try
@@ -227,7 +241,8 @@ void fblock_storage::put_appended_raw(
              );
         perror("pwrite");
     }
-    ftruncate(fd, filesize = append.AppendedSize);
+    filesize = append.AppendedSize;
+    //ftruncate(fd, filesize); //-- what use is this for?
     RemapFd(fd);
     // fd will be automatically closed.
 }
@@ -302,6 +317,7 @@ void fblock_storage::InitDataReadBuffer(
             // fd will be automatically closed.
         }
     }
+    last_access = std::time(NULL);
 }
 
 mkcromfs_fblockset::~mkcromfs_fblockset()
@@ -372,36 +388,51 @@ void mkcromfs_fblockset::restore_backup(const undo_t& e)
     index = e.fblock_index;
 }
 
-void mkcromfs_fblockset::UnmapOneRandomlyButNot(cromfs_fblocknum_t forbid)
+class OrderByAccessTime
 {
-    //return;
-    static cromfs_fblocknum_t counter = 0;
-    if(counter < fblocks.size() && counter != forbid)
-        fblocks[counter].Unmap();
-    if(!fblocks.empty())
-        counter = (counter+1) % fblocks.size();
-}
+private:
+    const std::vector<mkcromfs_fblock>& fblocks;
+public:
+    OrderByAccessTime(const std::vector<mkcromfs_fblock>& f) : fblocks(f) { }
 
-void mkcromfs_fblockset::CompressOneRandomlyButNot(cromfs_fblocknum_t forbid)
+    bool operator() (size_t a, size_t b) const
+    {
+        return fblocks[a].get_last_access()
+             < fblocks[b].get_last_access();
+    }
+};
+
+void mkcromfs_fblockset::FreeSomeResources()
 {
     static unsigned counter = RandomCompressPeriod;
-    if(!counter) counter = RandomCompressPeriod; else { --counter; return; }
-    
-    /* postpone it if there are no fblocks */
-    if(fblocks.empty()) { counter=0; return; }
-    
-    const cromfs_fblocknum_t c = std::rand() % fblocks.size();
-    
-    /* postpone it if we hit the landmine */
-    if(c == forbid) { counter=0; return; }
-    
-    mkcromfs_fblock& fblock = fblocks[c];
+    bool do_randomcompress = !counter;
+    if(do_randomcompress) counter = RandomCompressPeriod; else { --counter; }
 
-    /* postpone it if this fblock doesn't need compressing */
-    if(!fblock.is_uncompressed()) { counter=0; return; }     
-      
-    if(fblock.is_uncompressed())
+    std::vector<size_t> fblocknums(fblocks.size());
+    for(size_t a=0; a<fblocks.size(); ++a)
+        fblocknums[a]=a;
+    std::sort(fblocknums.begin(), fblocknums.end(), OrderByAccessTime(fblocks) );
+    
+    time_t now = std::time(NULL);
+    for(size_t a=0; a<fblocks.size(); ++a)
     {
-        fblock.put_compressed(LZMACompress(fblock.get_raw()));
+        mkcromfs_fblock& fblock = fblocks[fblocknums[a]];
+        
+        time_t last_access = fblock.get_last_access();
+        
+        if(std::difftime(now, last_access) >= FblockMaxAccessAgeBeforeDealloc)
+        {
+            if(do_randomcompress && fblock.is_uncompressed())
+            {
+                fblock.put_compressed(LZMACompress(fblock.get_raw()));
+                do_randomcompress = false;
+                continue;
+            }
+
+            fblock.Unmap();
+        }
     }
+    
+    if(do_randomcompress)
+        counter = 0; /* postpone it if we cannot comply */
 }

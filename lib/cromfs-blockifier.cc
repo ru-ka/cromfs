@@ -215,15 +215,12 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         std::vector<cromfs_fblocknum_t>& candidates = params.candidates;
         candidates.reserve(fblocks.size());
         
-        unsigned priority_candidates = 0;
-        
         /* First candidate: The fblock that we would get without brute force. */
         /* I.e. the fblock with smallest fitting hole. */
         { int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
           if(i >= 0)
           {
             candidates.push_back(i);
-            ++priority_candidates;
         } }
         
         /* Next candidates: last N (up to MaxFblockCountForBruteForce) */
@@ -234,9 +231,16 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
             if(!candidates.empty() && j != candidates[0])
             {
                 candidates.push_back(j);
-                ++priority_candidates;
             }
         }
+        
+#if 0
+        unsigned priority_candidates = candidates.size();
+        
+        /* This code would get run only when the smallest fitting hole fblock
+         * has no room for a block (and there's no full overlap). On large
+         * filesystems, it causes a large memory use, so it's better be disabled.
+         */
         
         /* Add all the rest of fblocks as non-priority candidates. */
         for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0; )
@@ -250,11 +254,15 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         
         /* Randomly shuffle the non-priority candidates */
         std::random_shuffle(candidates.begin()+priority_candidates, candidates.end());
+#endif
         
         /* Task description:
          * Check each candidate (up to MaxFblockCountForBruteForce)
          * for the fit which reuses the maximum amount of data.
          */
+        
+        for(size_t a=0; a<candidates.size(); ++a)
+            fblocks[candidates[a]].EnsureMMapped();
         
         static ThreadWorkEngine<OverlapFinderParameter> engine;
         engine.RunTasks(UseThreads, candidates.size(),
@@ -332,9 +340,6 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     const cromfs_fblocknum_t fblocknum = plan.fblocknum;
     const AppendInfo& appended         = plan.appended;
     
-    fblocks.UnmapOneRandomlyButNot(fblocknum); /* Free up some resources (address space) */
-    fblocks.CompressOneRandomlyButNot(fblocknum); /* Free up some resources (disk space) */
-
     /* Note: This line may automatically create a new fblock. */
     mkcromfs_fblock& fblock = fblocks[fblocknum];
 
@@ -410,6 +415,8 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
         new_remaining_room >= (int)MinimumFreeSpace
             ? new_remaining_room
             : 0 );
+
+    fblocks.FreeSomeResources();
 
     /* Create a new blocknumber and add to block index */
     const cromfs_blocknum_t blocknum = CreateNewBlock(block);
@@ -742,14 +749,14 @@ void cromfs_blockifier::FlushBlockifyRequests()
     
     uint_fast64_t total_size = 0, blocks_total = 0;
     uint_fast64_t total_done = 0, blocks_done  = 0;
-    for(unsigned a=0; a<schedule.size(); ++a)
+    for(size_t a=0; a<schedule.size(); ++a)
     {
         uint_fast64_t size = schedule[a].GetDataSource()->size();
         total_size   += size;
         blocks_total += CalcSizeInBlocks(size, BSIZE);
     }
     
-    for(unsigned a=0; a<schedule.size(); ++a)
+    for(ssize_t a=0; a<schedule.size(); ++a)
     {
         schedule_item& s = schedule[a];
         
@@ -786,6 +793,9 @@ void cromfs_blockifier::FlushBlockifyRequests()
         }
         source->close();
         HandleOrders(blockify_orders, BlockifyAmount1);
+        
+        schedule.erase(schedule.begin() + a);
+        --a;
     }
     schedule.clear();
     

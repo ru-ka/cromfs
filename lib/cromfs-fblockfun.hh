@@ -28,6 +28,7 @@ namespace fblock_private
         int fblock_disk_id;
         bool is_compressed;
         uint_fast32_t filesize;
+        time_t last_access;
         MemMappingType<false> mmapped;
     public:
         fblock_storage()
@@ -36,10 +37,12 @@ namespace fblock_private
             fblock_disk_id = disk_id++;
             filesize = 0;
             is_compressed = false;
+            last_access = 0;
             mmapped.Unmap();
         }
         
         bool is_uncompressed() const { return !is_compressed; }
+        bool is_mmapped()      const { return mmapped; }
         
         const std::string getfn() const;
         
@@ -131,11 +134,13 @@ namespace fblock_private
             if(fd >= 0) RemapFd(fd);
             // fd will be automcally closed.
         }
-        uint_fast32_t size()
+        const uint_fast32_t size()
         {
             if(is_compressed) return get_raw().size();
             return filesize;
         }
+        
+        const time_t get_last_access() const { return last_access; }
         
     private:
         void RemapFd(int fd) { mmapped.SetMap(fd, 0, filesize); }
@@ -195,6 +200,8 @@ public:
                             uint_fast32_t req_size) const
         { storage.InitDataReadBuffer(Buffer,size,req_offset,req_size); }
 
+    const time_t get_last_access() const { return storage.get_last_access(); }
+
     typedef fblock_private::fblock_storage::undo_t undo_t;
     undo_t create_backup() const { return storage.create_backup(); }
     void restore_backup(undo_t b) { storage.restore_backup(b); }
@@ -246,9 +253,8 @@ public:
     
     undo_t create_backup() const;
     void restore_backup(const undo_t& e);
-
-    void UnmapOneRandomlyButNot(cromfs_fblocknum_t forbid);
-    void CompressOneRandomlyButNot(cromfs_fblocknum_t forbid);
+    
+    void FreeSomeResources();
 
 private:
     std::vector<mkcromfs_fblock> fblocks;
