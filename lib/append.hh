@@ -1,9 +1,7 @@
 #ifndef HHappendHH
 #define HHappendHH
 
-#include <stdint.h>
-
-#include "boyermoore.hh"
+#include "boyermooreneedle.hh"
 
 /* AppendInfo describes how to append/overlap
  * the input into the given fblock.

@@ -18,6 +18,8 @@ used to initialize the cromfs_oper struct.
 #include <stdlib.h>
 #include <unistd.h>
 
+#define ALLOW_OUTPUT_IN_FORK_MODE 0
+
 static const struct fuse_lowlevel_ops cromfs_oper =
 {
     .statfs  = cromfs_statfs,
@@ -83,9 +85,19 @@ int main(int argc, char *argv[])
             {
                 fuse_session_add_chan(se, ch);
                 
-                if(foreground)
-                    fprintf(stderr, "ready\n");
+#if ALLOW_OUTPUT_IN_FORK_MODE
+                int fdt = dup(2);
+#endif
+                if(foreground) fprintf(stderr, "ready\n");
                 fuse_daemonize(foreground);
+                
+                cromfs_initialize(userdata);
+
+#if ALLOW_OUTPUT_IN_FORK_MODE
+                dup2(fdt, 1); dup2(fdt, 2); close(fdt);
+                stderr = fdopen(2, "w");
+                stdout = fdopen(1, "w");
+#endif
 
                 err = fuse_session_loop(se);
             }

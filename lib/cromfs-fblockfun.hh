@@ -5,7 +5,7 @@
 #include "../cromfs-defs.hh"
 
 #include "mmapping.hh"
-#include "boyermoore.hh"
+#include "boyermooreneedle.hh"
 #include "datareadbuf.hh"
 #include "autoclosefd.hh"
 #include "append.hh"
@@ -17,8 +17,6 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
-
-const char* GetTempDir();
 
 namespace fblock_private
 {
@@ -40,9 +38,22 @@ namespace fblock_private
             last_access = 0;
             mmapped.Unmap();
         }
+        fblock_storage(int disk_id)
+        {
+            fblock_disk_id = disk_id;
+            filesize = 0;
+            is_compressed = false;
+            last_access = 0;
+            mmapped.Unmap();
+            
+            Check_Existing_File();
+        }
+        
+        void Check_Existing_File();
         
         bool is_uncompressed() const { return !is_compressed; }
         bool is_mmapped()      const { return mmapped; }
+        uint_fast64_t getfilesize() const { return filesize; }
         
         const std::string getfn() const;
         
@@ -77,7 +88,7 @@ namespace fblock_private
         
         void put_compressed(const std::vector<unsigned char>& compressed);
 
-        void put(const std::vector<unsigned char>& raw,
+        void put(const std::vector<unsigned char>& /*raw*/,
                  const std::vector<unsigned char>& compressed)
         {
             /* This method can choose freely whether to store
@@ -174,9 +185,14 @@ private:
     mutable fblock_private::fblock_storage storage;
 
 public:
+    mkcromfs_fblock()            : storage()        { }
+    mkcromfs_fblock(int disk_id) : storage(disk_id) { }
+
     void EnsureMMapped() const { storage.EnsureMMapped(); }
 
     bool is_uncompressed() const { return storage.is_uncompressed(); }
+    uint_fast64_t getfilesize() const { return storage.getfilesize(); }
+
     void Unmap() { storage.Unmap(); }
     void Remap() { storage.Remap(); }
     void Delete() { storage.Delete(); }
@@ -259,3 +275,5 @@ public:
 private:
     std::vector<mkcromfs_fblock> fblocks;
 };
+
+extern void set_fblock_name_pattern(const std::string& pat);

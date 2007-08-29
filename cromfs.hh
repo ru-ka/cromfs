@@ -41,6 +41,13 @@ public:
     /* Deallocates the structures associated with this filesystem. */
     ~cromfs() throw();
     
+    /* To be called after the constructor, before any real
+     * file access. Separated from the constructor so that
+     * it may use threads in the same context as the rest
+     * of the program (fork() in fuse_main confuses otherwise).
+     */
+    void Initialize() throw (cromfs_exception, std::bad_alloc);
+    
     /* Returns the superblock of the filesystem, indicating various
      * statistics about the filesystem.
      */
@@ -113,6 +120,15 @@ public:
                                 uint_fast64_t offset,
                                 unsigned char* target, uint_fast64_t size,
                                 const char* purpose)
+        throw (cromfs_exception, std::bad_alloc);
+
+    /* A variant of read_file_data that restricts the read
+     * to a single fblock. */
+    int_fast64_t read_file_data_from_one_fblock_only
+               (const cromfs_inode_internal& inode,
+                uint_fast64_t offset,
+                unsigned char* target, uint_fast64_t size,
+                const cromfs_fblocknum_t allowed_fblocknum)
         throw (cromfs_exception, std::bad_alloc);
 
 

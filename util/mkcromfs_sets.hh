@@ -1,3 +1,6 @@
+#ifndef bqtMkCromfsSetsHH
+#define bqtMkCromfsSetsHH
+
 extern int LZMA_HeavyCompress;
 extern bool DecompressWhenLookup;
 extern bool MayAutochooseBlocknumSize;
@@ -26,3 +29,7 @@ extern size_t BlockifyAmount1;
 extern size_t BlockifyAmount2;
 // 0 = nope. 1 = yep, 2 = use TSP, 3 = yes, and try combinations too
 extern int TryOptimalOrganization;
+
+extern const char* GetTempDir();
+
+#endif

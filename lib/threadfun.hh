@@ -7,6 +7,12 @@
 
 #define THREAD_DEBUG 0
 
+#if THREAD_DEBUG >= 1
+    #define ONLY_IF_THREAD_DEBUG(n) n
+#else
+    #define ONLY_IF_THREAD_DEBUG(n)
+#endif
+
 #if defined(USE_PTHREADS) /* posix threads */
 
 /***************************************************/
@@ -33,23 +39,19 @@ public:
         pthread_mutex_destroy(&mut);
     }
     void Lock() {
+        ONLY_IF_THREAD_DEBUG(int res =) pthread_mutex_lock(&mut);
 #if THREAD_DEBUG >= 1
-        int res = pthread_mutex_lock(&mut);
         //{char tmp;fprintf(stderr, "- mutex locking by %p\n", &tmp); fflush(stderr);}
         if(res != 0)
             { fprintf(stderr, "- mutex locking failed: %d\n", res); fflush(stderr); throw this; }
-#else
-        pthread_mutex_lock(&mut);
 #endif
     }
     void Unlock() {
+        ONLY_IF_THREAD_DEBUG(int res =) pthread_mutex_unlock(&mut); 
 #if THREAD_DEBUG >= 1
-        int res = pthread_mutex_unlock(&mut); 
         //{char tmp;fprintf(stderr, "- mutex unlocking by %p\n", &tmp); fflush(stderr);}
         if(res != 0)
             { fprintf(stderr, "- mutex unlocking failed: %d\n", res); fflush(stderr); throw this; }
-#else
-        pthread_mutex_unlock(&mut); 
 #endif
     }
     pthread_mutex_t& Get() { return mut; }
@@ -72,7 +74,7 @@ struct ThreadCondition
 {
 public:
     ThreadCondition() {
-      int res =  pthread_cond_init(&cond, NULL);
+      ONLY_IF_THREAD_DEBUG(int res =) pthread_cond_init(&cond, NULL);
 #if THREAD_DEBUG >= 1
       if(res != 0) fprintf(stderr, "- cond init(%p):%d\n", &cond, res); fflush(stderr);
 #endif
@@ -85,17 +87,17 @@ public:
 #if THREAD_DEBUG >= 2
           fprintf(stderr, "- waiting(%p)\n", &cond); fflush(stderr);
 #endif
-          int res =  pthread_cond_wait(&cond, &mut.Get());
+          ONLY_IF_THREAD_DEBUG(int res =) pthread_cond_wait(&cond, &mut.Get());
 #if THREAD_DEBUG >= 1
           if(res != 0) fprintf(stderr, "- wait(%p):%d\n", &cond, res); fflush(stderr);
 #endif
         }
-    void Signal() { int res =  pthread_cond_signal(&cond);
+    void Signal() { ONLY_IF_THREAD_DEBUG(int res =) pthread_cond_signal(&cond);
 #if THREAD_DEBUG >= 1
                     if(res != 0) fprintf(stderr, "- signal(%p):%d\n", &cond, res); fflush(stderr);
 #endif
                   }
-    void Broadcast() { int res =  pthread_cond_broadcast(&cond);
+    void Broadcast() { ONLY_IF_THREAD_DEBUG(int res =) pthread_cond_broadcast(&cond);
 #if THREAD_DEBUG >= 1
                        if(res != 0) fprintf(stderr, "- bcast(%p):%d\n", &cond, res); fflush(stderr);
 #endif
@@ -165,15 +167,18 @@ static inline void SetCancellableThread(bool async = false)
  */
 struct InterruptibleContext
 {
-    InterruptibleContext() : disabled(false)
-        { pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0); }
-    ~InterruptibleContext() { Disable(); }
-    void Disable() { if(disabled)return;
-      pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, 0); disabled=true; }
-    void Enable() { if(!disabled)return;
-      pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0); disabled=false; }
+    InterruptibleContext() : now_disabled(false)
+        { int oldtype;
+          pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldtype);
+          was_disabled = oldtype == PTHREAD_CANCEL_DEFERRED;
+        }
+    ~InterruptibleContext() { if(was_disabled) Disable(); else Enable(); }
+    void Disable() { if(now_disabled)return;
+      pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, 0); now_disabled=true; }
+    void Enable() { if(!now_disabled)return;
+      pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, 0); now_disabled=false; }
 private:
-    bool disabled;
+    bool now_disabled,was_disabled;
 };
 
 /***************************************************/

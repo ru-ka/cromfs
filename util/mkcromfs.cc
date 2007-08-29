@@ -22,19 +22,22 @@
 
 #include <sys/vfs.h> /* for statfs64 */
 
+#ifdef _OPENMP
+# include <omp.h>
+#endif
+
 #include "mkcromfs_sets.hh"
 #include "sparsewrite.hh"
-#include "threadworkengine.hh"
 
 #include "lzma.hh"
 #include "datasource.hh"
 #include "cromfs-inodefun.hh"
 #include "cromfs-directoryfun.hh"
 #include "cromfs-blockifier.hh"
+#include "longfileread.hh"
+#include "longfilewrite.hh"
 #include "util.hh"
 #include "fnmatch.hh"
-#include "bwt.hh"
-#include "mtf.hh"
 
 /* Settings */
 #include "mkcromfs_sets.hh"
@@ -95,51 +98,32 @@ uint_fast32_t storage_opts = 0x00000000;
 
 typedef std::pair<dev_t,ino_t> hardlinkdata;
 
-struct CompressorParams
+static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
+    mkcromfs_fblock& fblock,
+    uint_fast64_t& compressed_total,
+    uint_fast64_t& uncompressed_total)
 {
-    mkcromfs_fblockset& fblocks;
-    uint_fast64_t compressed_total;
-    uint_fast64_t uncompressed_total;
-    
-    MutexType mut;
-};
-static bool FinalCompressFblock(size_t index, CompressorParams& params)
-{
-    mkcromfs_fblock& fblock = params.fblocks[index];
-
     std::vector<unsigned char> fblock_lzma, fblock_raw;
     
     fblock_raw = fblock_lzma = fblock.get_raw();
 
-    if(storage_opts & CROMFS_OPT_USE_BWT)
-    {
-        // I don't know whether BWT is thread-safe, so use mutex just in case.
-        static MutexType bwt_mutex;
-        ScopedLock lck(bwt_mutex);
-        fblock_lzma = BWT_encode_embedindex(fblock_lzma);
-    }
-    if(storage_opts & CROMFS_OPT_USE_MTF)
-    {
-        fblock_lzma = MTF_encode(fblock_lzma);
-    }
-    
-    fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, fblock_lzma, "fblock");
+    char why[512];std::sprintf(why,"fblock %u", (unsigned)fblocknum);
+    fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, fblock_lzma, why);
     fblock.put_compressed(fblock_lzma);
 
     if(DisplayEndProcess)
     {
         std::printf(" [%d] %u -> %u\n",
-            (int)index,
+            (int)fblocknum,
             (unsigned)fblock_raw.size(),
             (unsigned)fblock_lzma.size());
         std::fflush(stdout);
     }
-
-    { ScopedLock lck(params.mut); 
-    params.uncompressed_total += fblock_raw.size();
-    params.compressed_total += fblock_lzma.size(); }
     
-    return false;
+  #pragma omp atomic
+    uncompressed_total += fblock_raw.size();
+  #pragma omp atomic
+    compressed_total   += fblock_lzma.size();
 }
 
 namespace cromfs_creator
@@ -536,7 +520,8 @@ namespace cromfs_creator
     /* Start here: Walk through some path. */
     /***************************************/
     
-    static int CreateAndWriteFs(const std::string& source_rootdir, int out_fd)
+    static int CreateAndWriteFs(
+        const std::string& source_rootdir, int out_fd)
     {
         uint_fast64_t bytes_of_files = 0;
         
@@ -749,46 +734,71 @@ namespace cromfs_creator
         lseek64(out_fd, 0, SEEK_SET);
 
         write(out_fd, Superblock, sblock.GetSize());
-        
-        //fprintf(stderr, "root goes at %llX\n", lseek64(out_fd,0,SEEK_CUR));
-        SparseWrite(out_fd, &compressed_root_inode[0],   compressed_root_inode.size(), sblock.rootdir_offs);
-        //fprintf(stderr, "inotab goes at %llX\n", lseek64(out_fd,0,SEEK_CUR));
-        SparseWrite(out_fd, &compressed_inotab_inode[0], compressed_inotab_inode.size(), sblock.inotab_offs);
-
-        SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs);
-        
+      
+      #pragma omp parallel sections
+      {
+        #pragma omp section
+        { //fprintf(stderr, "root goes at %llX\n", lseek64(out_fd,0,SEEK_CUR));
+        SparseWrite(out_fd, &compressed_root_inode[0],   compressed_root_inode.size(), sblock.rootdir_offs); }
+        #pragma omp section
+        { //fprintf(stderr, "inotab goes at %llX\n", lseek64(out_fd,0,SEEK_CUR));
+        SparseWrite(out_fd, &compressed_inotab_inode[0], compressed_inotab_inode.size(), sblock.inotab_offs); }
+        #pragma omp section
+        { SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs); }
+      }
         lseek64(out_fd, sblock.fblktab_offs, SEEK_SET);
         
         if(DisplayEndProcess)
         {
-            std::printf("Compressing %u fblocks...\n",
+            std::printf("Compressing and writing %u fblocks...\n",
                 (unsigned)fblocks.size());
             std::fflush(stdout);
         }
         
         uint_fast64_t compressed_total = 0;
         uint_fast64_t uncompressed_total = 0;
-
-        { CompressorParams params = { fblocks, 0, 0 };
-        { ThreadWorkEngine<CompressorParams> engine;
-        engine.RunTasks(UseThreads, fblocks.size(), params, FinalCompressFblock); }
         
-        compressed_total   += params.compressed_total;
-        uncompressed_total += params.uncompressed_total; }
+        bool terminate_for = false;
         
-        if(DisplayEndProcess)
+      #ifdef _OPENMP
+        int backup_max_threads = omp_get_max_threads(),
+            backup_nested = omp_get_nested();
+        if(LZMA_HeavyCompress)
         {
-            std::printf("Writing %u fblocks...",
-                (unsigned)fblocks.size());
-            std::fflush(stdout);
+            // For cache performance it is better to multithread
+            // the LZMA optimizer than this outer loop. Therefore,
+            // we set the number of threads to 1 for this loop,
+            // and restore it immediately after the team is created.
+            // The nesting flag is enabled in order to allow the
+            // nested parallel setting to have multiple threads.
+            // However, we do this only for LZMA_HeavyCompress
+            // because the non-heavy version does not do threading.
+            omp_set_num_threads(1);
+            omp_set_nested(1);
         }
+      #endif
         
-        for(size_t a=0; a<fblocks.size(); ++a)
+      #pragma omp parallel for ordered schedule(dynamic) \
+            reduction(+:compressed_total) \
+            reduction(+:uncompressed_total)
+        for(cromfs_fblocknum_t fblocknum=0; fblocknum<fblocks.size(); ++fblocknum)
         {
-            const std::vector<unsigned char> fblock_lzma = fblocks[a].get_compressed();
+      #ifdef _OPENMP
+          omp_set_num_threads(backup_max_threads);
+      #endif
+
+          #pragma omp flush(terminate_for)
+            mkcromfs_fblock& fblock = fblocks[fblocknum];
+            
+            if(!terminate_for)
+                FinalCompressFblock(fblocknum, fblock, compressed_total, uncompressed_total);
+          
+          #pragma omp ordered
+          {
+            const std::vector<unsigned char> fblock_lzma = fblock.get_compressed();
             
             { char Buf[64];
-              W64(Buf, fblock_lzma.size());
+              W32(Buf, fblock_lzma.size());
               write(out_fd, Buf, 4); }
             
             const uint_fast64_t pos = lseek64(out_fd, 0, SEEK_CUR);
@@ -805,7 +815,9 @@ namespace cromfs_creator
                         "       actually became larger than the decompressed one.\n"
                         "       Sorry. Try the 'minfreespace' option if it helps.\n"
                      );
-                    return 1;
+                    terminate_for = true;
+                  #pragma omp flush(terminate_for)
+                    goto next_for;
                 }
                 lseek64(out_fd, pos + FSIZE, SEEK_SET);
             }
@@ -816,8 +828,21 @@ namespace cromfs_creator
             
             std::fflush(stdout);
             
-            fblocks[a].Delete();
+            // Ensure the data is written before deleting the fblock
+            // So that if the computer happens to crash, a recovery
+            // with --finish-interrupted is possible.
+            
+            fdatasync(out_fd);
+            fblock.Delete();
+          next_for:;
+          }
         }
+      #ifdef _OPENMP
+        omp_set_num_threads(backup_max_threads);
+        omp_set_nested(backup_nested);
+      #endif
+
+        if(terminate_for) return -1;
         
         ftruncate64(out_fd, lseek64(out_fd, 0, SEEK_CUR));
         
@@ -839,6 +864,118 @@ namespace cromfs_creator
                 ReportSize(bytes_of_files).c_str()
                    );
         }
+        
+        return 0;
+    }
+    
+    static int ResumeWritingFs(
+        const std::string& fblock_pattern, int out_fd)
+    {
+        set_fblock_name_pattern(fblock_pattern);
+        
+        cromfs_superblock_internal sblock;
+        
+        cromfs_superblock_internal::BufferType Superblock;
+        ( LongFileRead(out_fd, 0, sizeof(Superblock), Superblock) );
+        
+        //storage_opts = 0;
+        sblock.ReadFromBuffer(Superblock);
+        
+        uint_fast64_t fblock_pos = sblock.fblktab_offs;
+        
+        //const size_t max_num_fblocks = (size_t)-1;
+        
+        /* Note: This loop cannot be made parallel, because each loop
+         * iteration requires knowing the value of fblock_pos, and that
+         * value is updated on the previous loop.
+         * Not even the "ordered" OpenMP clause helps this.
+         */
+        for(size_t fblocknum=0; /*fblocknum<max_num_fblocks*/; ++fblocknum)
+        {
+            std::printf("checking the state of fblock %u... (supposedly at file position 0x%X)\n",
+                (int)fblocknum, (unsigned)fblock_pos);
+            try
+            {
+                unsigned char SizeBuffer[4];
+                LongFileRead(out_fd, fblock_pos, 4, SizeBuffer);
+                
+                uint_fast64_t fblock_lzma_size = R32(SizeBuffer);
+                
+                std::vector<unsigned char> fblockdata(fblock_lzma_size);
+                
+                LongFileRead(out_fd, fblock_pos+4, fblock_lzma_size, &fblockdata[0]);
+                
+                std::printf(" fblock %u appears to be in the file already\n", (int)fblocknum);
+                
+                bool is_ok = true;
+                
+                if(fblocknum >= 190) LZMADeCompress(fblockdata, is_ok);
+                if(!is_ok)
+                {
+                    std::printf(" but it is not valid LZMA data!\n");
+                    throw EINVAL;
+                }
+                
+                fblock_pos += fblock_lzma_size + 4;
+                continue;
+            }
+            catch(int) // fblock was not found in the target file
+            {
+                std::printf(" checking the fblock file for fblock %u...\n", (int)fblocknum);
+                
+                mkcromfs_fblock fblock(fblocknum);
+                
+                if(fblock.getfilesize() == 0)
+                {
+                    std::printf(" file for fblock %u does not seem to exist\n", (int)fblocknum);
+                    break;
+                }
+                
+                if(fblock.is_uncompressed())
+                {
+                    std::printf(" it existed, compressing...\n");
+                    uint_fast64_t com=0, uncom=0;
+                    FinalCompressFblock(fblocknum, fblock, com, uncom);
+                }
+
+                const std::vector<unsigned char> fblock_lzma = fblock.get_compressed();
+                
+                std::printf(" writing fblock %u (%u bytes) at 0x%lX\n",
+                    (int)fblocknum, (unsigned) fblock_lzma.size(),
+                    (unsigned long)fblock_pos);
+                
+                { unsigned char SizeBuffer[64];
+                  W32(SizeBuffer, fblock_lzma.size());
+                  LongFileWrite(out_fd, fblock_pos, 4, SizeBuffer); }
+                
+                SparseWrite(out_fd, &fblock_lzma[0], fblock_lzma.size(), fblock_pos+4);
+                
+                if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
+                {
+                    if(fblock_lzma.size() > (size_t)FSIZE)
+                    {
+                        std::printf("\n");
+                        std::fflush(stdout);
+                        std::fprintf(stderr,
+                            "Error: This filesystem cannot be sparse, because a compressed fblock\n"
+                            "       actually became larger than the decompressed one.\n"
+                            "       Sorry. Try the 'minfreespace' option if it helps.\n"
+                         );
+                        return 1;
+                    }
+                    
+                    fblock_pos += 4 + FSIZE;
+                }
+                else
+                {
+                    fblock_pos += 4 + fblock_lzma.size();
+                }
+                
+                std::fflush(stdout);
+            }
+        }
+        std::printf("Done\n");
+        ftruncate64(out_fd, fblock_pos);
         
         return 0;
     }
@@ -1015,6 +1152,13 @@ public:
     }
 };
 
+const char* GetTempDir()
+{
+    const char* t;
+    t = std::getenv("TEMP"); if(t) return t;
+    t = std::getenv("TMP"); if(t) return t;
+    return "/tmp";
+}
 
 static void CleanupTempsExit(int signo)
 {
@@ -1023,10 +1167,21 @@ static void CleanupTempsExit(int signo)
     raise(signo); // reraise the signal
 }
 
+static void set_default_fblock_name_pattern()
+{
+    const std::string tmpdir = GetTempDir();
+    const int pid = getpid();
+    char Buf[4096];
+    std::sprintf(Buf, "/fblock_%d-", pid);
+    set_fblock_name_pattern(tmpdir + Buf);
+}
+
 int main(int argc, char** argv)
 {
     std::string path  = ".";
     std::string outfn = "cromfs.bin";
+    
+    std::string resume_file_selection = "";
     
     long AutoIndexRatio = 0;
 
@@ -1078,6 +1233,8 @@ int main(int argc, char** argv)
             {"bwt",                     0,0,2001},
             {"mtf",                     0,0,2002},
             {"overlapgranularity",      1,0,'g'},
+            
+            {"finish-interrupted",      1,0,7001},
             {0,0,0,0}
         };
         int c = getopt_long(argc, argv, "hVvf:b:er:s:a:A:c:qx:X:lS:432g:", long_options, &option_index);
@@ -1132,6 +1289,12 @@ int main(int argc, char** argv)
                     "     This option only makes sense if the value is smaller\n"
                     "     or equal to the value of --bruteforcelimit.\n"
                     "     Use 0 or 1 to disable threads. (Default)\n"
+                    " --finish-interrupted <fblock_path_prefix>\n"
+                    "     Use this option to finish a cromfs filesystem, if for some\n"
+                    "     reason mkcromfs was interrupted during the final phase of\n"
+                    "     LZMA-compressing fblocks (due to blackout for example).\n"
+                    "     Example:\n"
+                    "       mkcromfs --finish-interrupted '/path/to/fblock_6207-' out.cromfs\n"
                     "\n"
                     "Filesystem parameters:\n"
                     " --fsize, -f <size>\n"
@@ -1177,10 +1340,6 @@ int main(int argc, char** argv)
                     "     a filesystem that may be write-extended).\n"
                     "     This option supersedes the old --packedblocks (-k) with opposite\n"
                     "     semantics.\n"
-                    " --bwt\n"
-                    "     Use BWT transform when compressing. Experimental.\n"
-                    " --mtf\n"
-                    "     Use MTF transform when compressing. Experimental.\n"
                     "\n"
                     "Compression algorithm parameters:\n"
                     " --minfreespace, -s <value>\n"
@@ -1238,7 +1397,7 @@ int main(int argc, char** argv)
                     "     Specifies the priorities for storing different types of elements\n"
                     "     in directories. Default:  dir=1,link=2,other=3\n"
                     "     Changing it may affect compressibility.\n"
-                    " --overlapgranularity <value>\n"
+                    " --overlapgranularity, -g <value>\n"
                     "     Forbids overlap lengths that are not divisible by <value>.\n"
                     "     Use for periodic data.\n"
                     "     Default: 1\n"
@@ -1440,13 +1599,9 @@ int main(int argc, char** argv)
                 break;
             }
             case 2001: // bwt
-            {
-                storage_opts |= CROMFS_OPT_USE_BWT;
-                break;
-            }
             case 2002: // mtf
             {
-                storage_opts |= CROMFS_OPT_USE_MTF;
+                std::fprintf(stderr, "mkcromfs: The --bwt and --mtf options are no longer supported.\n");
                 break;
             }
             case 6001: // nopackedblocks
@@ -1556,6 +1711,9 @@ int main(int argc, char** argv)
                 }
                 if(size == 1) size = 0; // 1 thread is the same as no threads.
                 UseThreads = size;
+            #ifdef _OPENMP
+                omp_set_num_threads(std::max(1u, UseThreads));
+            #endif
                 break;
             }
             case 5001: // blockifyorder
@@ -1605,6 +1763,12 @@ int main(int argc, char** argv)
                     if(last_comma) break;
                     arg=comma+1;
                 }
+                break;
+            }
+            case 7001: // finish-interrupted
+            {
+                char* arg = optarg;
+                resume_file_selection = arg;
                 break;
             }
         }
@@ -1678,18 +1842,29 @@ int main(int argc, char** argv)
         std::printf("Writing %s...\n", outfn.c_str());
     }
     
-    int fd = open(outfn.c_str(), O_WRONLY | O_CREAT | O_LARGEFILE, 0644);
+    int fd = open(outfn.c_str(), O_RDWR | O_CREAT | O_LARGEFILE, 0644);
     if(fd < 0)
     {
         std::perror(outfn.c_str());
         return errno;
     }
-    ftruncate64(fd, 0);
     
-    (CheckSomeDefaultOptions(path));
+    int ExitStatus = 0;
+    
+    if(!resume_file_selection.empty())
+    {
+        ExitStatus = cromfs_creator::ResumeWritingFs(resume_file_selection, fd);
+    }
+    else
+    {
+        ftruncate64(fd, 0);
+        
+        (CheckSomeDefaultOptions(path));
+        
+        set_default_fblock_name_pattern();
 
-    int ExitStatus = cromfs_creator::CreateAndWriteFs(path.c_str(), fd);
-    //MaxSearchLength = FSIZE;
+        ExitStatus = cromfs_creator::CreateAndWriteFs(path, fd);
+    }
     close(fd);
     
     if(DisplayEndProcess)

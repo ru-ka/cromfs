@@ -115,9 +115,24 @@ static void FindOverlap(
     DataReadBuffer Buffer; long FblockSize; { uint_fast32_t tmpsize;
     fblock.InitDataReadBuffer(Buffer, tmpsize); FblockSize = tmpsize; }
 
+    long max_may_add = smallest.found ? smallest_adds : data.size();
+    if(FblockSize + max_may_add > FSIZE) max_may_add = FSIZE - FblockSize;
+    if(max_may_add < 0) max_may_add = 0;
+    
     long minimum_pos     = minimum_test_pos;
-    long MaxFblockSize   = std::min(FSIZE, FblockSize + smallest_adds);
-    long minimum_overlap = std::max(0l, MaxFblockSize - FblockSize);
+    long minimum_overlap = data.size() - max_may_add;
+    if(minimum_overlap > FblockSize
+    || minimum_pos + (long)data.size() > FblockSize + max_may_add)
+    {
+        // No way this is going to work, skip this fblock
+        return;
+    }
+    
+    if(AutoIndexPeriod == 1)
+    {
+        // only search for append if autoindexperiod covers all possible full overlaps
+        minimum_pos = std::max(0l, (long)(FblockSize - data.size() + 1));
+    }
     
     AppendInfo appended = AnalyzeAppend(
         data, minimum_pos, minimum_overlap, OverlapGranularity,
@@ -209,7 +224,9 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         OverlapFinderParameter params = 
         {
             fblocks, data, minimum_tested_positions,
-            { 0, 0, 0, AppendInfo() }
+            { 0, 0, 0, AppendInfo(), MutexType() },
+            std::vector<cromfs_fblocknum_t>(),
+            MutexType()
         };
         
         std::vector<cromfs_fblocknum_t>& candidates = params.candidates;
@@ -756,7 +773,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
         blocks_total += CalcSizeInBlocks(size, BSIZE);
     }
     
-    for(ssize_t a=0; a<schedule.size(); ++a)
+    for(ssize_t a=0; a < (ssize_t) schedule.size(); ++a)
     {
         schedule_item& s = schedule[a];
         

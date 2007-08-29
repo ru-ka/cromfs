@@ -1,3 +1,6 @@
+#ifndef bqtDataReadBuf
+#define bqtDataReadBuf
+
 #include <unistd.h>
 #include <cstring>
 
@@ -40,3 +43,5 @@ private:
     void operator=(const DataReadBuffer&);
     DataReadBuffer(const DataReadBuffer&);
 };
+
+#endif

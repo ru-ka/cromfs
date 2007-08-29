@@ -155,12 +155,7 @@ static uint_fast64_t ConvertBuffer
     
     if(want_compressed && !was_compressed)
     {
-        if(LZMA_HeavyCompress==2)
-            Buffer = LZMACompressHeavy(Buffer, "data");
-        else if(LZMA_HeavyCompress)
-            Buffer = LZMACompressAuto(Buffer, "data");
-        else
-            Buffer = LZMACompress(Buffer);
+        Buffer = DoLZMACompress(LZMA_HeavyCompress, Buffer, "data");
     }
     
     std::printf("written %u", (unsigned)Buffer.size());
@@ -513,10 +508,6 @@ int main(int argc, char** argv)
                     "     Alternatively, you can choose \"--lzmabits full\", which will\n"
                     "     try every possible option. Beware it will consume lots of time.\n"
                     "     \"--lzmabits auto\" is a lighter alternative to \"--lzmabits full\".\n"
-                    " --bwt\n"
-                    "     Use BWT transform when compressing. Experimental.\n"
-                    " --mtf\n"
-                    "     Use MTF transform when compressing. Experimental.\n"
                     "\n");
                 return 0;
             }
@@ -581,13 +572,9 @@ int main(int argc, char** argv)
                 break;
             }
             case 2001: // bwt
-            {
-                storage_opts |= CROMFS_OPT_USE_BWT;
-                break;
-            }
             case 2002: // mtf
             {
-                storage_opts |= CROMFS_OPT_USE_MTF;
+                std::fprintf(stderr, "mkcromfs: The --bwt and --mtf options are no longer supported.\n");
                 break;
             }
             case 4001: // lzmafastbytes

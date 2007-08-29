@@ -1,4 +1,5 @@
-#include "../lib/boyermoore.hh"
+#include "../lib/boyermooreneedle.hh"
+#include "../lib/boyermoore.cc"
 #include <cstdlib>
 #include <cstdio>
 
@@ -17,8 +18,9 @@ static const std::vector<unsigned char>
     
     for(unsigned a=0; a<len; ++a)
     {
-        result[a] = std::rand() & 255;
+        result[a] = std::rand() % 4;
     }
+    
     return result;
 }
 
@@ -29,11 +31,12 @@ static const std::vector<unsigned char>
     return GenRandomVector(len);
 }    
 
-static void Test(bool horspool)
+enum kinds { Full, Horspool, Turbo };
+static void Test(kinds kind)
 {
     /* Generate a random haystack and a random needle */
-    std::vector<unsigned char> haystack = GenRandomVector(100, 1000000);
-    std::vector<unsigned char> needle   = GenRandomVector(40, haystack.size()-1);
+    std::vector<unsigned char> haystack = GenRandomVector(100, 10000);
+    std::vector<unsigned char> needle   = GenRandomVector(10, haystack.size()-1);
     /* Select a position randomly and ensure that the needle
      * exists in that position */
     unsigned needlepos = std::rand() % (haystack.size() - needle.size());
@@ -45,9 +48,13 @@ static void Test(bool horspool)
     std::printf("%u in %u... \r", needle.size(), haystack.size());
     std::fflush(stdout);
     
-    unsigned foundpos = horspool
-        ? ding.SearchInHorspool(haystack)
-        : ding.SearchIn(haystack);
+    unsigned foundpos = 0;
+    switch(kind)
+    {
+        case Full: foundpos = ding.SearchIn(haystack); break;
+        case Turbo: foundpos = ding.SearchInTurbo(haystack); break;
+        case Horspool: foundpos = ding.SearchInHorspool(haystack); break;
+    }
     
     if(foundpos < needlepos)
     {
@@ -73,6 +80,7 @@ static void Test(bool horspool)
         ++fails;
     }
 }
+static const unsigned granularity = 2;
 
 static void TestWithAppend()
 {
@@ -88,9 +96,10 @@ static void TestWithAppend()
         haystack = GenRandomVector(haystack.size());
         
         /* Select a position randomly and ensure that the needle
-         * exists in that position */ rerand:;
-        unsigned needlepos = std::rand() % (haystack.size() + 1);
-        if(needlepos + needle.size() <= haystack.size()) goto rerand;
+         * exists in that position */
+        const unsigned hndiff = haystack.size() - needle.size();
+
+        unsigned needlepos = hndiff + std::rand() % (needle.size()+1);
         
     #if 1
         std::memcpy(&haystack[needlepos], &needle[0],
@@ -108,8 +117,11 @@ static void TestWithAppend()
           );
         std::fflush(stdout);*/
         
-        unsigned foundpos = ding.SearchInWithAppend(haystack);
+        unsigned foundpos = ding.SearchInTurboWithAppend(haystack, 0, granularity);
         std::fflush(stderr);
+        
+        if(needlepos < haystack.size() &&
+        (needlepos - hndiff) % granularity) needlepos = haystack.size();
         
         if(foundpos < needlepos)
         {
@@ -125,20 +137,40 @@ static void TestWithAppend()
             }
         }
         
+        if(needlepos < haystack.size() &&
+        (needlepos - hndiff) % granularity) needlepos = haystack.size();
+        
         if(foundpos != needlepos)
         {
+            if(foundpos < haystack.size() && (foundpos - hndiff) % granularity)
+            {
+                std::fprintf(stderr, "Error: It ignored granularity\n");
+            }
+            if(needlepos < haystack.size() && (needlepos - hndiff) % granularity)
+            {
+                std::fprintf(stderr, "Error: We ignored granularity\n");
+            }
+        
             unsigned compare_size = std::min(needle.size(), haystack.size() - needlepos);
             if(std::memcmp(&haystack[needlepos], &needle[0], compare_size) != 0)
             {
                 fprintf(stderr, "Test faulty\n");
             }
 
-            std::fprintf(stderr, "Error: needle=%u, haystack=%u, pos=%u, claims %u\n",
+            std::fprintf(stderr, "Error: needle=%u, haystack=%u, wanted=%u, claims %u\n",
                 needle.size(),
                 haystack.size(),
                 needlepos,
                 foundpos);
             std::fflush(stderr);
+
+            compare_size = std::min(needle.size(), haystack.size() - foundpos);
+            if(compare_size > 0
+            && std::memcmp(&haystack[foundpos], &needle[0], compare_size) == 0)
+            {
+                fprintf(stderr, "- though the needle was there, too\n");
+            }
+
             ++fails;
         }
     }
@@ -147,23 +179,11 @@ static void TestWithAppend()
 
 int main(void)
 {
-#if 0
+#if 1
     for(unsigned a=0; a<250; ++a)
     {
         std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
-        Test(false); // full
-    }
-    if(!fails)
-        std::printf("BoyerMoore tests OK\n");
-    else
-        std::fprintf(stderr, "BoyerMoore: %u failures\n", fails);
-    fails=0;
-#endif
-#if 0
-    for(unsigned a=0; a<250; ++a)
-    {
-        std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
-        Test(true); // horspool
+        Test(Horspool);
     }
     if(!fails)
         std::printf("BoyerMoore Horspool tests OK\n");
@@ -172,7 +192,31 @@ int main(void)
     fails=0;
 #endif
 #if 1
-    for(unsigned a=0; a<2500; ++a)
+    for(unsigned a=0; a<125000; ++a)
+    {
+        std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
+        Test(Full);
+    }
+    if(!fails)
+        std::printf("BoyerMoore tests OK\n");
+    else
+        std::fprintf(stderr, "BoyerMoore: %u failures\n", fails);
+    fails=0;
+#endif
+#if 1
+    for(unsigned a=0; a<125000; ++a)
+    {
+        std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
+        Test(Turbo);
+    }
+    if(!fails)
+        std::printf("Turbo BoyerMoore tests OK\n");
+    else
+        std::fprintf(stderr, "BoyerMoore: %u failures\n", fails);
+    fails=0;
+#endif
+#if 1
+    for(unsigned a=0; a<50000; ++a)
     {
         std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
         TestWithAppend();

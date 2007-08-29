@@ -47,8 +47,16 @@ else
 fi
 rm -rf a.listing b.listing tmp.cromfs b
 
+## TEST 3: Boyer-Moore
+
 if [ "$CXX" = "" ]; then CXX=g++; fi
 $CXX -o test-boyermoore -O3 test-boyermoore.cc -ftree-vectorize
 echo "Testing Boyer-Moore search algorithm..."
 ./test-boyermoore
 rm -f test-boyermoore
+
+## TEST 4: Backwards match
+$CXX -o test-backwards_match -O3 test-backwards_match.cc -g -Wall -W -ftree-vectorize
+echo "Testing Backwards match..."
+./test-backwards_match
+rm -f test-backwards_match

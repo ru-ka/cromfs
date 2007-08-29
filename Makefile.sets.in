@@ -41,9 +41,14 @@ CXXFLAGS=$(OPTIM) $(CXXOPTS) -fno-default-inline
 LDFLAGS=-g
 
 #####
-CC=gcc
-CPP=cpp
-CXX=g++
-OPTIM += 
-CPPFLAGS +=  -DHASH_MAP=1
-LDFLAGS += 
+# These options were set by ./configure
+# at {CONFIG_DATE}
+# for {CONFIG_UNAME}
+# To change, run ./configure again.
+#
+CC={CONFIG_CC}
+CPP={CONFIG_CPP}
+CXX={CONFIG_CXX}
+OPTIM += {CONFIG_OPTIM}
+CPPFLAGS += {CONFIG_CPPFLAGS}
+LDFLAGS += {CONFIG_LDFLAGS}

@@ -19,13 +19,29 @@ const AppendInfo AnalyzeAppend
 
     if(minimum_pos < hlen)
     {
-        size_t result =
-            needle.SearchInWithAppend(
-                haystack + minimum_pos,
-                hlen - minimum_pos,
-                minimum_overlap,
-                overlap_granularity) + minimum_pos;
-
+        size_t result;
+        
+        /* If the minimum_pos only allows appending (no complete overlaps possible) */
+        if(unlikely(minimum_pos > hlen - std::min(hlen, needle.size())))
+        {
+            if(unlikely(overlap_granularity) == 0)
+                result = hlen;
+            else
+                result = needle.SearchInWithAppendOnly(
+                    haystack + minimum_pos,
+                    hlen - minimum_pos,
+                    minimum_overlap,
+                    overlap_granularity) + minimum_pos;
+        }
+        else
+        {
+            result =
+                needle.SearchInTurboWithAppend(
+                    haystack + minimum_pos,
+                    hlen - minimum_pos,
+                    minimum_overlap,
+                    overlap_granularity) + minimum_pos;
+        }
         append.SetAppendPos(result, needle.size());
     }
     return append;

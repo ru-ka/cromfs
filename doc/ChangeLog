@@ -4,6 +4,24 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.3	2007-08-29 Joel Yliluoma <bisqwit@iki.fi>
+- mkcromfs: Added a feature to finish previously interrupted mkcromfs
+  work (only if it was interrupted during the last stage (fblock
+  LZMA compression or writing of fblocks into the result file)).
+- mkcromfs: Optimized the Boyer-Moore search algorithms, and added
+  a Turbo Boyer-Moore search (now default) which should yield slightly
+  better performance.
+- Added optional parallerism (threads) in cromfs-driver
+  through OpenMP (requires gcc 4.2 and -fopenmp). See Makefile.sets
+- Also changed partially the thread systems in mkcromfs and unmkcromfs
+  to OpenMP for simplicity of code.
+- Added a ./configure script (not autotools though).
+- Fixed an error in cromfs-driver that actually caused
+  pessimization of performance in case of long file reads.
+- Since I could not find a single test case where the BWT or MTF filters
+  yielded a compression improvement, I designed to remove them from this
+  release to simplify the code.
+
 1.5.2	2007-08-17 Joel Yliluoma <bisqwit@iki.fi>
 - Added buffering in datasource, improving mkcromfs performance when
   the files are read from a slow filesystem (such as another cromfs mount)

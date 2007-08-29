@@ -5,6 +5,7 @@
 #include "lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.h"
 
 #include "lzma.hh"
+#include "threadfun.hh" // for ForceSwitchThread
 
 #include <vector>
 #include <algorithm>
@@ -319,11 +320,22 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 #include "LzmaDecode.c"
 
 const std::vector<unsigned char> LZMADeCompress
-    (const std::vector<unsigned char>& buf)
+    (const std::vector<unsigned char>& buf, bool& ok)
 {
-    if(buf.size() <= 5+8) return std::vector<unsigned char> ();
+    if(buf.size() <= 5+8) 
+    {
+    clearly_not_ok:
+        ok = false;
+        return std::vector<unsigned char> ();
+    }
     
     uint_least64_t out_sizemax = R64(&buf[5]);
+    
+    /*if(out_sizemax >= (size_t)~0ULL)
+    {
+        // cannot even allocate a vector this large.
+        goto clearly_not_ok;
+    }*/
     
     std::vector<unsigned char> result(out_sizemax);
     
@@ -333,13 +345,30 @@ const std::vector<unsigned char> LZMADeCompress
     
     SizeT in_done;
     SizeT out_done;
-    LzmaDecode(&state, &buf[13], buf.size()-13, &in_done,
-               &result[0], result.size(), &out_done);
+    int res = LzmaDecode(&state, &buf[13], buf.size()-13, &in_done,
+                         &result[0], result.size(), &out_done);
+    
+    /*
+    fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
+        res, (int)in_done, (int)buf.size(),
+             (int)out_done, (int)out_sizemax);
+    */
+    
+    ok = out_done == out_sizemax
+      && in_done+5+8 == buf.size()
+      && res == LZMA_RESULT_OK;
     
     delete[] state.Probs;
     
     result.resize(out_done);
     return result;
+}
+
+const std::vector<unsigned char> LZMADeCompress
+    (const std::vector<unsigned char>& buf)
+{
+    bool ok_unused;
+    return LZMADeCompress(buf, ok_unused);
 }
 
 #if 0
@@ -356,7 +385,7 @@ int main(void)
 const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned char>& buf,
     const char* why)
 {
-    std::vector<unsigned char> bestresult, result;
+    std::vector<unsigned char> bestresult;
     char best[512];
     bool first = true;
     if(LZMA_verbose >= 1)
@@ -370,15 +399,22 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
     
     bool use_small_dict = false;
     
-    for(unsigned pb = 0; pb <= 4; ++pb)
-    for(unsigned lp = 0; lp <= 4; ++lp)
-    for(unsigned lc = 0; lc <= 8; ++lc)
+  #pragma omp parallel for
+    for(unsigned compress_mode = 0; compress_mode < (5*5*9); ++compress_mode)
     {
-        result = use_small_dict
-            ? LZMACompress(buf,pb,lp,lc, 4096)
-            : LZMACompress(buf,pb,lp,lc);
+        const unsigned pb = compress_mode % 5;
+        const unsigned lp = (compress_mode / 5) % 5;
+        const unsigned lc = (compress_mode / 5 / 5) % 9;
         
+        std::vector<unsigned char>
+            result = use_small_dict
+                ? LZMACompress(buf,pb,lp,lc, 4096)
+                : LZMACompress(buf,pb,lp,lc);
+        
+      #pragma omp critical (lzmacompressheavy_updatestatistics)
+       {
         sizemap[pb][lp][lc] = result.size();
+        
         if(first || result.size() < minresultsize) minresultsize = result.size();
         if(first || result.size() > maxresultsize) maxresultsize = result.size();
         if(first || result.size() < bestresult.size())
@@ -398,7 +434,6 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
             if(LZMA_verbose >= 2)
                 fprintf(stderr, "Blaa result with %s: %u\n", tmp, (unsigned)result.size());
         }
-        
         if(LZMA_verbose >= 2)
         {
             fprintf(stderr, "%*s\n", (5 * (4+9+2)), "");
@@ -430,6 +465,7 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
             for(unsigned a=0; a<6; ++a) fprintf(stderr, "%s\n", lines[a].c_str());
             fprintf(stderr, "\33[%uA", 7);
         }
+       }
     }
     if(LZMA_verbose >= 2)
         fprintf(stderr, "\n\n\n\n\n\n\n\n");
@@ -510,113 +546,190 @@ parameters reliably using different compression settings than in the actual case
 class ParabolicFinder
 {
 public:
-    ParabolicFinder()
+    enum QueryState      { Unknown, Pending, Done };
+    enum InstructionType { HereYouGo, WaitingResults, End };
+public:
+    ParabolicFinder(unsigned Start, unsigned End)
+        : begin(Start),
+          results(End-Start+1, 0),
+          state  (End-Start+1, Unknown),
+          LeftRightSwap(false)
     {
     }
-    void Init(unsigned Start, unsigned End)
+    
+    InstructionType GetNextInstruction(unsigned& attempt)
     {
-        begin = Start;
-        count = End - Start + 1;
-        results.resize(count);
-        done  = 0;
-        cur_attempt = 0;
-        focus_mode = false;
-        focus_low  = 0;
-        focus_high = 0;
-    }
-    bool End() const
-    {
-        return done >= count;
-    }
-    unsigned GetAttempt() const
-    {
-        return cur_attempt + begin;
-    }
-    void Got(unsigned n)
-    {
-        results[cur_attempt] = n; ++done; 
+      InstructionType result = End;
+      
+      const int Last  = begin + results.size()-1;
+      
+      #define RetIns(n) do{ result = (n); goto DoneCrit; }while(0)
+      #define RetVal(n) do{ state[attempt = (n)] = Pending; RetIns(HereYouGo); }while(0)
+      
+      #pragma omp critical(LZMA_ParabolicFinderState)
+      {
+        /*
+        fprintf(stderr, "NextInstruction...");
+        for(unsigned a=0; a<state.size(); ++a)
+            fprintf(stderr, " %u=%s", a,
+                state[a]==Unknown?"??"
+               :state[a]==Done?"Ok"
+               :"..");
+        fprintf(stderr, "\n");*/
         
-        if(cur_attempt == 1)
+        if(CountUnknown() == 0)
         {
-            if(results[0] != results[1])
-                { cur_attempt = count-1; return; }
+            // No unassigned slots remain. Don't need more workers.
+            RetIns(End);
         }
-        else if(cur_attempt == count-1)
+
+        if(1) // scope for local variables
         {
-            if(results[0] < results[1]
-            && results[1] < results[count-1])
-            {
-                // looks like an ascending curve. We're done.
-                done = count; return;
-            }
-            if(results[0] > results[1]
-            && results[1] > results[count-1])
-            {
-                // looks like a descending curve. Try second last now.
-                focus_mode = true;
-                focus_low  = 1;
-                cur_attempt = focus_high = count-2;
-                return;
-            }
-            // bleh, go normally.
-            cur_attempt = 2; return;
-        }
-        else if(focus_mode)
-        {
-        //ReFocus:
-            if(LZMA_verbose >= 1)
-            {
-                fprintf(stderr, "\t\tfocus mode(cur=%u, lo=%u, hi=%u)\n",
-                    cur_attempt,focus_low,focus_high); 
-            }
-            if(cur_attempt == focus_high)
-            {
-                if(results[cur_attempt] > results[cur_attempt+1])
+            // Alternate which side to do next if both are available.
+            bool LeftSideFirst = LeftRightSwap ^= 1;
+            
+            // Check left side descend type
+            int LeftSideNext = -1; bool LeftSideDoable = false;
+            for(int c=0; c<=Last; ++c)
+                switch(state[c])
                 {
-                    // stopped descending. We're done.
-                    done = count; return;
+                    case Unknown: LeftSideNext = c; LeftSideDoable = true; goto ExitLeftSideFor;
+                    case Pending: LeftSideNext = c; LeftSideDoable = false; goto ExitLeftSideFor;
+                    case Done:
+                        if(c == 0) continue;
+                        if(results[c] > results[c-1])
+                        {
+                            // Left side stopped descending.
+                            if(state[Last] != Unknown) RetIns(End);
+                            goto ExitLeftSideFor;
+                        }
+                        else if(results[c] == results[c-1])
+                            LeftSideFirst = true;
                 }
-              FocusTryLow:
-                cur_attempt = ++focus_low;
-                return;
-            }
-            if(cur_attempt == focus_low)
-            {
-                if(results[cur_attempt] > results[cur_attempt-1])
+        ExitLeftSideFor: ;
+            
+            // Check right side descend type
+            int RightSideNext = -1; bool RightSideDoable = false;
+            for(int c=Last; c>=0; --c)
+                switch(state[c])
                 {
-                    // stopped descending. We're done.
-                    done = count; return;
+                    case Unknown: RightSideNext = c; RightSideDoable = true; goto ExitRightSideFor;
+                    case Pending: RightSideNext = c; RightSideDoable = false; goto ExitRightSideFor;
+                    case Done:
+                        if(c == Last) continue;
+                        if(results[c] > results[c+1])
+                        {
+                            // Right side stopped descending.
+                            if(state[0] != Unknown) RetIns(End);
+                            goto ExitRightSideFor;
+                        }
+                        else if(results[c] == results[c+1])
+                            LeftSideFirst = false;
                 }
-                if(count >= 7)
-                    goto FocusTryLow;
-                cur_attempt = --focus_high;
-                return;
-            }
+        ExitRightSideFor: ;
+        
+            if(!LeftSideFirst)
+                 { std::swap(LeftSideDoable, RightSideDoable);
+                   std::swap(LeftSideNext,   RightSideNext); }
+            
+            if(LeftSideDoable) RetVal(LeftSideNext);
+            if(RightSideDoable) RetVal(RightSideNext);
+            
+            // If we have excess threads and work to do, give them something
+            if(CountHandled() > 2) if(LeftSideNext >= 0) RetVal(LeftSideNext);
+            if(CountHandled() > 3) if(RightSideNext >= 0) RetVal(RightSideNext);
+            
+            RetIns(WaitingResults);
         }
-        else if(cur_attempt > 0 && results[cur_attempt] > results[cur_attempt-1])
-        {
-            // looks like an ascending curve. We're done.
-            done = count; return;
-        }
-        ++cur_attempt;
+        
+      DoneCrit: ;
+      }
+      return result;
+    }
+    
+    void GotResult(unsigned attempt, unsigned value)
+    {
+      #pragma omp critical(LZMA_ParabolicFinderState)
+      {
+        results[attempt] = value;
+        state[attempt]   = Done;
+      }
+    }
+
+private:
+    unsigned CountUnknown() const
+    {
+        unsigned result=0;
+        for(size_t a=0, b=state.size(); a<b; ++a)
+            if(state[a] == Unknown) ++result;
+        return result;
+    }
+    unsigned CountHandled() const
+    {
+        return state.size() - CountUnknown();
     }
 private:
-    std::vector<unsigned> results;
     unsigned begin;
-    unsigned count;
-    unsigned done;
-    unsigned cur_attempt;
-    bool focus_mode;
-    unsigned focus_low;
-    unsigned focus_high;
+    std::vector<unsigned>   results;
+    std::vector<QueryState> state;
+    bool LeftRightSwap;
 };
+
+static void LZMACompressAutoHelper(
+    const std::vector<unsigned char>& buf, bool use_small_dict,
+    const char* why,
+    unsigned& pb, unsigned& lp, unsigned& lc,
+    unsigned& which_iterate, ParabolicFinder& finder,
+    bool&first, std::vector<unsigned char>& bestresult)
+{
+    for(;;)
+    {
+        unsigned t=0;
+        switch(finder.GetNextInstruction(t))
+        {
+            case ParabolicFinder::End:
+                return;
+            case ParabolicFinder::HereYouGo:
+                break;
+            case ParabolicFinder::WaitingResults:
+                ForceSwitchThread();
+                continue;
+        }
+        
+        const unsigned try_pb = &which_iterate == &pb ? t : pb;
+        const unsigned try_lp = &which_iterate == &lp ? t : lp;
+        const unsigned try_lc = &which_iterate == &lc ? t : lc;
+        
+        if(LZMA_verbose >= 2)
+            fprintf(stderr, "%s:Trying pb%u lp%u lc%u\n",
+                why,try_pb,try_lp,try_lc);
+        
+        std::vector<unsigned char> result = use_small_dict
+            ? LZMACompress(buf,try_pb,try_lp,try_lc, 65536)
+            : LZMACompress(buf,try_pb,try_lp,try_lc);
+
+        if(LZMA_verbose >= 2)
+            fprintf(stderr, "%s:       pb%u lp%u lc%u -> %u\n",
+                why,try_pb,try_lp,try_lc, (unsigned)result.size());
+        
+        finder.GotResult(t, result.size());
+        
+      #pragma omp critical(LZMA_Auto_UpdateStats)
+      {
+        if(first || result.size() <= bestresult.size())
+        {
+            first    = false;
+            bestresult.swap(result);
+            which_iterate = t;
+        }
+      }
+    }
+}
+
 
 const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned char>& buf,
     const char* why)
 {
-    std::vector<unsigned char> bestresult, result;
-    char best[512];
-    bool first = true;
     if(LZMA_verbose >= 1)
     {
         fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)buf.size());
@@ -629,82 +742,51 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
     
     if(use_small_dict) LZMA_AlgorithmNo = 0;
     
-    unsigned bestsize=0;
-    
-    ParabolicFinder finder;
     unsigned pb=0, lp=0, lc=0;
 
+    std::vector<unsigned char> bestresult;
+  
+  {
+    ParabolicFinder pb_finder(0,4);
+    ParabolicFinder lp_finder(0,4);
+    ParabolicFinder lc_finder(0,8);
+    bool first=true;
+  #pragma omp parallel
+   {
+    /* Using parallelism here. However, we need barriers after
+     * each step, because the comparisons are made based on the
+     * result size, and if the pb/lp/lc values other than the
+     * one being focused change, it won't work. Only one parameter
+     * must change in the loop.
+     */
+    
     /* step 1: find best value in pb axis */
-    first=true;
-    finder.Init(0, 4);
-    while(!finder.End())
-    {
-        unsigned t = finder.GetAttempt();
-        
-        if(LZMA_verbose >= 2)
-            fprintf(stderr, "Trying pb%u lp%u lc%u ", t,lp,lc);
-        
-        result = use_small_dict
-            ? LZMACompress(buf,t,lp,lc, 65536)
-            : LZMACompress(buf,t,lp,lc);
-        if(LZMA_verbose >= 2)
-            fprintf(stderr, "-> %u\n", (unsigned)result.size());
-        
-        finder.Got(result.size());
-        
-        if(first || result.size() < bestsize)
-            { first=false; bestsize=result.size(); pb=t; }
-    }
+    LZMACompressAutoHelper(buf,use_small_dict,why,
+        pb, lp, lc,
+        pb, pb_finder, first, bestresult);
+
+    #pragma omp barrier
+
+    #pragma omp single
+    lp_finder.GotResult(lp, bestresult.size());
     
-    /* step 2: find best value in LP axis */
-    first=true;
-    finder.Init(0, 4);
-    while(!finder.End())
-    {
-        unsigned t = finder.GetAttempt();
+    /* step 2: find best value in lp axis */
+    LZMACompressAutoHelper(buf,use_small_dict,why,
+        pb, lp, lc,
+        lp, lp_finder, first, bestresult);
 
-        if(LZMA_verbose >= 2)
-            fprintf(stderr, "Trying pb%u lp%u lc%u ", pb,t,lc);
-        
-        result = use_small_dict
-            ? LZMACompress(buf,pb,t,lc, 65536)
-            : LZMACompress(buf,pb,t,lc);
-        if(LZMA_verbose >= 2)
-            fprintf(stderr, "-> %u\n", (unsigned)result.size());
+    #pragma omp barrier
 
-        finder.Got(result.size());
-        
-        if(first || result.size() < bestsize)
-            { first=false; bestsize=result.size(); lp=t; }
-    }
+    #pragma omp single
+    lc_finder.GotResult(lc, bestresult.size());
     
-    /* step 3: find best value in LC axis */
-    first=true;
-    finder.Init(0, 8);
-    while(!finder.End())
-    {
-        unsigned t = finder.GetAttempt();
-
-        if(LZMA_verbose >= 2)
-            fprintf(stderr, "Trying pb%u lp%u lc%u ", pb,lp,t);
-        
-        result = use_small_dict
-            ? LZMACompress(buf,pb,lp,t, 65536)
-            : LZMACompress(buf,pb,lp,t);
-        if(LZMA_verbose >= 2)
-            fprintf(stderr, "-> %u\n", (unsigned)result.size());
-
-        finder.Got(result.size());
-
-        if(first || result.size() < bestsize)
-            { first=false; bestsize=result.size();
-              lc=t;
-              sprintf(best, "pb%u lp%u lc%u",
-                  pb,lp,lc);
-              bestresult.swap(result);
-            }
-    }
-    
+    /* step 3: find best value in lc axis */
+    LZMACompressAutoHelper(buf,use_small_dict,why,
+        pb, lp, lc,
+        lc, lc_finder, first, bestresult);
+   }
+  }
+  
     if(use_small_dict || LZMA_AlgorithmNo != backup_algorithm)
     {
         LZMA_AlgorithmNo = backup_algorithm;
@@ -712,12 +794,13 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
     }
     
     if(LZMA_verbose >= 1)
-        fprintf(stderr, "Best LZMA for %s(%u->%u): %s\n",
+    {
+        fprintf(stderr, "Best LZMA for %s(%u->%u): pb%u lp%u lc%u\n",
             why,
             (unsigned)buf.size(),
             (unsigned)bestresult.size(),
-            best);
-      
+            pb,lp,lc);
+    }
     fflush(stderr);
     
     return bestresult;

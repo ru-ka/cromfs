@@ -4,10 +4,12 @@
 /* Set to 0 if you have compilation problems
  * with hash_set or hash_map
  */
-#define USE_HASH 1
+#ifndef USE_HASHMAP
+#define USE_HASHMAP 1
+#endif
 
 
-#if USE_HASH
+#if USE_HASHMAP
 
 #include <string>
 #include <utility>
@@ -99,6 +101,6 @@ namespace __gnu_cxx
 #define hash_map std::map
 #define hash_set std::set
 
-#endif // USE_HASH
+#endif // USE_HASHMAP
 
 #endif // bqtHashHH

@@ -12,9 +12,6 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 */
 
-/* Disable this if you have hash-related compilation problems. */
-#define USE_HASHMAP
-
 #include "lib/endian.hh"
 
 #include <vector>

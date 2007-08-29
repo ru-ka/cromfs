@@ -69,6 +69,11 @@ extern "C" {
         }
         return (void*)fs;
     }
+    void cromfs_initialize(void* userdata)
+    {
+        cromfs* fs = (cromfs*)userdata;
+        if(fs) fs->Initialize();
+    }
     void cromfs_uncreate(void* userdata)
     {
         cromfs* fs = (cromfs*)userdata;

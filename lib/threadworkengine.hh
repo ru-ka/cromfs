@@ -36,6 +36,7 @@ public:
 private:
     std::vector<ThreadType> threads;
     
+//#ifndef _OPENMP
     struct workerparam
     {
         bool init_ok; // flag: should threads begin work?
@@ -66,6 +67,7 @@ private:
     } params;
     
     static void* WorkRunner(workerparam& params);
+//#endif
 };
 
 #include "threadworkengine.tcc"

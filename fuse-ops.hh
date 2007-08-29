@@ -6,6 +6,8 @@ extern "C" {
 #endif
 
 void* cromfs_create(int fd);
+void cromfs_initialize(void* userdata);
+
 void cromfs_uncreate(void* userdata);
 
 

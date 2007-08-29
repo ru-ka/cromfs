@@ -1,9 +1,10 @@
-VERSION=1.5.2
+VERSION=1.5.3
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
 ARCHFILES=\
 	Makefile.sets \
+	Makefile.sets.in \
 	\
 	COPYING progdesc.php \
 	\
@@ -41,6 +42,8 @@ ARCHFILES=\
 	lib/hash.hh \
 	lib/threadfun.hh \
 	lib/threadworkengine.hh lib/threadworkengine.tcc \
+	lib/duffsdevice.hh \
+	lib/stringsearchutil.hh \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
 	lib/autoclosefd.hh \
@@ -48,19 +51,17 @@ ARCHFILES=\
 	lib/datacache.hh \
 	lib/mmapping.hh \
 	lib/fadvise.cc lib/fadvise.hh \
-	lib/bwt.cc lib/bwt.hh \
-	lib/mtf.cc lib/mtf.hh \
 	lib/lzma.cc lib/lzma.hh \
 	lib/util.cc lib/util.hh \
 	lib/append.cc lib/append.hh \
 	lib/fnmatch.cc lib/fnmatch.hh \
 	lib/crc32.h lib/crc32.cc \
 	lib/assert++.hh lib/assert++.cc \
-	lib/memmem.h lib/memmem.c \
 	lib/sparsewrite.cc lib/sparsewrite.hh \
 	lib/longfileread.hh \
 	lib/longfilewrite.hh lib/longfilewrite.cc \
-	lib/boyermoore.hh \
+	lib/boyermooreneedle.hh \
+	lib/boyermoore.hh lib/boyermoore.cc \
 	lib/superstringfinder.hh \
 	lib/asymmetrictsp.hh \
 	lib/autoptr \
@@ -68,9 +69,6 @@ ARCHFILES=\
 	lib/range.hh lib/range.tcc \
 	lib/rangeset.hh lib/rangeset.tcc \
 	lib/rangemultimap.hh lib/rangemultimap.tcc \
-	\
-	lib/grzip/BWT.c \
-	lib/grzip/libGRZip.h \
 	\
 	lib/LzmaDecode.c lib/LzmaDecode.h lib/LzmaTypes.h \
 	\
@@ -136,16 +134,14 @@ include Makefile.sets
 CXXFLAGS += -O3 -fno-rtti
 
 CPPFLAGS += `pkg-config --cflags fuse` -pthread
+LDLIBS   += `pkg-config --libs fuse`
 
 OBJS=\
 	cromfs.o fuse-ops.o fuse-main.o \
-	lib/bwt.o lib/mtf.o \
 	lib/cromfs-inodefun.o \
 	lib/fadvise.o lib/util.o
 
-LDLIBS += -lfuse -ldl
-# Added -ldl because fuse 2.7.x depends on it,
-# according to report by cromo@klej.net
+LDLIBS += $(FUSELIBS)
 
 DEPFUN_INSTALL=ignore
 
@@ -161,10 +157,10 @@ all-strip: all FORCE
 all: $(PROGS)
 
 cromfs-driver: $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
 
 cromfs-driver-static: $(OBJS)
-	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS) -lpthread -lrt
+	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS) -lpthread -lrt
 	- strip -R.comment $@
 	# Note: It does not matter if upx cannot run.
 	- upx --best $@
@@ -180,6 +176,7 @@ util/cvcromfs: FORCE
 
 clean:
 	rm -rf $(OBJS) $(PROGS) install
+	rm -f cromfs-driver-static.??? configure.log
 	make -C util clean
 
 install: $(PROGS) FORCE

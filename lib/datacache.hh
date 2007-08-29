@@ -63,9 +63,16 @@ public:
     
     ValueType& Put(const KeyType key, const ValueType& value)
     {
+      ValueType* result;
+    //fprintf(stderr, "entering pragma critical(put)\n");
+      #pragma omp critical (datacache_put)
+       {
         std::pair<time_t, ValueType>& val = data[key];
         val.first  = std::time(0);
-        return val.second = value;
+        result = &(val.second = value);
+       }
+    //fprintf(stderr, "exit pragma critical(put)\n");
+      return *result;
     }
 
 private:

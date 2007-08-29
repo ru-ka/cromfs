@@ -4,7 +4,7 @@
 #if 1
 # include "bucketcontainer.hh"
 #else
-# ifdef USE_HASHMAP
+# if USE_HASHMAP
 #  include <ext/hash_map>
 #  include "hash.hh"
 # endif

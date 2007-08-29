@@ -65,8 +65,10 @@ In CROMFS03, the INOTAB inode contains flag bits in the inode's "mode" field:
         0 = BLOCks are not packed
       m:
         1 = Using MTF (move-to-front) filtering, 0 = not
+            Note: MTF is no longer supported (since version 1.5.3). Don't use.
       b:
         1 = Using BWT (burrows-wheeler-transform) filtering, 0 = not
+            Note: BWT is no longer supported (since version 1.5.3). Don't use.
 
 
 Technically, ROOTDIR could be placed into INOTAB just like all the other inodes.

@@ -2,7 +2,7 @@
 
 /* It does so by translating it into an asymmetric Travelling Salesman problem. */
 
-#include "boyermoore.hh"
+#include "boyermooreneedle.hh"
 #include "asymmetrictsp.hh"
 #include <algorithm>
 

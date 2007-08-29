@@ -29,7 +29,13 @@
  *
  *   Virtual and non-virtual classes are supported.
  *
- * autoptr.hh version 1.3.9
+ * autoptr.hh version 1.3.10
+ *
+ * The difference to boost::shared_ptr<> is that
+ * my autoptr does not keep two pointers around.
+ * Instead, it requires the pointed object to be
+ * derived from "ptrable" so that it contains the
+ * reference count in it.
  */
 
 /* Basic autopointer type. Can only point to ptrable-derived classes. */

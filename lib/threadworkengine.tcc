@@ -1,5 +1,9 @@
 #include "threadworkengine.hh"
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 template<typename WorkType>
 void ThreadWorkEngine<WorkType>::RunTasks(
     size_t num_threads,
@@ -9,6 +13,21 @@ void ThreadWorkEngine<WorkType>::RunTasks(
     /* DoWork returns bool if it wants to cancel its siblings */
 )
 {
+/*
+#ifdef _OPENMP
+    // This version is not used, because OpenMP does not specify
+    // a way to cancel sibling threads. It also specifies that
+    // the for loop may only have one exit.
+    //
+    omp_set_num_threads(num_threads);
+  #pragma omp for
+    for(size_t a=0; a<num_workunits; ++a)
+    {
+        bool cancel = DoWork(a, workparams);
+        if(cancel) break;
+    }
+#else
+*/
     if(num_threads <= 1 || num_workunits <= 1)
     {
         for(size_t a = 0; a < num_workunits; ++a)
@@ -112,8 +131,10 @@ void ThreadWorkEngine<WorkType>::RunTasks(
 #endif
 
     // End, the threads are now waiting for another work
+//#endif
 }
 
+//#ifndef _OPENMP
 template<typename WorkType>
 void* ThreadWorkEngine<WorkType>::WorkRunner
     (ThreadWorkEngine<WorkType>::workerparam& params)
@@ -212,3 +233,4 @@ void* ThreadWorkEngine<WorkType>::WorkRunner
     }
     return 0;
 }
+//#endif

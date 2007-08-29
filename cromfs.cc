@@ -29,8 +29,6 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #include "lib/LzmaDecode.h"
 #include "lib/LzmaDecode.c"
-#include "lib/bwt.hh"
-#include "lib/mtf.hh"
 #include "lib/longfileread.hh"
 #include "lib/cromfs-inodefun.hh"
 #include "lib/fadvise.hh"
@@ -51,7 +49,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #define BLKTAB_CACHE_TIMEOUT 0
 
 unsigned READDIR_CACHE_MAX_SIZE = 5;
-unsigned FBLOCK_CACHE_MAX_SIZE = 20;
+unsigned FBLOCK_CACHE_MAX_SIZE = 10;
 
 template<typename T>
 static void EraseRandomlyOne(T& container)
@@ -145,6 +143,11 @@ uint_fast64_t cromfs::CalcSizeInBlocks(uint_fast64_t filesize) const throw()
 void cromfs::reread_superblock()
         throw (cromfs_exception, std::bad_alloc)
 {
+    /* Note: Don't call this function from constructor,
+     * because this function sets up OpenMP teams and
+     * if fork() is called after that, it will cause problems.
+     */
+    
     cromfs_superblock_internal::BufferType Superblock;
     ( LongFileRead(fd, 0, sizeof(Superblock), Superblock) );
     
@@ -170,7 +173,8 @@ void cromfs::reread_superblock()
         "inotab at 0x%llX (size 0x%llX)\n"
         "rootdir at 0x%llX (size 0x%llX)\n"
         "FSIZE %u  BSIZE %u\n"
-        "%u fblocks, %u blocks\n",
+        "%u fblocks, %u blocks\n"
+        "%llu bytes of files\n",
         (unsigned long long)sblock.sig,
         (unsigned long long)sblock.blktab_offs,
         (unsigned long long)sblock.fblktab_offs,
@@ -179,7 +183,8 @@ void cromfs::reread_superblock()
         (unsigned)CROMFS_FSIZE,
         (unsigned)CROMFS_BSIZE,
         (unsigned)fblktab.size(),
-        (unsigned)blktab.size());
+        (unsigned)blktab.size(),
+        (unsigned long long)sblock.bytes_of_files);
 #endif
     
     bool need_storage_opts = 
@@ -191,7 +196,7 @@ void cromfs::reread_superblock()
      * decoded. Hence we first read the inode header, then
      * read the full data after storage_opts is set.
      */
-    inotab  = read_special_inode(sblock.inotab_offs,  sblock.inotab_size, need_storage_opts);
+    inotab = read_special_inode(sblock.inotab_offs,  sblock.inotab_size, need_storage_opts);
     
     storage_opts = inotab.mode;
     if(!need_storage_opts)
@@ -204,23 +209,37 @@ void cromfs::reread_superblock()
         inotab = read_special_inode(sblock.inotab_offs,  sblock.inotab_size, false);
     }
 
-    rootdir = read_special_inode(sblock.rootdir_offs, sblock.rootdir_size, false);
-    
-    /* As rootdir and inotab have now been read, it's safe to forget
-     * them from the page cache. */
-    FadviseDontNeed(fd, 0, sblock.blktab_offs);
-    FadviseWillNeed(fd, sblock.blktab_offs, sblock.blktab_size);
-    
-    rootdir.mode = S_IFDIR | 0555;
-    if(sig == CROMFS_SIGNATURE_01)
-        rootdir.links = 2;
-    rootdir.uid = 0;
-    rootdir.gid = 0;
-    
-    forget_blktab();
-    reread_blktab();
-    
-    reread_fblktab();
+    #pragma omp parallel sections
+    {
+     #pragma omp section
+     {
+        /* This must be done after storage_opts are set. */
+        rootdir = read_special_inode(sblock.rootdir_offs, sblock.rootdir_size, false);
+        
+        /* As rootdir and inotab have now been read, it's safe to forget
+         * them from the page cache. */
+        FadviseDontNeed(fd, 0, sblock.blktab_offs);
+     }
+     
+     #pragma omp section
+     {
+        FadviseWillNeed(fd, sblock.blktab_offs, sblock.blktab_size);
+        
+        rootdir.mode = S_IFDIR | 0555;
+        if(sblock.sig == CROMFS_SIGNATURE_01)
+            rootdir.links = 2;
+        rootdir.uid = 0;
+        rootdir.gid = 0;
+        
+        forget_blktab();
+        reread_blktab(); // must be done after inotab is read
+     }
+     
+     #pragma omp section
+     {
+        reread_fblktab();
+     }
+    } // end sections
     
     if(fblktab.empty()) throw EINVAL;
     
@@ -240,6 +259,12 @@ void cromfs::reread_superblock()
         a += inode_size / 4;
     }
 #endif
+}
+
+void cromfs::Initialize()
+    throw (cromfs_exception, std::bad_alloc)
+{
+    reread_superblock();
 }
 
 void cromfs::reread_fblktab()
@@ -368,7 +393,7 @@ void cromfs::reread_blktab()
         }
     }
     
-#if FBLOCK_DEBUG
+#if READBLOCK_DEBUG >= 2
     for(unsigned a=0; a<blktab.size(); ++a)
     {
         fprintf(stderr, "BLOCK %u: %s\n", a, DumpBlock(blktab[a]).c_str());
@@ -540,20 +565,23 @@ void cromfs::read_block(cromfs_blocknum_t ind,
         DumpBlock(block).c_str());
 #endif
 
-    cromfs_cached_fblock& fblock = read_fblock(block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE));
+    cromfs_cached_fblock& fblock =
+        read_fblock(block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE));
+    
     const uint_fast32_t startoffs =
         block.get_startoffs(CROMFS_BSIZE,CROMFS_FSIZE)
          + offset;
     
-    if(startoffs > fblock.size()) return;
-    
+    if(startoffs < fblock.size())
+    {
 #if READBLOCK_DEBUG
-    fprintf(stderr, "- - - got fblock of %u bytes, reading %u from %u\n",
-        (unsigned)fblock.size(), (unsigned)size, (unsigned)(startoffs));
+        fprintf(stderr, "- - - got fblock of %u bytes, reading %u from %u\n",
+            (unsigned)fblock.size(), (unsigned)size, (unsigned)(startoffs));
 #endif
     
-    uint_fast32_t bytes = std::min(fblock.size() - startoffs, size);
-    std::memcpy(target, &fblock[startoffs], bytes);
+        uint_fast32_t bytes = std::min(fblock.size() - startoffs, size);
+        std::memcpy(target, &fblock[startoffs], bytes);
+    }
 }
 
 cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t fblocknum)
@@ -561,14 +589,21 @@ cromfs_cached_fblock& cromfs::read_fblock(cromfs_fblocknum_t fblocknum)
 {
     cromfs_cached_fblock* result = fblock_cache.Find(fblocknum);
     if(result) return *result;
-    fblock_cache.CheckAges(-1);
-    return fblock_cache.Put(fblocknum, read_fblock_uncached(fblocknum));
+    
+    cromfs_cached_fblock b = read_fblock_uncached(fblocknum);
+    
+    result = &fblock_cache.Put(fblocknum, b);
+    
+    return *result;
 }
 
 cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t fblocknum) const
         throw (cromfs_exception, std::bad_alloc)
 {
-    if(fblktab.empty()) throw ENODATA;
+    if(fblocknum >= fblktab.size())
+    {
+        throw ENODATA;
+    }
     
     const uint_fast32_t comp_size = fblktab[fblocknum].length;
     const uint_fast64_t filepos   = fblktab[fblocknum].filepos;
@@ -578,10 +613,7 @@ cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t fblocknum) 
         (unsigned)fblocknum, (unsigned)comp_size,
         (unsigned long long)filepos);
 #endif
-    std::vector<unsigned char> result = DoLZMALoading(fd, filepos, comp_size);
-    if(storage_opts & CROMFS_OPT_USE_MTF) result = MTF_decode(result);
-    if(storage_opts & CROMFS_OPT_USE_BWT) result = BWT_decode_embedindex(result);
-    return result;
+    return DoLZMALoading(fd, filepos, comp_size);
 }
 
 int_fast64_t cromfs::read_file_data(
@@ -594,6 +626,83 @@ int_fast64_t cromfs::read_file_data(
     return read_file_data(
         inonum==1 ? get_root_inode () : read_inode_and_blocks(inonum),
         offset, target, size, purpose);
+}
+
+
+
+int_fast64_t cromfs::read_file_data_from_one_fblock_only(
+    const cromfs_inode_internal& inode,
+    uint_fast64_t offset,
+    unsigned char* target, uint_fast64_t size,
+    const cromfs_fblocknum_t allowed_fblocknum
+)
+    throw (cromfs_exception, std::bad_alloc)
+{
+    uint_fast64_t result = 0;
+
+#if READFILE_DEBUG >= 2
+    fprintf(stderr, "- Accessing fblock %u\n", (unsigned)allowed_fblocknum);
+#endif
+    for(uint_fast64_t pos    = std::min(inode.bytesize, offset),
+                      endpos = std::min(inode.bytesize, offset + size);
+        pos < endpos; )
+    {
+        const uint_fast64_t begin_block_index  = pos / CROMFS_BSIZE;
+        const uint_fast32_t begin_block_offset = pos % CROMFS_BSIZE;
+        if(begin_block_index >= inode.blocklist.size()) break;
+        
+        const uint_fast64_t remain_block_bytes = CROMFS_BSIZE - begin_block_offset;
+        
+        const uint_fast64_t consume_bytes = std::min(endpos-pos, remain_block_bytes);
+        
+        const cromfs_blocknum_t blocknum = inode.blocklist[begin_block_index];
+        const cromfs_block_internal& block = blktab[blocknum];
+        const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
+        
+        if(fblocknum != allowed_fblocknum)
+        {
+            pos += consume_bytes;
+            continue;
+        }
+
+#if READFILE_DEBUG >= 2
+        fprintf(stderr,
+            "- File offset %llu (block %u(b%u f%u) @%u, consume %llu bytes of %llu) -> %p\n",
+                (unsigned long long)offset,
+                (unsigned)begin_block_index,
+                (unsigned)blocknum,
+                (unsigned)fblocknum,
+                (unsigned)begin_block_offset, 
+                (unsigned long long)consume_bytes,
+                (unsigned long long)size,
+                target + (pos-offset));
+#endif
+        const uint_fast32_t block_size =
+            std::min( (uint_fast64_t)CROMFS_BSIZE,
+                      (uint_fast64_t)(inode.bytesize - (pos - pos % CROMFS_BSIZE) ));
+        read_block(blocknum,
+                   begin_block_offset,
+                   target + (pos-offset),
+                   consume_bytes);
+
+#if READFILE_DEBUG >= 2
+        if(consume_bytes <= 50)
+        {
+            fprintf(stderr, "- - Got:");
+            
+            for(unsigned a=0; a<consume_bytes; ++a)
+            {
+                //if(a == consume_bytes) fprintf(stderr, " [");
+                fprintf(stderr, " %02X", (target + (pos-offset)) [a]);
+            }
+            fprintf(stderr, "\n");
+        }
+#endif
+        
+        pos    += consume_bytes;
+        result += consume_bytes;
+    }
+    return result;
 }
 
 int_fast64_t cromfs::read_file_data(
@@ -621,17 +730,18 @@ int_fast64_t cromfs::read_file_data(
     if(blktab.empty()) reread_blktab();
     cromfs_setup_alarm(*this);
     
-    std::deque<cromfs_fblocknum_t> required_fblocks;
+    std::vector<cromfs_fblocknum_t> required_fblocks_cached;
+    std::vector<cromfs_fblocknum_t> required_fblocks_uncached;
     
     /* Collect a list of fblocks that are required to complete this read. */
     if(true) /* scope */
     {
-        const unsigned bitset_bitness = 32;
+        const unsigned bitset_bitness = sizeof(long)*8; //__WORDSIZE;
         
         /* Using an adhoc bitset here.
          * std::set<cromfs_fblocknum_t>  would also be an option, but bitset
          * is more optimal when we know the maximum value of the entries
-         * (which is generally rather small).
+         * (which is generally rather small, around 400 at maximum).
          */
         std::vector<uint_least32_t> required_fblocks_set
             ( (fblktab.size() + bitset_bitness-1) / bitset_bitness );
@@ -652,22 +762,27 @@ int_fast64_t cromfs::read_file_data(
             const cromfs_block_internal& block = blktab[blocknum];
             const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
             
-            const unsigned fblock_bit_index = fblocknum / bitset_bitness;
-            const unsigned fblock_bit_value = 1U << (fblocknum % bitset_bitness);
-            
-            if(! (required_fblocks_set[fblock_bit_index] & fblock_bit_value) )
+            if(fblocknum < fblktab.size())
             {
-                required_fblocks_set[fblock_bit_index] |= fblock_bit_value;
+                const unsigned fblock_bit_index = fblocknum / bitset_bitness;
+                const unsigned fblock_bit_value = 1U << (fblocknum % bitset_bitness);
                 
-                if(fblock_cache.Has(fblocknum))
+                if(! (required_fblocks_set[fblock_bit_index] & fblock_bit_value) )
                 {
-                    required_fblocks.push_back(fblocknum); // uncached blocks last
-                    // Initiate background reading for them.
-                    FadviseWillNeed(fd, fblktab[fblocknum].filepos,
-                                        fblktab[fblocknum].length);
+                    required_fblocks_set[fblock_bit_index] |= fblock_bit_value;
+                    
+                    if(fblock_cache.Has(fblocknum))
+                    {
+                        required_fblocks_cached.push_back(fblocknum);
+                    }
+                    else
+                    {
+                        required_fblocks_uncached.push_back(fblocknum);
+                        // Initiate background reading for them.
+                        FadviseWillNeed(fd, fblktab[fblocknum].filepos,
+                                            fblktab[fblocknum].length);
+                    }
                 }
-                else
-                    required_fblocks.push_front(fblocknum); // cached blocks first
             }
             pos += consume_bytes;
         }
@@ -675,85 +790,53 @@ int_fast64_t cromfs::read_file_data(
     
 #if READFILE_DEBUG >= 2
     fprintf(stderr, "- List of fblocks to access:");
-    for(unsigned a=0, b=required_fblocks.size(); a<b; ++a)
+    for(unsigned a=0, b=required_fblocks_uncached.size(); a<b; ++a)
     {
-        const cromfs_fblocknum_t fblocknum = required_fblocks[a];
-        fprintf(stderr, " %u%s", (unsigned)required_fblocks[a],
-            fblock_cache.Has(fblocknum) ?  "(cached)" : ""
-        );
+        const cromfs_fblocknum_t fblocknum = required_fblocks_uncached[a];
+        fprintf(stderr, " %u (cached)", (unsigned)required_fblocks_uncached[a]);
+    }
+    for(unsigned a=0, b=required_fblocks_cached.size(); a<b; ++a)
+    {
+        const cromfs_fblocknum_t fblocknum = required_fblocks_cached[a];
+        fprintf(stderr, " %u (uncached)", (unsigned)required_fblocks_cached[a]);
     }
     fprintf(stderr, "\n");
 #endif
 
     uint_fast64_t result = 0;
-    for(unsigned a=0, b=required_fblocks.size(); a<b; ++a)
+
+#pragma omp parallel
+  {
+    const unsigned n_req_fblocks_cached   = required_fblocks_cached.size();
+    const unsigned n_req_fblocks_uncached = required_fblocks_uncached.size();
+  #pragma omp for nowait
+    for(unsigned a=0; a<n_req_fblocks_cached; ++a)
     {
-        const cromfs_fblocknum_t allowed_fblocknum = required_fblocks[a];
-#if READFILE_DEBUG >= 2
-        fprintf(stderr, "- Accessing fblock %u\n", (unsigned)allowed_fblocknum);
-#endif
-        for(uint_fast64_t pos    = std::min(inode.bytesize, offset),
-                          endpos = std::min(inode.bytesize, offset + size);
-            pos < endpos; )
-        {
-            const uint_fast64_t begin_block_index  = pos / CROMFS_BSIZE;
-            const uint_fast32_t begin_block_offset = pos % CROMFS_BSIZE;
-            if(begin_block_index >= inode.blocklist.size()) break;
-            
-            const uint_fast64_t remain_block_bytes = CROMFS_BSIZE - begin_block_offset;
-            
-            const uint_fast64_t consume_bytes = std::min(endpos-pos, remain_block_bytes);
-            
-            const cromfs_blocknum_t blocknum = inode.blocklist[begin_block_index];
-            const cromfs_block_internal& block = blktab[blocknum];
-            const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
-            
-            if(fblocknum != allowed_fblocknum)
-            {
-                pos += consume_bytes;
-                continue;
-            }
-
-#if READFILE_DEBUG >= 2
-            fprintf(stderr,
-                "- File offset %llu (block %u(b%u f%u) @%u, consume %llu bytes of %llu) -> %p\n",
-                    (unsigned long long)offset,
-                    (unsigned)begin_block_index,
-                    (unsigned)blocknum,
-                    (unsigned)fblocknum,
-                    (unsigned)begin_block_offset, 
-                    (unsigned long long)consume_bytes,
-                    (unsigned long long)size,
-                    target + (pos-offset));
-#endif
-            /*
-            const uint_fast32_t block_size =
-                std::min( (uint_fast64_t)CROMFS_BSIZE,
-                          (uint_fast64_t)(inode.bytesize - (pos - pos % CROMFS_BSIZE) ));
-            */
-            read_block(blocknum,
-                       begin_block_offset,
-                       target + (pos-offset),
-                       consume_bytes);
-
-#if READFILE_DEBUG >= 2
-            if(consume_bytes <= 50)
-            {
-                fprintf(stderr, "- - Got:");
-                
-                for(unsigned a=0; a<consume_bytes; ++a)
-                {
-                    //if(a == consume_bytes) fprintf(stderr, " [");
-                    fprintf(stderr, " %02X", (target + (pos-offset)) [a]);
-                }
-                fprintf(stderr, "\n");
-            }
-#endif
-            
-            pos    += consume_bytes;
-            result += consume_bytes;
-        }
+        const cromfs_fblocknum_t allowed_fblocknum = required_fblocks_cached[a];
+        
+        uint_fast64_t num_read =
+            read_file_data_from_one_fblock_only
+                (inode, offset, target, size, allowed_fblocknum);
+    #pragma omp atomic
+          result += num_read;
     }
+
+  #pragma omp for nowait
+    for(unsigned a=0; a<n_req_fblocks_uncached; ++a)
+    {
+        const cromfs_fblocknum_t allowed_fblocknum = required_fblocks_uncached[a];
+        
+        uint_fast64_t num_read =
+            read_file_data_from_one_fblock_only
+                (inode, offset, target, size, allowed_fblocknum);
+      #pragma omp atomic
+        result += num_read;
+    }
+  }
+    
+  #pragma omp critical (fblockcache_expiry)
+    fblock_cache.CheckAges(-1);
+    
     return result;
 }
 
@@ -898,6 +981,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
     
     if(dir_offset == 0 && dir_count >= num_files)
     {
+      #pragma omp critical (readdir_cache_expiry)
         readdir_cache.CheckAges(-1);
         readdir_cache.Put(inonum, result);
     }
@@ -1052,7 +1136,7 @@ void cromfs::DumpRAMusage() const
         (unsigned)fblktab.size(),
         ReportSize( blktab.size() * sizeof(blktab[0]) ).c_str(),
         (unsigned)blktab.size(),
-        ReportSize( 20000 * readdir_cache.num_entries() ).c_str(),
+        ReportSize( 60000 * readdir_cache.num_entries() ).c_str(),
         (unsigned)readdir_cache.num_entries(),
         ReportSize( CROMFS_FSIZE * fblock_cache.num_entries() ).c_str(),
         (unsigned)fblock_cache.num_entries()
@@ -1065,7 +1149,6 @@ cromfs::cromfs(int fild)
        readdir_cache(READDIR_CACHE_MAX_SIZE, 0),
        fblock_cache(FBLOCK_CACHE_MAX_SIZE, 0)
 {
-    reread_superblock();
 }
 
 cromfs::~cromfs() throw()

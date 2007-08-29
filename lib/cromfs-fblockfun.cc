@@ -2,8 +2,9 @@
 
 #include "../util/mkcromfs_sets.hh"
 
-#include "boyermoore.hh"
+#include "boyermooreneedle.hh"
 #include "longfilewrite.hh"
+#include "longfileread.hh"
 #include "autoclosefd.hh"
 #include "assert++.hh"
 #include "lzma.hh"
@@ -15,22 +16,55 @@ using namespace fblock_private;
 
 static const double FblockMaxAccessAgeBeforeDealloc = 10.0;
 
-const char* GetTempDir()
+static std::string fblock_name_pattern;
+
+void set_fblock_name_pattern(const std::string& pat)
 {
-    const char* t;
-    t = std::getenv("TEMP"); if(t) return t;
-    t = std::getenv("TMP"); if(t) return t;
-    return "/tmp";
+    fblock_name_pattern = pat;
 }
 
 const std::string fblock_storage::getfn() const
 {
-    static const std::string tmpdir = GetTempDir();
-    static const int pid = getpid();
     char Buf[4096];
-    std::sprintf(Buf, "/fblock_%d-%d", pid, fblock_disk_id);
-    //fprintf(stderr, "Buf='%s' tmpdir='%s'\n", Buf, tmpdir.c_str());
-    return tmpdir + Buf;
+    std::sprintf(Buf, "%d", fblock_disk_id);
+    return fblock_name_pattern + Buf;
+}
+
+void fblock_storage::Check_Existing_File()
+{
+    Unmap();
+    
+    const autoclosefd fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
+    
+    if(fd < 0)
+    {
+        filesize = 0;
+        is_compressed = false;
+        return;
+    }
+    
+    filesize = lseek64(fd, 0, SEEK_END);
+    std::vector<unsigned char> Buffer(filesize);
+    LongFileRead(fd, 0, filesize, &Buffer[0]);
+    
+    is_compressed = true;
+    
+    bool is_lzma_ok = false;
+    try
+    {
+        if(filesize > 0)
+            LZMADeCompress(Buffer, is_lzma_ok);
+    }
+    catch(std::bad_alloc)
+    {
+        // out of memory, probably invalid lzma data
+        is_lzma_ok = false;
+    }
+    
+    if(!is_lzma_ok)
+    {
+        is_compressed = false;
+    }
 }
 
 void fblock_storage::put_raw(const std::vector<unsigned char>& raw)

@@ -314,8 +314,8 @@ a real scientific study. But I attest that these are the results I got.
    <br />With 16M fblocks, &frac14;k blocks: <b>187,575,926</b> bytes (v1.5.0)
    </td>
   <td class=good><tt>mkcromfs</tt>
-   <br />With default options: <b>33,865,522</b> bytes (v1.5.0)
-   <br />(Peak memory use: ~270 MB, 230 MB of which were memory-mapped files)
+   <br />With default options: <b>33,866,164</b> bytes (v1.5.2)
+   <br />(Peak memory use (RSS): 97 MB (mostly comprising of memory-mapped files)
    </td>
   <td class=good><tt>mkcromfs -f1048576</tt>
    <br />With 64k blocks (-b65536), <b>39,778,030</b> bytes (v1.2.0)
@@ -454,11 +454,13 @@ the memory usage would be around 10.2&nbsp;MB.
     it does not work. If it gives \"operation not permitted\", it might work.</li>
      </ul></li>
   </ul></li>
+ <li>Configure the source code:
+  <pre>\$ ./configure</pre>
+  It will automatically determine your software environment
+  (mainly, the features supported by your compiler).
+ </li>
  <li>Build the programs:
   <pre>\$ make</pre>
-  
-  If you get compilation problems related to <tt>hash_map</tt> or <tt>hash</tt>, 
-  edit cromfs-defs.hh and remove the line that says <tt>#define USE_HASHMAP</tt>.
    <p>
   This builds the programs \"cromfs-driver\", \"cromfs-driver-static\",
   \"util/mkcromfs\", \"util/cvcromfs\" and \"util/unmkcromfs\".

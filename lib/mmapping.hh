@@ -1,3 +1,6 @@
+#ifndef bqtMmappingHH
+#define bqtMmappingHH
+
 //#define _LARGEFILE64_SOURCE
 #include "endian.hh"
 #include <unistd.h>
@@ -66,3 +69,5 @@ private:
 };
 
 typedef MemMappingType<true> MemMapping;
+
+#endif

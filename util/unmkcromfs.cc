@@ -5,9 +5,12 @@
 #include "lib/fadvise.hh"
 #include "lib/util.hh"
 
-#ifdef USE_HASHMAP
+#if USE_HASHMAP
 # include <ext/hash_set>
 # include "hash.hh"
+#endif
+#ifdef _OPENMP
+# include <omp.h>
 #endif
 #include <set>
 
@@ -23,7 +26,6 @@
 #include "rangeset.hh"
 #include "rangemultimap.hh"
 #include "longfilewrite.hh"
-#include "threadworkengine.hh"
 
 #include <map>
 #include <set>
@@ -108,6 +110,8 @@ private:
 public:
     cromfs_decoder(int fd): cromfs(fd)
     {
+        cromfs::Initialize();
+        
         BSIZE = sblock.bsize;
         FSIZE = sblock.fsize;
 
@@ -120,7 +124,8 @@ public:
                 "inotab at 0x%llX (size 0x%llX)\n"
                 "rootdir at 0x%llX (size 0x%llX)\n"
                 "FSIZE %u  BSIZE %u\n"
-                "%u fblocks, %u blocks\n",
+                "%u fblocks, %u blocks\n"
+                "%llu bytes of files\n",
                 (unsigned long long)sblock.sig,
                 (unsigned long long)sblock.blktab_offs,
                 (unsigned long long)sblock.fblktab_offs,
@@ -129,7 +134,8 @@ public:
                 (unsigned)FSIZE,
                 (unsigned)BSIZE,
                 (unsigned)fblktab.size(),
-                (unsigned)blktab.size()
+                (unsigned)blktab.size(),
+                (unsigned long long)sblock.bytes_of_files
             );
         }
     }
@@ -183,7 +189,7 @@ public:
         std::fflush(stdout);
 
 
-#ifdef USE_HASHMAP
+#if USE_HASHMAP
         typedef __gnu_cxx::hash_set<cromfs_inodenum_t> handled_inodes_t;
 #else
         typedef std::set<cromfs_inodenum_t> handled_inodes_t;
@@ -289,39 +295,6 @@ public:
     {
         cleanup();
         ScanDirectories();
-    }
-    
-    struct ExtractWorkerParameter
-    {
-        cromfs_decoder& decoder;
-        
-        const std::string& targetdir;
-        uint_fast64_t& expect_size;
-        uint_fast64_t& total_written;
-
-        mutable MutexType mutex;
-    };
-    
-    static bool ExtractWorker(size_t index, ExtractWorkerParameter& params)
-    {
-        const cromfs_fblocknum_t fblockno = index;
-        
-        ScopedLock lck(params.mutex);
-
-        uint_fast64_t old_expect_size=params.expect_size,
-                      old_total_written=params.total_written;
-        
-        lck.Unlock();
-        
-        uint_fast64_t expect_size=old_expect_size, total_written=old_total_written;
-        params.decoder.do_extract(fblockno, params.targetdir,
-            expect_size, total_written);
-        
-        lck.LockAgain();
-        params.expect_size   -= old_expect_size - expect_size;
-        params.total_written += total_written - old_total_written;
-        
-        return false;
     }
     
     bool IsFirstOccuranceOfInodenum(const cromfs_inodenum_t inonum,
@@ -554,11 +527,11 @@ public:
                        );
         }
         
-        { ExtractWorkerParameter params =
-            { *this, targetdir, expect_size, total_written };
-        { ThreadWorkEngine<ExtractWorkerParameter> engine;
-        engine.RunTasks(UseThreads, fblktab.size(), params, ExtractWorker);
-        } }
+      #pragma omp parallel for reduction(+:total_written)
+        for(cromfs_fblocknum_t fblockno = 0; fblockno < fblktab.size(); ++fblockno)
+        {
+            do_extract(fblockno, targetdir, expect_size, total_written);
+        }
         
         fblock_cache.clear(); // save RAM
         
@@ -671,11 +644,8 @@ public:
             //const cromfs_inodenum_t inonum = dir[i->second];
             const std::string target = GetTargetPath(targetdir, filename);
             
-            static MutexType inode_mutex;
-            ScopedLock lck(inode_mutex);
             const cromfs_inode_internal ino =
                 (const_cast<cromfs_decoder&>(*this)).read_inode_and_blocks(inonum);
-            lck.Unlock();
             
             if(verbose >= 2)
             {
@@ -749,6 +719,7 @@ public:
             std::fprintf(stderr, "corrupt data: got more data than expected\n");
         }
         
+      #pragma omp atomic
         expect_size -= wrote_size;
         
         if(verbose >= 1)
@@ -760,6 +731,7 @@ public:
                 ReportSize(expect_size).c_str());
         }
         
+      #pragma omp atomic
         total_written += wrote_size;
         
         FileOutputFlushAll();
@@ -1140,6 +1112,9 @@ int main(int argc, char** argv)
                 }
                 if(size == 1) size = 0; // 1 thread is the same as no threads.
                 UseThreads = size;
+            #ifdef _OPENMP
+                omp_set_num_threads(std::max(1u, UseThreads));
+            #endif
                 break;
             }
         }

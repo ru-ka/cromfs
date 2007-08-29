@@ -15,6 +15,9 @@ extern unsigned LZMA_LiteralContextBits;
 const std::vector<unsigned char> LZMADeCompress
     (const std::vector<unsigned char>& buf);
 
+const std::vector<unsigned char> LZMADeCompress
+    (const std::vector<unsigned char>& buf, bool& ok);
+
 /* LZMA-compress data with current settings. */
 const std::vector<unsigned char> LZMACompress
     (const std::vector<unsigned char>& buf);
