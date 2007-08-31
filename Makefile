@@ -1,10 +1,11 @@
-VERSION=1.5.3
+VERSION=1.5.3.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
 ARCHFILES=\
 	Makefile.sets \
 	Makefile.sets.in \
+	configure \
 	\
 	COPYING progdesc.php \
 	\

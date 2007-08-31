@@ -4,6 +4,9 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.3.1	2007-09-01 Joel Yliluoma <bisqwit@iki.fi>
+- Oops! I forgot to include the ./configure in the package.
+
 1.5.3	2007-08-29 Joel Yliluoma <bisqwit@iki.fi>
 - mkcromfs: Added a feature to finish previously interrupted mkcromfs
   work (only if it was interrupted during the last stage (fblock
