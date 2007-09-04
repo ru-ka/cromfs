@@ -805,7 +805,7 @@ int_fast64_t cromfs::read_file_data(
 
     uint_fast64_t result = 0;
 
-#pragma omp parallel
+#pragma omp parallel reduction(+:result)
   {
     const unsigned n_req_fblocks_cached   = required_fblocks_cached.size();
     const unsigned n_req_fblocks_uncached = required_fblocks_uncached.size();
@@ -817,7 +817,7 @@ int_fast64_t cromfs::read_file_data(
         uint_fast64_t num_read =
             read_file_data_from_one_fblock_only
                 (inode, offset, target, size, allowed_fblocknum);
-    #pragma omp atomic
+
           result += num_read;
     }
 
@@ -829,12 +829,11 @@ int_fast64_t cromfs::read_file_data(
         uint_fast64_t num_read =
             read_file_data_from_one_fblock_only
                 (inode, offset, target, size, allowed_fblocknum);
-      #pragma omp atomic
+
         result += num_read;
     }
   }
     
-  #pragma omp critical (fblockcache_expiry)
     fblock_cache.CheckAges(-1);
     
     return result;
@@ -981,7 +980,6 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
     
     if(dir_offset == 0 && dir_count >= num_files)
     {
-      #pragma omp critical (readdir_cache_expiry)
         readdir_cache.CheckAges(-1);
         readdir_cache.Put(inonum, result);
     }

@@ -1,4 +1,4 @@
-VERSION=1.5.3.1
+VERSION=1.5.3.2
 
 include Makefile.sets
 
@@ -14,7 +14,7 @@ OPTIM += -O3
 #OPTIM += -O1 -pg -g
 #LDOPTS += -pg
 
-CPPFLAGS += -I../lib -I.. -pthread
+CPPFLAGS += -I../lib -I..
 
 # multithread versions of lzma -- Windows only
 #CPPFLAGS += -DCOMPRESS_MF_MT
@@ -62,7 +62,7 @@ unmkcromfs: $(OBJS_UN)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 mkcromfs: $(OBJS_MK)
-	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS) -pthread
+	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 cvcromfs: $(OBJS_CV)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS)

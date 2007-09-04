@@ -21,9 +21,11 @@ template<typename WorkType>
 class ThreadWorkEngine
 {
 public:
+#ifndef _OPENMP
     ThreadWorkEngine() : threads(), params()
     {
     }
+#endif
     
     void RunTasks(
         size_t num_threads,
@@ -32,11 +34,11 @@ public:
         bool (*DoWork)(size_t index, WorkType& )
         /* DoWork returns bool if it wants to cancel its siblings */
     );
-    
+
 private:
+#ifndef _OPENMP
     std::vector<ThreadType> threads;
     
-//#ifndef _OPENMP
     struct workerparam
     {
         bool init_ok; // flag: should threads begin work?
@@ -67,7 +69,7 @@ private:
     } params;
     
     static void* WorkRunner(workerparam& params);
-//#endif
+#endif
 };
 
 #include "threadworkengine.tcc"

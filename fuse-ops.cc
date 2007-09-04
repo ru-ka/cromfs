@@ -16,6 +16,8 @@ the fuse_reply_err() function.
 
 #include <cerrno>
 #include <fcntl.h>
+#include <sys/statvfs.h>
+
 
 #define CROMFS_CTXP(obj,userdata) \
     cromfs& obj = (*(cromfs*)(userdata))

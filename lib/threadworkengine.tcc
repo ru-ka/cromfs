@@ -13,21 +13,23 @@ void ThreadWorkEngine<WorkType>::RunTasks(
     /* DoWork returns bool if it wants to cancel its siblings */
 )
 {
-/*
 #ifdef _OPENMP
-    // This version is not used, because OpenMP does not specify
-    // a way to cancel sibling threads. It also specifies that
-    // the for loop may only have one exit.
-    //
-    omp_set_num_threads(num_threads);
-  #pragma omp for
+    /* This version does not cancel sibling threads,
+     * but may be a little more robust that way.
+     * Just hope that DoWork() does not consume a lot of time.
+     */
+    bool cancel = false;
+  #pragma omp parallel for schedule(guided,1) shared(cancel)
     for(size_t a=0; a<num_workunits; ++a)
     {
-        bool cancel = DoWork(a, workparams);
-        if(cancel) break;
+      #pragma omp flush(cancel)
+        if(!cancel && DoWork(a, workparams))
+        {
+            cancel = true;
+            //#pragma omp flush(cancel) -- is this needed here?
+        }
     }
 #else
-*/
     if(num_threads <= 1 || num_workunits <= 1)
     {
         for(size_t a = 0; a < num_workunits; ++a)
@@ -131,10 +133,10 @@ void ThreadWorkEngine<WorkType>::RunTasks(
 #endif
 
     // End, the threads are now waiting for another work
-//#endif
+#endif
 }
 
-//#ifndef _OPENMP
+#ifndef _OPENMP
 template<typename WorkType>
 void* ThreadWorkEngine<WorkType>::WorkRunner
     (ThreadWorkEngine<WorkType>::workerparam& params)
@@ -233,4 +235,4 @@ void* ThreadWorkEngine<WorkType>::WorkRunner
     }
     return 0;
 }
-//#endif
+#endif

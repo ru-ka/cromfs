@@ -1,4 +1,4 @@
-VERSION=1.5.3.1
+VERSION=1.5.3.2
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -42,6 +42,9 @@ ARCHFILES=\
 	lib/endian.hh \
 	lib/hash.hh \
 	lib/threadfun.hh \
+	lib/threadfun_none.hh \
+	lib/threadfun_openmp.hh \
+	lib/threadfun_pthread.hh \
 	lib/threadworkengine.hh lib/threadworkengine.tcc \
 	lib/duffsdevice.hh \
 	lib/stringsearchutil.hh \
@@ -134,7 +137,7 @@ include Makefile.sets
 #CXXFLAGS += -O1 -fno-inline -g
 CXXFLAGS += -O3 -fno-rtti
 
-CPPFLAGS += `pkg-config --cflags fuse` -pthread
+CPPFLAGS += `pkg-config --cflags fuse`
 LDLIBS   += `pkg-config --libs fuse`
 
 OBJS=\
@@ -161,7 +164,7 @@ cromfs-driver: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
 
 cromfs-driver-static: $(OBJS)
-	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS) -lpthread -lrt
+	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
 	- strip -R.comment $@
 	# Note: It does not matter if upx cannot run.
 	- upx --best $@

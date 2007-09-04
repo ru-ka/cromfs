@@ -3,6 +3,8 @@
 #include <vector>
 #include <algorithm>
 
+#include "threadfun.hh"
+
 template<
     typename KeyType,
     typename ValueType>
@@ -17,11 +19,13 @@ private:
     typedef typename std::map<KeyType, std::pair<time_t, ValueType> >::iterator it;
     typedef typename std::map<KeyType, std::pair<time_t, ValueType> >::const_iterator cit;
 public:
-    void clear() { data.clear(); }
+    void clear() { ScopedLock lck(writelock); data.clear(); }
     size_t num_entries() const { return data.size(); }
     
     void CheckAges(long count_offset)
     {
+        ScopedLock lck(writelock);
+        
         std::vector<it> age_order;
         time_t nowtime = time(0);
         for(it j,i = data.begin(); i != data.end(); i=j)
@@ -63,16 +67,11 @@ public:
     
     ValueType& Put(const KeyType key, const ValueType& value)
     {
-      ValueType* result;
-    //fprintf(stderr, "entering pragma critical(put)\n");
-      #pragma omp critical (datacache_put)
-       {
+        ScopedLock lck(writelock);
+        
         std::pair<time_t, ValueType>& val = data[key];
         val.first  = std::time(0);
-        result = &(val.second = value);
-       }
-    //fprintf(stderr, "exit pragma critical(put)\n");
-      return *result;
+        return val.second = value;
     }
 
 private:
@@ -82,6 +81,7 @@ private:
     }
     
 private:
+    MutexType writelock;
     std::map<KeyType, std::pair<time_t, ValueType> > data;
     size_t max_size;
     int max_age;

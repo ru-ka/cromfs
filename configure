@@ -68,7 +68,7 @@ select_tool CC  gcc cc `(IFS=':'; for s in $PATH;do cd "$s"&&echo gcc-*;done) 2>
 do_echo ""
 
 do_echo -n "Checking if the determined compiler works... "
-if cc_check '<stdio.h>' '' ''; then
+if cc_check '<stdio.h>' '' 'for(int a=0; a<10;++a) { for(int a=0; a<5;++a) { } } puts("ok");'; then
   do_echo Ok
 else
   do_echo No
@@ -77,14 +77,24 @@ else
   exit 1
 fi
 
-do_echo -n "Checking if your compiler supports -pthread... "
-if cc_check '"lib/threadfun.hh"' '-pthread' 'ThreadType t;JoinThread(t);'; then
+do_echo -n "Checking if your compiler supports -fopenmp... "
+if cc_check '<stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
   do_echo Yes
+  do_echo "- Will use OpenMP, not checking for -pthread"
+  CPPFLAGS="$CPPFLAGS -fopenmp"
+  LDFLAGS="$LDFLAGS -fopenmp"
+  CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=0"
 else
   do_echo No
-  do_echo "Error: Cromfs requires a compiler that supports -pthread."
-  do_echo "Please try installing some recent version of gcc."
-  exit 1
+  do_echo -n "Checking if your compiler supports -pthread... "
+  if cc_check '"lib/threadfun.hh"' '-pthread' 'ThreadType t;JoinThread(t);'; then
+    do_echo Yes
+    CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=1 -pthread"
+    LDFLAGS="$LDFLAGS -pthread"
+  else
+    do_echo No
+    CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=0"
+  fi
 fi
 
 do_echo -n "Checking if your compiler supports hash_map... "
@@ -115,15 +125,6 @@ else
   do_echo No
 fi
 
-do_echo -n "Checking if your compiler supports -fopenmp... "
-if cc_check '<stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
-  do_echo Yes
-  CPPFLAGS="$CPPFLAGS -fopenmp"
-  LDFLAGS="$LDFLAGS -fopenmp"
-else
-  do_echo No
-fi
-
 do_echo "Updating Makefile.sets ..."
 
 DATE="`LC_ALL=C date`"
@@ -135,3 +136,7 @@ for s in CC CPP CXX OPTIM CPPFLAGS LDFLAGS FUSELIBS DATE UNAME; do
 done
 
 sed "$sed_cmd" < Makefile.sets.in > Makefile.sets
+
+for dir in . lib util; do
+  rm $dir/.depend $dir/.libdepend; make -C $dir .depend
+done &> /dev/null

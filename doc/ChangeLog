@@ -4,6 +4,10 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.3.2	2007-09-04 Joel Yliluoma <bisqwit@iki.fi>
+- Added include for sys/statvfs.h, fixing a compilation error
+  relating to missing struct definition (thanks Thomas Munn).
+
 1.5.3.1	2007-09-01 Joel Yliluoma <bisqwit@iki.fi>
 - Oops! I forgot to include the ./configure in the package.
 
