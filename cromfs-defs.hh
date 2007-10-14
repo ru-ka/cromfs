@@ -26,12 +26,13 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 enum CROMFS_OPTS
 {
-    CROMFS_OPT_SPARSE_FBLOCKS  = 0x00000001,
-    CROMFS_OPT_24BIT_BLOCKNUMS = 0x00000100,
-    CROMFS_OPT_16BIT_BLOCKNUMS = 0x00000200,
-    CROMFS_OPT_PACKED_BLOCKS   = 0x00000400,
-    CROMFS_OPT_USE_BWT         = 0x00010000,
-    CROMFS_OPT_USE_MTF         = 0x00020000
+    CROMFS_OPT_SPARSE_FBLOCKS      = 0x00000001,
+    CROMFS_OPT_24BIT_BLOCKNUMS     = 0x00000100,
+    CROMFS_OPT_16BIT_BLOCKNUMS     = 0x00000200,
+    CROMFS_OPT_PACKED_BLOCKS       = 0x00000400,
+    CROMFS_OPT_VARIABLE_BLOCKSIZES = 0x00000800,
+    CROMFS_OPT_USE_BWT             = 0x00010000,
+    CROMFS_OPT_USE_MTF             = 0x00020000
 };
 
 
@@ -54,6 +55,7 @@ struct cromfs_inode_internal
     uint_fast16_t uid;
     uint_fast16_t gid;
     uint_fast64_t bytesize;
+    uint_fast32_t blocksize;
     std::vector<cromfs_blocknum_t> blocklist;
 };
 struct cromfs_fblock_internal
@@ -189,6 +191,11 @@ typedef std::map<std::string, cromfs_inodenum_t> cromfs_dirinfo;
 #define BLOCKNUM_SIZE_BYTES() \
    (4 - 1*!!(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS) \
       - 2*!!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS) )
+#define INODE_HEADER_SIZE() \
+    (0x18 + 4*!!(storage_opts & CROMFS_OPT_VARIABLE_BLOCKSIZES))
+#define MAX_INODE_HEADER_SIZE 0x1C
+#define INODE_SIZE_BYTES(nblocks) \
+    (INODE_HEADER_SIZE() + BLOCKNUM_SIZE_BYTES() * nblocks)
 
 #define DATALOCATOR_SIZE_BYTES() \
     ((storage_opts & CROMFS_OPT_PACKED_BLOCKS) ? 4 : 8)

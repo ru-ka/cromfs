@@ -12,7 +12,7 @@ make -C ../util mkcromfs unmkcromfs
 ## TEST 1
 
 rm -f tmp.cromfs
-../util/mkcromfs a tmp.cromfs -b16384 -f65536 -e  >/dev/null
+../util/mkcromfs a tmp.cromfs -B'*.hh:128' -b16384 -f65536 -e  >/dev/null
 rm -rf b
 ../util/unmkcromfs tmp.cromfs b >/dev/null
 

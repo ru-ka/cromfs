@@ -71,8 +71,14 @@ struct StorageOptToucher: public BlockToucher
     {
         if(read_old) old_opts = R32(&Buffer[0]);
         
-        if(old_opts & CROMFS_OPT_24BIT_BLOCKNUMS) new_opts |= CROMFS_OPT_24BIT_BLOCKNUMS;
-        if(old_opts & CROMFS_OPT_16BIT_BLOCKNUMS) new_opts |= CROMFS_OPT_16BIT_BLOCKNUMS;
+        if(old_opts &   CROMFS_OPT_24BIT_BLOCKNUMS)
+            new_opts |= CROMFS_OPT_24BIT_BLOCKNUMS;
+
+        if(old_opts &   CROMFS_OPT_16BIT_BLOCKNUMS)
+            new_opts |= CROMFS_OPT_16BIT_BLOCKNUMS;
+
+        if(old_opts &   CROMFS_OPT_VARIABLE_BLOCKSIZES)
+            new_opts |= CROMFS_OPT_VARIABLE_BLOCKSIZES;
         
         if(write_new) W32(&Buffer[0], new_opts);
     }

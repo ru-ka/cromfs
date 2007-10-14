@@ -4,6 +4,13 @@ cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.4	2007-10-15 Joel Yliluoma <bisqwit@iki.fi>
+- mkcromfs: Added --nosortbyfilename option.
+- mkcromfs: Added the --bsize_for option, and updated the filesystem
+  format to allow each inode to have a different block size. Useful
+  when creating filesystems that contain different types of files.
+  Files of different type can have different block sizes.
+
 1.5.3.2	2007-09-04 Joel Yliluoma <bisqwit@iki.fi>
 - Added include for sys/statvfs.h, fixing a compilation error
   relating to missing struct definition (thanks Thomas Munn).

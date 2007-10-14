@@ -220,7 +220,14 @@ public:
                                           const size_t minimum_overlap = 0,
                                           const size_t overlap_granularity = 1) const
     {
-        if(overlap_granularity >= 3)
+        if(overlap_granularity >= 3
+        || true
+            /* Still have problems with the Horspool version.
+             * Valgrind complains about an "Invalid read of size 8"
+             * that I haven't been able to track down. So use
+             * the parent version in any case.
+             */
+          )
         {
             // When granularity is 1, we are more optimal.
             // When it is 2, we are about equal.
@@ -228,6 +235,7 @@ public:
             
             return BoyerMooreNeedle::SearchInWithAppendOnly(haystack, hlen, minimum_overlap, overlap_granularity);
         }
+        if(unlikely(minimum_overlap > nlen)) return hlen;
         
         InterruptibleContext make_interruptible;
         

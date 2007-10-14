@@ -98,7 +98,8 @@ private:
     /* Autoindex new data in this fblock */
     void AutoIndex(const cromfs_fblocknum_t fblocknum,
         uint_fast32_t old_raw_size,
-        uint_fast32_t new_raw_size);
+        uint_fast32_t new_raw_size,
+        uint_fast32_t bsize);
 
     bool block_is(const cromfs_block_internal& block,
                   const std::vector<unsigned char>& data) const
@@ -221,7 +222,8 @@ public:
     void ScheduleBlockify(
         datasource_t* source,
         SchedulerDataClass dataclass,
-        unsigned char* blocknum_target);
+        unsigned char* blocknum_target,
+        long BlockSize);
     
     /* Flushes all blockifying requests so far. */
     void FlushBlockifyRequests();
@@ -239,13 +241,16 @@ private:
          * data from given source.
          * The blocks will be written into the given target.
          */
-        schedule_item(datasource_t* src, SchedulerDataClass dc, unsigned char* tgt)
-            : source(src), target(tgt), dataclass(dc)
+        schedule_item(
+            datasource_t* src, SchedulerDataClass dc,
+            unsigned char* tgt, long bsize)
+            : source(src), target(tgt), dataclass(dc), blocksize(bsize)
         {
         }
         
         inline datasource_t* GetDataSource() const { return source; }
         const std::string GetName() const { return source->getname(); }
+        long GetBlockSize() const { return blocksize; }
         
         inline unsigned char* GetBlockTarget() const { return target; }
 
@@ -259,6 +264,7 @@ private:
         
         unsigned char*     target;
         SchedulerDataClass dataclass;
+        long               blocksize;
     };
 
     std::deque<schedule_item> schedule;
@@ -269,7 +275,9 @@ public:
     
     // The fblocks written into filesystem. Indexed by data locators.
     mkcromfs_fblockset fblocks;
-    std::vector<size_t> last_autoindex_length;
+    
+    /* For each bsize differently. */
+    std::vector< std::map<long,size_t> > last_autoindex_length;
     
     // This is the index used for two purposes:
     //   Discovering identical blocks (reuse of the data locator)

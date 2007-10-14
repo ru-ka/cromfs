@@ -6,8 +6,8 @@
 
 template<typename WorkType>
 void ThreadWorkEngine<WorkType>::RunTasks(
-    size_t num_threads,
-    size_t num_workunits,
+    size_t num_threads, /* Note: <- unused when OPENMP */
+    ssize_t num_workunits,
     WorkType& workparams,
     bool (*DoWork)(size_t index, WorkType& )
     /* DoWork returns bool if it wants to cancel its siblings */
@@ -19,8 +19,9 @@ void ThreadWorkEngine<WorkType>::RunTasks(
      * Just hope that DoWork() does not consume a lot of time.
      */
     bool cancel = false;
+    
   #pragma omp parallel for schedule(guided,1) shared(cancel)
-    for(size_t a=0; a<num_workunits; ++a)
+    for(ssize_t a=0; a<num_workunits; ++a)
     {
       #pragma omp flush(cancel)
         if(!cancel && DoWork(a, workparams))

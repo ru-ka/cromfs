@@ -180,6 +180,18 @@ static void TestWithAppend()
 int main(void)
 {
 #if 1
+    for(unsigned a=0; a<50000; ++a)
+    {
+        std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
+        TestWithAppend();
+    }
+    if(!fails)
+        std::printf("BoyerMoore Append tests OK\n");
+    else
+        std::fprintf(stderr, "BoyerMoore Append: %u failures\n", fails);
+    fails=0;
+#endif
+#if 1
     for(unsigned a=0; a<250; ++a)
     {
         std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
@@ -213,18 +225,6 @@ int main(void)
         std::printf("Turbo BoyerMoore tests OK\n");
     else
         std::fprintf(stderr, "BoyerMoore: %u failures\n", fails);
-    fails=0;
-#endif
-#if 1
-    for(unsigned a=0; a<50000; ++a)
-    {
-        std::printf("\rtest %u...%50s\r", a, ""); std::fflush(stdout);
-        TestWithAppend();
-    }
-    if(!fails)
-        std::printf("BoyerMoore Append tests OK\n");
-    else
-        std::fprintf(stderr, "BoyerMoore Append: %u failures\n", fails);
     fails=0;
 #endif
 }

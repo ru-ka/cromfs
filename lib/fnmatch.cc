@@ -3,7 +3,27 @@
 
 #include "fnmatch.hh"
 
-bool MatchFileFrom(const std::string& entname, MatchingFileListType& list, bool empty_means)
+bool MatchFile(const std::string& pathname, const std::string& pattern)
+{
+    return fnmatch(
+        pattern.c_str(),
+        pathname.c_str(),
+        0 
+#if 0
+        | FNM_PATHNAME
+        /* disabled. It is nice if *Zelda* also matches subdir/Zelda. */
+#endif
+#ifdef FNM_LEADING_DIR
+        | FNM_LEADING_DIR
+        /* GNU extension which does exactly what I want --Bisqwit
+         * With this, one can enter pathnames to the commandline and
+         * those will too be extracted, without need to append / and *
+         */
+#endif
+      ) == 0;
+}
+
+bool MatchFileFrom(const std::string& pathname, MatchingFileListType& list, bool empty_means)
 {
     if(list.empty()) return empty_means;
     
@@ -12,22 +32,7 @@ bool MatchFileFrom(const std::string& entname, MatchingFileListType& list, bool 
     {
         const std::string& pattern = list[a].first;
         
-        if(fnmatch(
-            pattern.c_str(),
-            entname.c_str(),
-            0 
-#if 0
-            | FNM_PATHNAME
-            /* disabled. It is nice if *Zelda* also matches subdir/Zelda. */
-#endif
-#ifdef FNM_LEADING_DIR
-            | FNM_LEADING_DIR
-            /* GNU extension which does exactly what I want --Bisqwit
-             * With this, one can enter pathnames to the commandline and
-             * those will too be extracted, without need to append / and *
-             */
-#endif
-          ) == 0)
+        if(MatchFile(pathname, pattern))
         {
             retval = true;
             /* Don't return immediately. Otherwise, we won't catch it

@@ -29,7 +29,7 @@ public:
     
     void RunTasks(
         size_t num_threads,
-        size_t num_workunits,
+        ssize_t num_workunits,
         WorkType& workparams,
         bool (*DoWork)(size_t index, WorkType& )
         /* DoWork returns bool if it wants to cancel its siblings */

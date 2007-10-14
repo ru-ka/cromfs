@@ -5,7 +5,7 @@
 #include "lib/fadvise.hh"
 #include "lib/util.hh"
 
-#if USE_HASHMAP
+#if HASH_MAP
 # include <ext/hash_set>
 # include "hash.hh"
 #endif
@@ -189,7 +189,7 @@ public:
         std::fflush(stdout);
 
 
-#if USE_HASHMAP
+#if HASH_MAP
         typedef __gnu_cxx::hash_set<cromfs_inodenum_t> handled_inodes_t;
 #else
         typedef std::set<cromfs_inodenum_t> handled_inodes_t;
@@ -528,9 +528,9 @@ public:
         }
         
       #pragma omp parallel for reduction(+:total_written)
-        for(cromfs_fblocknum_t fblockno = 0; fblockno < fblktab.size(); ++fblockno)
+        for(cromfs_fblocknum_t fblocknum = 0; fblocknum < fblktab.size(); ++fblocknum)
         {
-            do_extract(fblockno, targetdir, expect_size, total_written);
+            do_extract(fblocknum, targetdir, expect_size, total_written);
         }
         
         fblock_cache.clear(); // save RAM
@@ -560,7 +560,7 @@ public:
         cleanup();
     }
     
-    void do_extract(const cromfs_fblocknum_t fblockno,
+    void do_extract(const cromfs_fblocknum_t fblocknum,
                     const std::string& targetdir,
                     uint_fast64_t& expect_size,
                     uint_fast64_t& total_written) const
@@ -571,8 +571,8 @@ public:
         unsigned nfiles = 0;
 
         for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::const_iterator
-            i = fblock_users.find(fblockno);
-            i != fblock_users.end() && i->first == fblockno;
+            i = fblock_users.find(fblocknum);
+            i != fblock_users.end() && i->first == fblocknum;
             ++i) ++nfiles;
         
         if(!nfiles)
@@ -584,12 +584,12 @@ public:
             if(verbose >= 1)
             {
                 std::printf("fblock %u / %u: skipping\n",
-                    (unsigned)fblockno, (unsigned)fblktab.size());
+                    (unsigned)fblocknum, (unsigned)fblktab.size());
                 std::fflush(stdout);
             }
 
-            FadviseDontNeed(fd, fblktab[fblockno].filepos,
-                                fblktab[fblockno].length);
+            FadviseDontNeed(fd, fblktab[fblocknum].filepos,
+                                fblktab[fblocknum].length);
             
             return;
         }
@@ -597,8 +597,8 @@ public:
         if(verbose >= 1)
         {
             std::printf("fblock %u / %u: %s->",
-                (unsigned)fblockno, (unsigned)fblktab.size(),
-                ReportSize(fblktab[fblockno].length).c_str()
+                (unsigned)fblocknum, (unsigned)fblktab.size(),
+                ReportSize(fblktab[fblocknum].length).c_str()
                  );
             std::fflush(stdout);
         }
@@ -608,16 +608,16 @@ public:
         // removed from the cache while it's still in use.
         // Also, read it uncached so that we don't accidentally
         // cause the inode-table fblocks to be removed from cache.
-        cromfs_cached_fblock fblock = read_fblock_uncached(fblockno);
+        cromfs_cached_fblock fblock = read_fblock_uncached(fblocknum);
         
-        FadviseDontNeed(fd, fblktab[fblockno].filepos,
-                            fblktab[fblockno].length);
+        FadviseDontNeed(fd, fblktab[fblocknum].filepos,
+                            fblktab[fblocknum].length);
         
-        if(fblockno+1 < fblktab.size())
+        if(fblocknum+1 < fblktab.size())
         {
             // At background, initiate reading for the next fblock.
-            FadviseWillNeed(fd, fblktab[fblockno+1].filepos,
-                                fblktab[fblockno+1].length);
+            FadviseWillNeed(fd, fblktab[fblocknum+1].filepos,
+                                fblktab[fblocknum+1].length);
         }
 
         if(verbose >= 1)
@@ -630,8 +630,8 @@ public:
 
         /* Write into each file that requires data from this fblock */
         for(std::multimap<cromfs_fblocknum_t, cromfs_inodenum_t>::const_iterator
-            i = fblock_users.find(fblockno);
-            i != fblock_users.end() && i->first == fblockno;
+            i = fblock_users.find(fblocknum);
+            i != fblock_users.end() && i->first == fblocknum;
             ++i)
         {
             const cromfs_inodenum_t inonum = i->second;
@@ -645,17 +645,20 @@ public:
             const std::string target = GetTargetPath(targetdir, filename);
             
             const cromfs_inode_internal ino =
-                (const_cast<cromfs_decoder&>(*this)).read_inode_and_blocks(inonum);
+                (const_cast<cromfs_decoder&>(*this)).
+                read_inode_and_blocks(inonum);
             
             if(verbose >= 2)
             {
                 std::printf("\n\t%s",
-                    target.c_str()/*, (unsigned)fblockno*/);
+                    target.c_str()/*, (unsigned)fblocknum*/);
             }
             
             try
             {
                 FileOutputter file(target.c_str(), ino.bytesize);
+                
+                const uint_fast64_t block_size = ino.blocksize;
             
                 /* Find which blocks need this fblock */
                 for(unsigned a=0; a<ino.blocklist.size(); ++a)
@@ -676,34 +679,35 @@ public:
                     const uint_fast32_t block_startoffs = block.get_startoffs(BSIZE,FSIZE);
                     
                     // Only write data from this fblock that is being handled now.
-                    if(block_fblocknum != fblockno) continue;
+                    if(block_fblocknum != fblocknum) continue;
                     
                     /* Allright, it uses data from this fblock. */
 
                     /* Count how much. */
-                    uint_fast64_t block_size = sblock.bsize;
                     uint_fast64_t file_offset = a * block_size;
+                    uint_fast64_t read_size = block_size;
+                    
                     /* the last block may be smaller than the block size */
                     if(a+1 == ino.blocklist.size() && (ino.bytesize % block_size) > 0)
                     {
-                        block_size = ino.bytesize % block_size;
+                        read_size = ino.bytesize % block_size;
                     }
                     
-                    if(block_startoffs + block_size > fblock.size())
+                    if(block_startoffs + read_size > fblock.size())
                     {
                         std::fprintf(stderr, "block %u (block #%u of inode %u) is corrupt (points to bytes %llu-%llu, fblock size is %llu)\n",
                             (unsigned)ino.blocklist[a],
                             a,
                             (unsigned)inonum,
                             (unsigned long long)(block_startoffs),
-                            (unsigned long long)(block_startoffs + block_size-1),
+                            (unsigned long long)(block_startoffs + read_size-1),
                             (unsigned long long)fblock.size()
                                 );
                         continue;
                     }
                     
-                    file.write(&fblock[block_startoffs], block_size, file_offset, use_sparse);
-                    wrote_size += block_size;
+                    file.write(&fblock[block_startoffs], read_size, file_offset, use_sparse);
+                    wrote_size += read_size;
                 }
                 
                 /* "file" goes out of scope, and hence it will be automatically closed. */
@@ -829,7 +833,7 @@ private:
     
         if(verbose >= 4 && !ino.blocklist.empty())
         {
-            std::printf("  [blocks:");
+            std::printf("  [blocks(%u):", ino.blocksize);
             for(size_t a=0; a<ino.blocklist.size(); ++a)
                 std::printf(" %u", ino.blocklist[a]);
             std::printf("]\n");
@@ -963,20 +967,23 @@ private:
     {
         rangeset<cromfs_block_index> result;
         cromfs_inode_internal ino = read_inode_and_blocks(inonum);
+        
+        const uint_fast64_t block_size = ino.blocksize;
+        
         for(unsigned a=0; a<ino.blocklist.size(); ++a)
         {
             const cromfs_block_internal& blk = blktab[ino.blocklist[a]];
 
             /* Count how much. */
-            uint_fast64_t block_size = sblock.bsize;
+            uint_fast64_t size = block_size;
             /* the last block may be smaller than the block size */
-            if(a+1 == ino.blocklist.size() && (ino.bytesize % block_size) > 0)
+            if(a+1 == ino.blocklist.size() && (ino.bytesize % size) > 0)
             {
-                block_size = ino.bytesize % block_size;
+                size = ino.bytesize % block_size;
             }
 
             cromfs_block_index b(blk);
-            result.set(b, b + block_size);
+            result.set(b, b + size);
         }
         return result;
     }

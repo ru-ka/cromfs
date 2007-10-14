@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.5.3.2.
+  This is the documentation of cromfs-1.5.4.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlist">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -888,8 +888,8 @@ The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml44><b id=eml30 class=nonmail>zc</b><span id=eml31 class=ismail>Joel</span><span id=eml32 class=nonmail><b>4kc</b></span><span id=eml33 class=ismail> Yli</span><b id=eml34 class=nonmail>jjck@</b><span id=eml35 class=ismail>luom</span><span id=eml36 class=nonmail><b>e</b></span><span id=eml37 class=ismail>a &lt;bi</span><b id=eml38 class=nonmail>nxAb</b><span id=eml39 class=ismail>sqwi</span><span id=eml40 class=nonmail><b>eee</b></span><span id=eml41 class=ismail>t@ik</span><b id=eml42 class=nonmail>rdkwmfq</b><span id=eml43 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=30;i<44;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml41><b id=eml27 class=nonmail>fhl</b><span id=eml28 class=ismail>Joel</span><span id=eml29 class=nonmail><b>poB305</b></span><span id=eml30 class=ismail> Yli</span><b id=eml31 class=nonmail>en@59m</b><span id=eml32 class=ismail>luom</span><span id=eml33 class=nonmail><b>q.i@akqme</b></span><span id=eml34 class=ismail>a &lt;bi</span><b id=eml35 class=nonmail>jx4eYty</b><span id=eml36 class=ismail>sqwi</span><span id=eml37 class=nonmail><b>6ei@z5vgy</b></span><span id=eml38 class=ismail>t@ik</span><b id=eml39 class=nonmail>hCy</b><span id=eml40 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=27;i<41;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -994,7 +994,7 @@ to this package.
 </div> <p align=right><small>Generated from
        <tt>progdesc.php</tt> (last updated: Sun, 26 Aug 2007 13:52:46 +0300)<br>
   with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Tue, 04 Sep 2007 16:43:16 +0300</small>
+  at Mon, 15 Oct 2007 01:12:07 +0300</small>
  </p>
 </body>
 </html>

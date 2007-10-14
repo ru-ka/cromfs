@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <set>
 
 ///////////////////////////////////////////////
 
@@ -404,13 +405,27 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
         if(last_autoindex_length.size() <= fblocknum)
             last_autoindex_length.resize(fblocknum+1);
         
-        size_t& last_raw_size = last_autoindex_length[fblocknum];
-        
-        if(new_raw_size - last_raw_size >= 1024*256
-        || new_raw_size >= FSIZE-MinimumFreeSpace-BSIZE)
+        std::set<long> different_bsizes;
+        different_bsizes.insert(BSIZE);
+        for(std::map<std::string, long>::const_iterator
+            i = BSIZE_FOR.begin(); i != BSIZE_FOR.end(); ++i)
         {
-            AutoIndex(fblocknum, last_raw_size, new_raw_size);
-            last_raw_size = new_raw_size;
+            different_bsizes.insert(i->second);
+        }
+        
+        for(std::set<long>::const_iterator
+            i = different_bsizes.begin(); i != different_bsizes.end(); ++i)
+        {
+            const long bsize = *i;
+
+            size_t& last_raw_size = last_autoindex_length[fblocknum][bsize];
+            
+            if(new_raw_size - last_raw_size >= 1024*256
+            || new_raw_size >= FSIZE-MinimumFreeSpace - bsize)
+            {
+                AutoIndex(fblocknum, last_raw_size, new_raw_size, bsize);
+                last_raw_size = new_raw_size;
+            }
         }
     }
     
@@ -467,21 +482,22 @@ bool cromfs_blockifier::block_is(
 }
 
 /* How many automatic indexes can be done in this amount of data? */
-static const int CalcAutoIndexCount(int_fast32_t raw_size)
+static const int CalcAutoIndexCount(int_fast32_t raw_size, uint_fast32_t bsize)
 {
-    int_fast32_t a = (raw_size - BSIZE + AutoIndexPeriod);
+    int_fast32_t a = (raw_size - bsize + AutoIndexPeriod);
     return a / (int_fast32_t)AutoIndexPeriod;
 }
 
 void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
     uint_fast32_t old_raw_size,
-    uint_fast32_t new_raw_size)
+    uint_fast32_t new_raw_size,
+    uint_fast32_t bsize)
 {
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
 
     /* Index all new checksum data */
-    const int OldAutoIndexCount = std::max(CalcAutoIndexCount(old_raw_size),0);
-    const int NewAutoIndexCount = std::max(CalcAutoIndexCount(new_raw_size),0);
+    const int OldAutoIndexCount = std::max(CalcAutoIndexCount(old_raw_size,bsize),0);
+    const int NewAutoIndexCount = std::max(CalcAutoIndexCount(new_raw_size,bsize),0);
     if(NewAutoIndexCount > OldAutoIndexCount && NewAutoIndexCount > 0)
     {
         const uint_fast32_t min_offset = AutoIndexPeriod * OldAutoIndexCount;
@@ -493,7 +509,7 @@ void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
         for(int count=OldAutoIndexCount+1; count<=NewAutoIndexCount; ++count)
         {
             uint_fast32_t startoffs = AutoIndexPeriod * (count-1);
-            if(startoffs + BSIZE > new_raw_size) throw "error";
+            if(startoffs + bsize > new_raw_size) throw "error";
             /*
             std::printf("\nBlock reached 0x%X->0x%X bytes in size, (%d..%d), adding checksum for 0x%X; ",
                 old_raw_size, new_raw_size,
@@ -501,13 +517,13 @@ void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
                 startoffs);
             */
             const unsigned char* ptr = &new_raw_data[startoffs - min_offset];
-            const crc32_t crc = crc32_calc(ptr, BSIZE);
+            const crc32_t crc = crc32_calc(ptr, bsize);
             
             /* Check if this checksum has already been indexed */
             cromfs_block_internal match;
             for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
             {
-                if(block_is(match, ptr, BSIZE)) goto dont_add_crc;
+                if(block_is(match, ptr, bsize)) goto dont_add_crc;
             }
             match.define(fblocknum, startoffs);
             block_index.AddAutoIndex(crc, match);
@@ -769,8 +785,9 @@ void cromfs_blockifier::FlushBlockifyRequests()
     for(size_t a=0; a<schedule.size(); ++a)
     {
         uint_fast64_t size = schedule[a].GetDataSource()->size();
+        long blocksize     = schedule[a].GetBlockSize();
         total_size   += size;
-        blocks_total += CalcSizeInBlocks(size, BSIZE);
+        blocks_total += CalcSizeInBlocks(size, blocksize);
     }
     
     for(ssize_t a=0; a < (ssize_t) schedule.size(); ++a)
@@ -780,6 +797,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
         datasource_t* source  = s.GetDataSource();
         unsigned char* target = s.GetBlockTarget();
         uint_fast64_t nbytes  = source->size();
+        uint_fast64_t blocksize = s.GetBlockSize();
 
         if(DisplayBlockSelections)
             std::printf("%s\n", source->getname().c_str());
@@ -792,7 +810,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
         {
             DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
 
-            uint_fast64_t eat = std::min((uint_fast64_t)BSIZE, nbytes);
+            uint_fast64_t eat = std::min(blocksize, nbytes);
             
             /* TODO: Threading, possibly? */
             
@@ -824,9 +842,10 @@ void cromfs_blockifier::FlushBlockifyRequests()
 void cromfs_blockifier::ScheduleBlockify(
     datasource_t* source,
     SchedulerDataClass dataclass,
-    unsigned char* blocknum_target)
+    unsigned char* blocknum_target,
+    long BlockSize)
 {
-    schedule.push_back(schedule_item(source, dataclass, blocknum_target));
+    schedule.push_back(schedule_item(source, dataclass, blocknum_target, BlockSize));
 }
 
 void cromfs_blockifier::NoMoreBlockifying()
@@ -838,9 +857,17 @@ void cromfs_blockifier::NoMoreBlockifying()
 
 void cromfs_blockifier::EnablePackedBlocksIfPossible()
 {
+    /*long MinimumBsize = BSIZE;
+    for(std::map<std::string, long>::const_iterator
+        i = BSIZE_FOR.begin(); i != BSIZE_FOR.end(); ++i)
+    {
+        MinimumBsize = std::min(MinimumBsize, i->second);
+    }*/
+    long MinimumBsize = 1; // partial blocks may be even this small.
+    
     if(MayPackBlocks)
     {
-        uint_fast64_t max_blockoffset = FSIZE - BSIZE;
+        uint_fast64_t max_blockoffset = FSIZE - MinimumBsize;
         max_blockoffset *= fblocks.size();
         if(max_blockoffset < UINT64_C(0x100000000))
         {

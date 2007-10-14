@@ -155,8 +155,6 @@ protected:
     cromfs_cached_fblock read_fblock_uncached(cromfs_fblocknum_t ind) const
         throw (cromfs_exception, std::bad_alloc);
     
-    uint_fast64_t CalcSizeInBlocks(uint_fast64_t filesize) const throw();
-
 protected:
     int fd; // file handle
     

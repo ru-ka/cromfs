@@ -15,6 +15,7 @@ extern uint_fast32_t OverlapGranularity;
 
 extern long FSIZE;
 extern long BSIZE;
+extern std::map<std::string, long> BSIZE_FOR;
 
 //extern uint_fast32_t MaxSearchLength;
 

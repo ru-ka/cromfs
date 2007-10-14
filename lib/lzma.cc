@@ -324,7 +324,7 @@ const std::vector<unsigned char> LZMADeCompress
 {
     if(buf.size() <= 5+8) 
     {
-    clearly_not_ok:
+    /*clearly_not_ok:*/
         ok = false;
         return std::vector<unsigned char> ();
     }
@@ -400,7 +400,7 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
     bool use_small_dict = false;
     
   #pragma omp parallel for
-    for(unsigned compress_mode = 0; compress_mode < (5*5*9); ++compress_mode)
+    for(int compress_mode = 0; compress_mode < (5*5*9); ++compress_mode)
     {
         const unsigned pb = compress_mode % 5;
         const unsigned lp = (compress_mode / 5) % 5;

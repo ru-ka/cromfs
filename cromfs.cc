@@ -35,7 +35,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include "lib/util.hh"
 #include "cromfs.hh"
 
-#define CROMFS_FSIZE  (sblock.fsize)
+#define CROMFS_FSIZE (sblock.fsize)
 #define CROMFS_BSIZE (sblock.bsize)
 
 #define SBLOCK_DEBUG    0
@@ -108,7 +108,8 @@ const std::string DumpInode(const cromfs_inode_internal& inode)
     s << ")time(" << std::dec << inode.time
       << ")links(" << inode.links
       << ")rdev(" << std::hex << inode.rdev
-      << ")size(" << std::dec << inode.bytesize;
+      << ")size(" << std::dec << inode.bytesize
+      << ")bsize(" << std::dec << inode.blocksize;
    
     if(!inode.blocklist.empty())
     {
@@ -133,11 +134,6 @@ const std::string cromfs::DumpBlock(const cromfs_block_internal& block) const
       << ")";
     
     return s.str();
-}
-
-uint_fast64_t cromfs::CalcSizeInBlocks(uint_fast64_t filesize) const throw()
-{
-    return ::CalcSizeInBlocks(filesize, CROMFS_BSIZE);
 }
 
 void cromfs::reread_superblock()
@@ -206,6 +202,7 @@ void cromfs::reread_superblock()
     
     if(need_storage_opts)
     {
+        /* Reread the inode because its interpretation might have changed */
         inotab = read_special_inode(sblock.inotab_offs,  sblock.inotab_size, false);
     }
 
@@ -252,9 +249,9 @@ void cromfs::reread_superblock()
     {
         cromfs_inode_internal result = read_inode_and_blocks(a);
         fprintf(stderr, "INODE %u: %s\n", (unsigned)a, DumpInode(result).c_str());
-        uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize);
+        uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize, result.blocksize);
         
-        unsigned inode_size = 0x18 + BLOCKNUM_SIZE_BYTES()*nblocks;
+        unsigned inode_size = INODE_SIZE_BYTES(nblocks);
         inode_size = (inode_size + 3) & ~3;
         a += inode_size / 4;
     }
@@ -438,19 +435,22 @@ cromfs_inode_internal cromfs::read_special_inode
                 inodename,
                 ignore_blocks ? "true" : "false");
 #endif
-            if(ignore_blocks)
-                get_inode(&Buf[0], inode);
-            else
-                get_inode(&Buf[0], inode, CROMFS_BSIZE, BLOCKNUM_SIZE_BYTES());
+            
+            /*fprintf(stderr, "inode_buf[");
+            for(unsigned c=0; c<32; ++c) fprintf(stderr, "%c", Buf[c]);
+            fprintf(stderr, "]\n");
+            fflush(stderr);*/            
+            
+            get_inode(&Buf[0], 0, inode, storage_opts, CROMFS_BSIZE, !ignore_blocks);
 
             break;
         }
         case CROMFS_SIGNATURE_01:
         {
-            unsigned char Buf[0x18];
+            unsigned char Buf[MAX_INODE_HEADER_SIZE];
             ( LongFileRead(fd, offset+0, 0x18, Buf) );
             
-            get_inode(Buf, inode);
+            get_inode_header(Buf, 0x18, inode, 0, CROMFS_BSIZE);
             
 #if INODE_DEBUG
             printf("read_special_inode(%lld): %s\n",
@@ -460,7 +460,7 @@ cromfs_inode_internal cromfs::read_special_inode
             
             if(!ignore_blocks)
             {
-                uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize);
+                uint_fast64_t nblocks = CalcSizeInBlocks(inode.bytesize, inode.blocksize);
                 inode.blocklist.resize(nblocks);
                 
                 LongFileRead reader(fd, offset+0x18, 4*nblocks);
@@ -485,11 +485,11 @@ const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
     }
     if(unlikely(inodenum < 1)) throw EBADF;
 
-    unsigned char Buf[0x18];
-    read_file_data(inotab, GetInodeOffset(inodenum), Buf, 0x18, "inode");
+    unsigned char Buf[MAX_INODE_HEADER_SIZE];
+    read_file_data(inotab, GetInodeOffset(inodenum), Buf, INODE_HEADER_SIZE(), "inode");
     
     cromfs_inode_internal inode;
-    get_inode(Buf, inode);
+    get_inode_header(Buf, INODE_HEADER_SIZE(), inode, storage_opts, CROMFS_BSIZE);
     
 #if INODE_DEBUG
     fprintf(stderr, "returning inode %llu: %s\n",
@@ -509,15 +509,20 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
 #endif
         return rootdir;
     }
+    
+    /* Note: This function is largely a duplicate
+     * of get_inode(), except that it uses read_file_data()
+     * instead of buffer access. (FIXME, duplicate code)
+     */
 
     cromfs_inode_internal result = read_inode(inodenum);
     
-    uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize);
+    uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize, result.blocksize);
     
     //fprintf(stderr, "%llu bytes: %llu blocks\n",
     //    (unsigned long long)result.bytesize, (unsigned long long)nblocks);
     
-    uint_fast64_t inode_offset = GetInodeOffset(inodenum) + 0x18;
+    uint_fast64_t inode_blocktable_offset = GetInodeOffset(inodenum) + INODE_HEADER_SIZE();
     
     result.blocklist.resize(nblocks);
     
@@ -526,7 +531,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
     {
         std::vector<unsigned char> blocklist(b * nblocks);
 
-        read_file_data(inotab, inode_offset,
+        read_file_data(inotab, inode_blocktable_offset,
                        &blocklist[0], b * nblocks,
                        "inode block table");
 
@@ -535,7 +540,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
     }
     else
     {
-        read_file_data(inotab, inode_offset,
+        read_file_data(inotab, inode_blocktable_offset,
                        (unsigned char*)&result.blocklist[0], 4 * nblocks,
                        "inode block table");
 
@@ -643,15 +648,17 @@ int_fast64_t cromfs::read_file_data_from_one_fblock_only(
 #if READFILE_DEBUG >= 2
     fprintf(stderr, "- Accessing fblock %u\n", (unsigned)allowed_fblocknum);
 #endif
+    const uint_fast64_t bsize = inode.blocksize;
+
     for(uint_fast64_t pos    = std::min(inode.bytesize, offset),
                       endpos = std::min(inode.bytesize, offset + size);
         pos < endpos; )
     {
-        const uint_fast64_t begin_block_index  = pos / CROMFS_BSIZE;
-        const uint_fast32_t begin_block_offset = pos % CROMFS_BSIZE;
+        const uint_fast64_t begin_block_index  = pos / bsize;
+        const uint_fast32_t begin_block_offset = pos % bsize;
         if(begin_block_index >= inode.blocklist.size()) break;
         
-        const uint_fast64_t remain_block_bytes = CROMFS_BSIZE - begin_block_offset;
+        const uint_fast64_t remain_block_bytes = bsize - begin_block_offset;
         
         const uint_fast64_t consume_bytes = std::min(endpos-pos, remain_block_bytes);
         
@@ -677,9 +684,11 @@ int_fast64_t cromfs::read_file_data_from_one_fblock_only(
                 (unsigned long long)size,
                 target + (pos-offset));
 #endif
+        /*
         const uint_fast32_t block_size =
-            std::min( (uint_fast64_t)CROMFS_BSIZE,
-                      (uint_fast64_t)(inode.bytesize - (pos - pos % CROMFS_BSIZE) ));
+            std::min( (uint_fast64_t)bsize,
+                      (uint_fast64_t)(inode.bytesize - (pos - pos % bsize) ));
+        */
         read_block(blocknum,
                    begin_block_offset,
                    target + (pos-offset),
@@ -733,6 +742,8 @@ int_fast64_t cromfs::read_file_data(
     std::vector<cromfs_fblocknum_t> required_fblocks_cached;
     std::vector<cromfs_fblocknum_t> required_fblocks_uncached;
     
+    const uint_fast64_t bsize = inode.blocksize;
+
     /* Collect a list of fblocks that are required to complete this read. */
     if(true) /* scope */
     {
@@ -750,11 +761,11 @@ int_fast64_t cromfs::read_file_data(
                           endpos = std::min(inode.bytesize, offset + size);
             pos < endpos; )
         {
-            const uint_fast64_t begin_block_index  = pos / CROMFS_BSIZE;
-            const uint_fast32_t begin_block_offset = pos % CROMFS_BSIZE;
+            const uint_fast64_t begin_block_index  = pos / bsize;
+            const uint_fast32_t begin_block_offset = pos % bsize;
             if(begin_block_index >= inode.blocklist.size()) break;
             
-            const uint_fast64_t remain_block_bytes = CROMFS_BSIZE - begin_block_offset;
+            const uint_fast64_t remain_block_bytes = bsize - begin_block_offset;
             
             const uint_fast64_t consume_bytes = std::min(endpos-pos, remain_block_bytes);
 
@@ -807,10 +818,13 @@ int_fast64_t cromfs::read_file_data(
 
 #pragma omp parallel reduction(+:result)
   {
-    const unsigned n_req_fblocks_cached   = required_fblocks_cached.size();
-    const unsigned n_req_fblocks_uncached = required_fblocks_uncached.size();
+    /* Note: Using ssize_t instead of size_t here because "omp for"
+     *       requires a signed iteration variable instead of unsigned.
+     */
+    const ssize_t n_req_fblocks_cached   = required_fblocks_cached.size();
+    const ssize_t n_req_fblocks_uncached = required_fblocks_uncached.size();
   #pragma omp for nowait
-    for(unsigned a=0; a<n_req_fblocks_cached; ++a)
+    for(ssize_t a=0; a<n_req_fblocks_cached; ++a)
     {
         const cromfs_fblocknum_t allowed_fblocknum = required_fblocks_cached[a];
         
@@ -822,7 +836,7 @@ int_fast64_t cromfs::read_file_data(
     }
 
   #pragma omp for nowait
-    for(unsigned a=0; a<n_req_fblocks_uncached; ++a)
+    for(ssize_t a=0; a<n_req_fblocks_uncached; ++a)
     {
         const cromfs_fblocknum_t allowed_fblocknum = required_fblocks_uncached[a];
         

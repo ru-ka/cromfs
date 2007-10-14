@@ -39,4 +39,4 @@ struct ThreadCondition
 };
 
 static inline void TestThreadCancel() { }
-static inline void SetCancellableThread(bool)  { }
+static inline void SetCancellableThread(bool=false)  { }
