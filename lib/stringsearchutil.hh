@@ -17,6 +17,10 @@
 # include <xmmintrin.h>
 #endif
 
+#if defined(__SSE__) && defined(__GNUC__)
+# include <xmmintrin.h>
+#endif
+
 namespace StringSearchUtil {
 template<typename T>
 static inline bool MultiByteNeq(T a,T b) { return a!=b; }

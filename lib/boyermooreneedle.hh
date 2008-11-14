@@ -9,7 +9,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <string.h>
+#include <cstring>
 
 #include "autoptr"
 #include "threadfun.hh"

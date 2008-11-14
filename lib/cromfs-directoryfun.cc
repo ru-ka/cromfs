@@ -1,3 +1,4 @@
+#include <cstring>
 #include "endian.hh"
 #include "cromfs-directoryfun.hh"
 
