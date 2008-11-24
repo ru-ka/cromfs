@@ -70,32 +70,38 @@ git_pop_branch: ;
 	git checkout `cat .git/PUSHED_HEAD`
 	
 git_release: ${ARCHFILES} ;
-	git commit -a -m 'Release version ${VERSION}'
-	@make git_push_branch
+	git commit         -a -m 'Release version ${VERSION} (dev)' || \
+	git commit --amend -a -m 'Release version ${VERSION} (dev)' # commit in dev brach
+	sed 's@^ref: refs/heads/@@' < .git/HEAD > .git/PUSHED_HEAD
 	git checkout release || git checkout -b release
-	@- git pull `cat .git/PUSHED_HEAD`
-	@- make git_rm
-	@- make git_add
-	git commit -a -m 'Release version ${VERSION}'
-	@- mkdir ${ARCHDIR} 2>/dev/null
-	git-archive --format=tar --prefix=${ARCHNAME}/ HEAD > ${ARCHDIR}${ARCHNAME}.tar
-	@- git_pop_branch
+	 git merge --no-commit `cat .git/PUSHED_HEAD`
+	 git rm -fr --cached '*' &> /dev/null
+	 git add --ignore-errors ${ARCHFILES} ${EXTRA_ARCHFILES} depfun.mak Makefile
+	 @if [ -f docmaker.php ]; then php -q docmaker.php ${ARCHNAME} > README.html; git add docmaker.php README.html; fi
+	 @if [ -f makediff.php ]; then git add makediff.php; fi
+	 git commit -a -m 'Release version ${VERSION}' # commit in release
+	 @- mkdir ${ARCHDIR} 2>/dev/null
+	 git-archive --format=tar --prefix=${ARCHNAME}/ HEAD > ${ARCHDIR}${ARCHNAME}.tar
+	git checkout `cat .git/PUSHED_HEAD`
 	@make arch_finish_pak
 	@make omabin_link${DEPFUN_OMABIN}
 
 git_test_release: ${ARCHFILES}
-	git stash save 'Test release'
-	@make git_push_branch
+	git commit --allow-empty -a -m 'Test release ${VERSION} (dev)' # commit in dev branch
+	git-update-server-info
+	sed 's@^ref: refs/heads/@@' < .git/HEAD > .git/PUSHED_HEAD
 	git checkout release || git checkout -b release
-	git stash apply
-	@- make git_rm
-	@- make git_add
-	git commit -a -m 'Test release'
-	rm -rf test_release
-	git-archive --format=tar --prefix=test_release/ HEAD | tar xvf - | sed 's/^/	/'
-	git reset HEAD^
-	@make git_pop_branch
-	git stash pop
+	 grep refs/heads/release .git/info/refs | sed 's/	.*//' > .git/RELEASE_HEAD
+	 git merge --no-commit `cat .git/PUSHED_HEAD`
+	 git rm -fr --cached '*' &> /dev/null
+	 git add --ignore-errors ${ARCHFILES} ${EXTRA_ARCHFILES} depfun.mak Makefile
+	 @if [ -f docmaker.php ]; then php -q docmaker.php ${ARCHNAME} > README.html; git add docmaker.php README.html; fi
+	 @if [ -f makediff.php ]; then git add makediff.php; fi
+	 git commit -a -m 'Test release' # commit in release
+	 rm -rf test_release
+	 git-archive --format=tar --prefix=test_release/ HEAD | tar xvf - | sed 's/^/	/'
+	 git reset --hard `cat .git/RELEASE_HEAD`         # undo release AND dev release
+	git checkout `cat .git/PUSHED_HEAD`
 	git-gc --quiet
 	@echo
 	@echo ----------------------------------------------------------------------
