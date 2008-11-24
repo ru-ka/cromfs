@@ -1,5 +1,5 @@
 /*
-cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL
 
 cromfs-write.hh: Definitions of structures needed for write access

@@ -1,8 +1,14 @@
 Cromfs changelog
 
-cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+1.5.4.1	2008-11-24 Joel Yliluoma <bisqwit@iki.fi>
+- The next release WIP has been long overdue because of hairy
+  thread-related crashing problems, but for now, I'll release
+  this bugfix release which fixes compilation problems on
+  newer distributions and gcc versions.
 
 1.5.4	2007-10-15 Joel Yliluoma <bisqwit@iki.fi>
 - mkcromfs: Added --nosortbyfilename option.
