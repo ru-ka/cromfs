@@ -4,37 +4,19 @@ CPPDEBUG=-g -pipe
 CPPFLAGS=-DVERSION=\"$(VERSION)\" $(CPPDEBUG)
 #         -fmessage-length=0
 
-WARNINGS=-Wall \
-    -Wundef \
-    -Wcast-qual \
-    -Wpointer-arith \
-    -Wconversion \
-    -Wwrite-strings \
-    -Wsign-compare \
-    -Wredundant-decls \
-    -Winit-self \
-    -Wextra \
-    -Wcast-align -Wformat
-
-#    -Wtraditional
-
 # C specific warnings
-CCOPTS=$(WARNINGS) -Waggregate-return -Wshadow -Winline \
-    -Wstrict-prototypes \
-    -Wmissing-prototypes
-
+CCOPTS=$(WARNINGS) $(CWARNINGS)
 # C++ specific warnings
-CXXOPTS=$(WARNINGS) \
-	-Woverloaded-virtual
-#	-Weffc++
+CXXOPTS=$(WARNINGS) $(CXXWARNINGS)
+
 
 # Optimization
-OPTIM=-ffast-math -O1
+OPTIM=-O3
 #-march=pentiumpro
 
 # Flags.
 CFLAGS=$(OPTIM) $(CCOPTS)
-CXXFLAGS=$(OPTIM) $(CXXOPTS) -fno-default-inline
+CXXFLAGS=$(OPTIM) $(CXXOPTS)
 #-fno-rtti
 
 #LDFLAGS=-pg -ax
@@ -42,7 +24,7 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Mon Dec  8 09:18:25 EET 2008
+# at Mon Dec  8 10:44:13 EET 2008
 # for Linux chii 2.6.26 #1 SMP Wed Jul 23 08:47:11 EEST 2008 x86_64 GNU/Linux
 # To change, run ./configure again.
 #
@@ -55,3 +37,5 @@ LDFLAGS +=  -fopenmp
 WARNINGS +=  -Wall -Wundef -Wcast-qual -Wpointer-arith -Wconversion -Wwrite-strings -Wsign-compare -Wredundant-decls -Winit-self -Wextra -Wcast-align -Wformat
 CWARNINGS +=  -Waggregate-return -Wshadow -Winline -Wstrict-prototypes -Wmissing-prototypes
 CXXWARNINGS +=  -Woverloaded-virtual -Weffc++
+
+
