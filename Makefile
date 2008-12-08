@@ -70,6 +70,7 @@ ARCHFILES=\
 	lib/boyermoore.hh lib/boyermoore.cc \
 	lib/superstringfinder.hh \
 	lib/asymmetrictsp.hh \
+	lib/fsballocator.hh \
 	lib/autoptr \
 	\
 	lib/range.hh lib/range.tcc \

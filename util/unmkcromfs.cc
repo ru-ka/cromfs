@@ -26,6 +26,7 @@
 #include "rangeset.hh"
 #include "rangemultimap.hh"
 #include "longfilewrite.hh"
+#include "fsballocator.hh"
 
 #include <map>
 #include <set>
@@ -196,12 +197,13 @@ public:
 #endif
 
         /* Create a map of which inodes cover what sections of the filesystem */
-        rangemultimap<cromfs_block_index, cromfs_inodenum_t> range_map;
+        rangemultimap<cromfs_block_index, cromfs_inodenum_t, FSBAllocator<int> > range_map;
         for(unsigned a=0; a<inodelist.size(); ++a)
         {
             const cromfs_inodenum_t ino_a = inodelist[a];
-            const rangeset<cromfs_block_index> range_a = create_rangeset(ino_a);
-            for(rangeset<cromfs_block_index>::const_iterator
+            const rangeset<cromfs_block_index, FSBAllocator<int> >
+                range_a = create_rangeset(ino_a);
+            for(rangeset<cromfs_block_index, FSBAllocator<int> >::const_iterator
                 i = range_a.begin(); i != range_a.end(); ++i)
             {
                 range_map.set(i->lower, i->upper, ino_a);
@@ -224,14 +226,15 @@ public:
                 continue;
             }
             
-            const rangeset<cromfs_block_index>& range_a = range_map.get_rangelist(ino_a);
+            const rangeset<cromfs_block_index, FSBAllocator<int>
+              >& range_a = range_map.get_rangelist(ino_a);
             
             handled_inodes_t candidates;
             
             /* Get the list of all inodes that coincide
              * with the ranges occupied by this inode
              */
-            for(rangeset<cromfs_block_index>::const_iterator
+            for(rangeset<cromfs_block_index, FSBAllocator<int> >::const_iterator
                 i = range_a.begin(); i != range_a.end(); ++i)
             {
                 fprintf(stderr, "s"); fflush(stderr);
@@ -257,12 +260,12 @@ public:
                 const uint_fast64_t size_b = read_inode(ino_b).bytesize;
                 if(!size_b) { handled_inodes.insert(ino_b); continue; }
                 
-                const rangeset<cromfs_block_index>& range_b = range_map.get_rangelist(ino_b);
-                rangeset<cromfs_block_index> intersect = range_a.intersect(range_b);
+                const rangeset<cromfs_block_index, FSBAllocator<int> >& range_b = range_map.get_rangelist(ino_b);
+                rangeset<cromfs_block_index, FSBAllocator<int> > intersect = range_a.intersect(range_b);
                 if(intersect.empty()) continue;
                 
                 uint_fast64_t intersecting_size = 0;
-                for(rangeset<cromfs_block_index>::const_iterator
+                for(rangeset<cromfs_block_index, FSBAllocator<int> >::const_iterator
                     i = intersect.begin();
                     i != intersect.end();
                     ++i)
@@ -527,8 +530,12 @@ public:
                        );
         }
         
+        /* Note: Using "long" for loop iteration variable, because OpenMP
+         * requires the loop iteration variable to be of _signed_ type,
+         * and cromfs_fblocknum_t is unsigned.
+         */
       #pragma omp parallel for reduction(+:total_written)
-        for(cromfs_fblocknum_t fblocknum = 0; fblocknum < fblktab.size(); ++fblocknum)
+        for(long/*cromfs_fblocknum_t*/ fblocknum=0; fblocknum<(long)fblktab.size(); ++fblocknum)
         {
             do_extract(fblocknum, targetdir, expect_size, total_written);
         }
@@ -833,7 +840,7 @@ private:
     
         if(verbose >= 4 && !ino.blocklist.empty())
         {
-            std::printf("  [blocks(%u):", ino.blocksize);
+            std::printf("  [blocks(%lu):", (unsigned long)ino.blocksize);
             for(size_t a=0; a<ino.blocklist.size(); ++a)
                 std::printf(" %u", ino.blocklist[a]);
             std::printf("]\n");
@@ -962,10 +969,10 @@ private:
             scan_dir_recursive(i->second, i->first);
     }
     
-    const rangeset<cromfs_block_index>
+    const rangeset<cromfs_block_index, FSBAllocator<int> >
     create_rangeset(cromfs_inodenum_t inonum)
     {
-        rangeset<cromfs_block_index> result;
+        rangeset<cromfs_block_index, FSBAllocator<int> > result;
         cromfs_inode_internal ino = read_inode_and_blocks(inonum);
         
         const uint_fast64_t block_size = ino.blocksize;
