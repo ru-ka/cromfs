@@ -6,8 +6,8 @@ include Makefile.sets
 # -fmudflap
 #LDOPTS += -fmudflap -lmudflap
 
-OPTIM += -O3
-#OPTIM += -O1 -g -fno-inline
+#OPTIM += -O3
+OPTIM += -O1 -g -fno-inline
 #OPTIM += -O3 -g -fno-inline -finline-level=0 -debug extended
 #OPTIM += -O0 -g -fno-inline
 # -ftree-vectorize 
@@ -22,10 +22,6 @@ CPPFLAGS += -I../lib -I..
 #CPPFLAGS += -DCOMPRESS_MT
 
 OBJS_LZMADEC += ../lib/lzma/C/LzmaDec.o
-OBJS_LZMADEC += ../lib/lzma/C/Alloc.o
-
-OBJS_LZMA += ../lib/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.o
-OBJS_LZMA += ../lib/lzma/CPP/7zip/Common/StreamUtils.o
 OBJS_LZMA += $(OBJS_LZMADEC)
 OBJS_LZMA += ../lib/lzma/C/LzmaEnc.o
 OBJS_LZMA += ../lib/lzma/C/LzFind.o

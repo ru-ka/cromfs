@@ -28,7 +28,6 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include <sys/stat.h>
 
 extern "C" {
-#include "lib/lzma/C/Alloc.h"
 #include "lib/lzma/C/LzmaDec.h"
 }
 
@@ -67,19 +66,21 @@ static void EraseRandomlyOne(T& container)
     container.erase(container.lower_bound(random));
 }
 
-static void *SzAlloc(void *p, size_t size) { p = p; return MyAlloc(size); }
-static void SzFree(void *p, void *address) { p = p; MyFree(address); }
+static void *SzAlloc(void*, size_t size)
+    { return new unsigned char[size]; }
+static void SzFree(void*, void *address)
+    { unsigned char*a = (unsigned char*)address; delete[] a; }
 static const std::vector<unsigned char> LZMADeCompress
     (const unsigned char* buf, size_t BufSize)
 {
-    if(BufSize <= 5+8) 
+    if(BufSize <= LZMA_PROPS_SIZE+8) 
     {
     /*clearly_not_ok:*/
         //ok = false;
         return std::vector<unsigned char> ();
     }
      
-    uint_least64_t out_sizemax = R64(&buf[5]);
+    uint_least64_t out_sizemax = R64(&buf[LZMA_PROPS_SIZE]);
     
     /*if(out_sizemax >= (size_t)~0ULL)
     {
@@ -93,11 +94,11 @@ static const std::vector<unsigned char> LZMADeCompress
     
     ELzmaStatus status;
     SizeT destlen = result.size();
-    SizeT srclen = BufSize-13;
+    SizeT srclen = BufSize-(LZMA_PROPS_SIZE+8);
     int res = LzmaDecode(
         &result[0], &destlen,
-        &buf[13], &srclen,
-        &buf[0], 13,
+        &buf[LZMA_PROPS_SIZE+8], &srclen,
+        &buf[0], LZMA_PROPS_SIZE+8,
         LZMA_FINISH_END,
         &status,
         &alloc);

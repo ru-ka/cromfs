@@ -1,16 +1,9 @@
 #include "endian.hh" /* For R64 */
 
-#include "lzma/CPP/Common/MyWindows.h"  // for obligatory GUID-related definitions
-#include "lzma/CPP/Common/MyInitGuid.h" // for IID_IUnknown (needed for LZMA linking)
-//#include "lzma/CPP/7zip/IDecl.h"
-//#include "lzma/CPP/7zip/ICoder.h"
-
 extern "C" {
-#include "lzma/C/Alloc.h"
 #include "lzma/C/LzmaDec.h"
+#include "lzma/C/LzmaEnc.h"
 }
-
-#include "lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.h"
 
 #include "lzma.hh"
 #include "threadfun.hh" // for ForceSwitchThread
@@ -21,9 +14,6 @@ extern "C" {
 #include <cstring> // std::memcpy
 
 #include <stdint.h>
-
-static OLECHAR LZMA_MatchFinder_full[] = L"BT4";
-static OLECHAR LZMA_MatchFinder_quick[] = L"HC4";
 
 int LZMA_verbose = 0;
 
@@ -179,66 +169,50 @@ static UInt32 SelectDictionarySizeFor(unsigned datasize)
    #endif
 }
 
+static void *SzAlloc(void*, size_t size)
+    { return new unsigned char[size]; }
+static void SzFree(void*, void *address)
+    { unsigned char*a = (unsigned char*)address; delete[] a; }
+static ISzAlloc LZMAalloc = { SzAlloc, SzFree };
 
-class CInStreamRam: public ISequentialInStream, public CMyUnknownImp
+class MemReader: public ISeqInStream
 {
-    const std::vector<unsigned char>& input;
-    size_t Pos;
 public:
-    MY_UNKNOWN_IMP
-  
-    CInStreamRam(const std::vector<unsigned char>& buf) : input(buf), Pos(0)
-    {
-    }
-    virtual ~CInStreamRam() {}
-  
-    STDMETHOD(Read)(void *data, UInt32 size, UInt32 *processedSize);
-};
-
-STDMETHODIMP CInStreamRam::Read(void *data, UInt32 size, UInt32 *processedSize)
-{
-    size_t remain = input.size() - Pos;
-    if (size > remain) size = remain;
-  
-    std::memcpy(data, &input[Pos], size);
-    Pos += size;
-    
-    if(processedSize != NULL) *processedSize = size;
-    
-    return S_OK;
-}
-
-class COutStreamRam: public ISequentialOutStream, public CMyUnknownImp
-{
-    std::vector<Byte> result;
-    size_t Pos;
+    const std::vector<unsigned char>& inbuf;
+    size_t pos;
 public:
-    MY_UNKNOWN_IMP
-    
-    COutStreamRam(): result(), Pos(0) { }
-    virtual ~COutStreamRam() { }
-    
-    void Reserve(unsigned n) { result.reserve(n); }
-    const std::vector<Byte>& Get() const { return result; }
-  
-    HRESULT WriteByte(Byte b)
+    MemReader(const std::vector<unsigned char>& buf)
+        : ISeqInStream(), inbuf(buf), pos(0)
     {
-        if(Pos >= result.size()) result.resize(Pos+1);
-        result[Pos++] = b;
-        return S_OK;
+        Read = ReadMethod;
     }
-  
-    STDMETHOD(Write)(const void *data, UInt32 size, UInt32 *processedSize);
+    static SRes ReadMethod(void *pp, void *buf, size_t *size)
+    {
+        MemReader& p = *(MemReader*)pp;
+        size_t rem = p.inbuf.size()-p.pos;
+        size_t read = *size;
+        if(read > rem) read= rem;
+        std::memcpy(buf, &p.inbuf[p.pos], read);
+        *size = read;
+        p.pos += read;
+        return SZ_OK;
+    }
 };
-STDMETHODIMP COutStreamRam::Write(const void *data, UInt32 size, UInt32 *processedSize)
+class MemWriter: public ISeqOutStream
 {
-    if(Pos+size > result.size()) result.resize(Pos+size);
+public:
+    std::vector<unsigned char> buf;
+public:
+    MemWriter(): ISeqOutStream(), buf() { Write = WriteMethod; }
     
-    std::memcpy(&result[Pos], data, size);
-    if(processedSize != NULL) *processedSize = size;
-    Pos += size;
-    return S_OK;
-}
+    static size_t WriteMethod(void*pp, const void* from, size_t size)
+    {
+        MemWriter& p = *(MemWriter*)pp;
+        const unsigned char* i = (const unsigned char*)from;
+        p.buf.insert(p.buf.end(), i, i+size);
+        return size;
+    }
+};
 
 const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& buf,
     unsigned pb,
@@ -249,7 +223,8 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
         SelectDictionarySizeFor(buf.size()));
 }
 
-const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& buf,
+const std::vector<unsigned char> LZMACompress(
+    const std::vector<unsigned char>& buf,
     unsigned pb,
     unsigned lp,
     unsigned lc,
@@ -257,62 +232,56 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 {
     if(buf.empty()) return buf;
     
-    NCompress::NLZMA::CEncoder *encoderSpec = new NCompress::NLZMA::CEncoder;
-    CMyComPtr<ICompressCoder> encoder = encoderSpec;
-    const PROPID propIDs[] = 
+    CLzmaEncProps props;
+    LzmaEncProps_Init(&props);
+    props.dictSize = dictionarysize;
+    props.pb       = pb;
+    props.lp       = lp;
+    props.lc       = lc;
+    props.fb       = LZMA_NumFastBytes;
+    props.mc       = LZMA_MatchFinderCycles;
+    props.algo     = LZMA_AlgorithmNo;
+    props.numThreads = 1;
+    
+    switch(LZMA_AlgorithmNo)
     {
-        NCoderPropID::kAlgorithm,
-        NCoderPropID::kDictionarySize,  
-        NCoderPropID::kNumFastBytes,
-        NCoderPropID::kMatchFinderCycles,
-        NCoderPropID::kPosStateBits,
-        NCoderPropID::kLitPosBits,
-        NCoderPropID::kLitContextBits,
-        NCoderPropID::kMatchFinder
-        /*
-    Other properties to consider:
-        kMatchFinder (VT_BSTR)
-        kMatchFinderCycles (VT_UI4)
-        kEndMarker (VT_BOOL) --apparently, this is false by default, so no need to adjust
-        */
-    };
-    const unsigned kNumProps = sizeof(propIDs) / sizeof(propIDs[0]);
-    PROPVARIANT properties[kNumProps];
-    properties[0].vt = VT_UI4; properties[0].ulVal = (UInt32)LZMA_AlgorithmNo;
-    properties[1].vt = VT_UI4; properties[1].ulVal = (UInt32)dictionarysize;
-    properties[2].vt = VT_UI4; properties[2].ulVal = (UInt32)LZMA_NumFastBytes;
-    properties[3].vt = VT_UI4; properties[3].ulVal = (UInt32)LZMA_MatchFinderCycles;
-    properties[4].vt = VT_UI4; properties[4].ulVal = (UInt32)pb;
-    properties[5].vt = VT_UI4; properties[5].ulVal = (UInt32)lp;
-    properties[6].vt = VT_UI4; properties[6].ulVal = (UInt32)lc;
-    properties[7].vt = VT_BSTR; properties[7].bstrVal =
-        (LZMA_AlgorithmNo ? LZMA_MatchFinder_full : LZMA_MatchFinder_quick);
-
-    if (encoderSpec->SetCoderProperties(propIDs, properties, kNumProps) != S_OK)
+        case 0: // quick: HC4
+            props.btMode = 0;
+            props.level = 1;
+            break;
+        case 1: // full: BT4
+        default:
+            props.level = 9;
+            props.btMode       = 1;
+            props.numHashBytes = 4;
+            break;
+    }
+    
+    CLzmaEncHandle p = LzmaEnc_Create(&LZMAalloc);
+    int res = LzmaEnc_SetProps(p, &props);
+    if(res != SZ_OK)
     {
     Error:
+        LzmaEnc_Destroy(p, &LZMAalloc, &LZMAalloc);
         return std::vector<unsigned char> ();
     }
     
-    COutStreamRam *const outStreamSpec = new COutStreamRam;
-    CMyComPtr<ISequentialOutStream> outStream = outStreamSpec;
-    CInStreamRam *const inStreamSpec = new CInStreamRam(buf);
-    CMyComPtr<ISequentialInStream> inStream = inStreamSpec;
+    unsigned char propsEncoded[LZMA_PROPS_SIZE + 8];
+    size_t propsSize = sizeof propsEncoded;
+    res = LzmaEnc_WriteProperties(p, propsEncoded, &propsSize);
+    if(res != SZ_OK) goto Error;
     
-    outStreamSpec->Reserve(buf.size());
+    MemReader is(buf);
+    MemWriter os;
+    W64(propsEncoded+LZMA_PROPS_SIZE, buf.size());
+    os.buf.insert(os.buf.end(), propsEncoded, propsEncoded+LZMA_PROPS_SIZE+8);
+    
+    res = LzmaEnc_Encode(p, &os, &is, 0, &LZMAalloc, &LZMAalloc);
+    if(res != SZ_OK) goto Error;
 
-    if (encoderSpec->WriteCoderProperties(outStream) != S_OK) goto Error;
+    LzmaEnc_Destroy(p, &LZMAalloc, &LZMAalloc);
     
-    for (unsigned i = 0; i < 8; i++)
-    {
-        UInt64 t = (UInt64)buf.size();
-        outStreamSpec->WriteByte((Byte)((t) >> (8 * i)));
-    }
-
-    HRESULT lzmaResult = encoder->Code(inStream, outStream, 0, 0, 0);
-    if (lzmaResult != S_OK) goto Error;
-    
-    return outStreamSpec->Get();
+    return os.buf;
 }
 
 const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& buf)
@@ -325,19 +294,17 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 
 #undef RC_NORMALIZE
 
-static void *SzAlloc(void *p, size_t size) { p = p; return MyAlloc(size); }
-static void SzFree(void *p, void *address) { p = p; MyFree(address); }
 const std::vector<unsigned char> LZMADeCompress
     (const std::vector<unsigned char>& buf, bool& ok)
 {
-    if(buf.size() <= 5+8) 
+    if(buf.size() <= LZMA_PROPS_SIZE+8) 
     {
     /*clearly_not_ok:*/
         ok = false;
         return std::vector<unsigned char> ();
     }
     
-    uint_least64_t out_sizemax = R64(&buf[5]);
+    uint_least64_t out_sizemax = R64(&buf[LZMA_PROPS_SIZE]);
     
     /*if(out_sizemax >= (size_t)~0ULL)
     {
@@ -347,18 +314,16 @@ const std::vector<unsigned char> LZMADeCompress
     
     std::vector<unsigned char> result(out_sizemax);
     
-    ISzAlloc alloc = { SzAlloc, SzFree };
-    
     ELzmaStatus status;
     SizeT destlen = result.size();
-    SizeT srclen = buf.size()-13;
+    SizeT srclen = buf.size()-(LZMA_PROPS_SIZE+8);
     int res = LzmaDecode(
         &result[0], &destlen,
-        &buf[13], &srclen,
-        &buf[0], 13,
+        &buf[LZMA_PROPS_SIZE+8], &srclen,
+        &buf[0], LZMA_PROPS_SIZE,
         LZMA_FINISH_END,
         &status,
-        &alloc);
+        &LZMAalloc);
     
     /*
     fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
@@ -367,7 +332,7 @@ const std::vector<unsigned char> LZMADeCompress
     */
     
     ok = res == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK
-      && srclen == (buf.size()-13) && destlen == out_sizemax;
+      && srclen == (buf.size()-LZMA_PROPS_SIZE) && destlen == out_sizemax;
     return result;
 }
 
