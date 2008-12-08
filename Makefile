@@ -1,4 +1,4 @@
-VERSION=1.5.4.3
+VERSION=1.5.5
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -77,53 +77,16 @@ ARCHFILES=\
 	lib/rangeset.hh lib/rangeset.tcc \
 	lib/rangemultimap.hh lib/rangemultimap.tcc \
 	\
-	lib/LzmaDecode.c lib/LzmaDecode.h lib/LzmaTypes.h \
-	\
-	lib/lzma/ORIGIN \
-	lib/lzma/LGPL.txt \
-	lib/lzma/lzma.txt \
-	\
-	lib/lzma/C/7zCrc.c \
-	lib/lzma/C/7zCrc.h \
-	lib/lzma/C/Alloc.c \
-	lib/lzma/C/Alloc.h \
-	lib/lzma/C/IStream.h \
+	lib/lzma/C/LzmaDec.c \
+	lib/lzma/C/LzmaDec.h \
+	lib/lzma/C/LzmaEnc.c \
+	lib/lzma/C/LzmaEnc.h \
 	lib/lzma/C/Types.h \
-	lib/lzma/CPP/Common/CRC.cpp \
-	lib/lzma/CPP/Common/Defs.h \
-	lib/lzma/CPP/Common/MyCom.h \
-	lib/lzma/CPP/Common/MyException.h \
-	lib/lzma/CPP/Common/MyGuidDef.h \
-	lib/lzma/CPP/Common/MyInitGuid.h \
-	lib/lzma/CPP/Common/MyUnknown.h \
-	lib/lzma/CPP/Common/MyWindows.h \
-	lib/lzma/CPP/Common/NewHandler.h \
-	lib/lzma/CPP/Common/StdAfx.h \
-	lib/lzma/CPP/Common/Types.h \
-	lib/lzma/C/Compress/Lz/LzHash.h \
-	lib/lzma/C/Compress/Lz/MatchFinder.c \
-	lib/lzma/C/Compress/Lz/MatchFinder.h \
-	lib/lzma/C/Compress/Lzma/LzmaDecode.c \
-	lib/lzma/C/Compress/Lzma/LzmaDecode.h \
-	lib/lzma/C/Compress/Lzma/LzmaTypes.h \
-	lib/lzma/CPP/7zip/ICoder.h \
-	lib/lzma/CPP/7zip/IStream.h \
-	lib/lzma/CPP/7zip/Common/InBuffer.h \
-	lib/lzma/CPP/7zip/Common/OutBuffer.cpp \
-	lib/lzma/CPP/7zip/Common/OutBuffer.h \
-	lib/lzma/CPP/7zip/Common/StdAfx.h \
-	lib/lzma/CPP/7zip/Common/StreamUtils.cpp \
-	lib/lzma/CPP/7zip/Common/StreamUtils.h \
-	lib/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.cpp \
-	lib/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.h \
-	lib/lzma/CPP/7zip/Compress/LZMA/LZMA.h \
-	lib/lzma/CPP/7zip/Compress/LZMA/StdAfx.h \
-	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.cpp \
-	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.h \
-	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBitTree.h \
-	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoder.h \
-	lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderOpt.h \
-	lib/lzma/CPP/7zip/Compress/RangeCoder/StdAfx.h \
+	lib/lzma/C/LzFind.c \
+	lib/lzma/C/LzFind.h \
+	lib/lzma/C/LzHash.h \
+	lib/lzma/ORIGIN \
+	lib/lzma/lzma.txt \
 	\
 	tests/run.sh \
 	tests/a/fblock.hh tests/a/lzma.hh \
@@ -146,7 +109,8 @@ LDLIBS   += `pkg-config --libs fuse`
 OBJS=\
 	cromfs.o fuse-ops.o fuse-main.o \
 	lib/cromfs-inodefun.o \
-	lib/fadvise.o lib/util.o
+	lib/fadvise.o lib/util.o \
+	lib/lzma/C/LzmaDec.o
 
 LDLIBS += $(FUSELIBS)
 

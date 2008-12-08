@@ -1,9 +1,10 @@
-/* MatchFinder.h */
+/* LzFind.h -- Match finder for LZ algorithms
+2008-10-04 : Igor Pavlov : Public domain */
 
-#ifndef __MATCHFINDER_H
-#define __MATCHFINDER_H
+#ifndef __LZFIND_H
+#define __LZFIND_H
 
-#include "../../IStream.h"
+#include "Types.h"
 
 typedef UInt32 CLzRef;
 
@@ -41,12 +42,12 @@ typedef struct _CMatchFinder
   UInt32 fixedHashSize;
   UInt32 hashSizeSum;
   UInt32 numSons;
-
-  HRes result;
+  SRes result;
+  UInt32 crc[256];
 } CMatchFinder;
 
 #define Inline_MatchFinder_GetPointerToCurrentPos(p) ((p)->buffer)
-#define Inline_MatchFinder_GetIndexByte(p, index) ((p)->buffer[index])
+#define Inline_MatchFinder_GetIndexByte(p, index) ((p)->buffer[(Int32)(index)])
 
 #define Inline_MatchFinder_GetNumAvailableBytes(p) ((p)->streamPos - (p)->pos)
 
@@ -61,18 +62,18 @@ void MatchFinder_Construct(CMatchFinder *p);
      historySize <= 3 GB
      keepAddBufferBefore + matchMaxLen + keepAddBufferAfter < 511MB
 */
-int MatchFinder_Create(CMatchFinder *p, UInt32 historySize, 
+int MatchFinder_Create(CMatchFinder *p, UInt32 historySize,
     UInt32 keepAddBufferBefore, UInt32 matchMaxLen, UInt32 keepAddBufferAfter,
     ISzAlloc *alloc);
 void MatchFinder_Free(CMatchFinder *p, ISzAlloc *alloc);
 void MatchFinder_Normalize3(UInt32 subValue, CLzRef *items, UInt32 numItems);
 void MatchFinder_ReduceOffsets(CMatchFinder *p, UInt32 subValue);
 
-UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byte *buffer, CLzRef *son, 
-    UInt32 _cyclicBufferPos, UInt32 _cyclicBufferSize, UInt32 _cutValue, 
+UInt32 * GetMatchesSpec1(UInt32 lenLimit, UInt32 curMatch, UInt32 pos, const Byte *buffer, CLzRef *son,
+    UInt32 _cyclicBufferPos, UInt32 _cyclicBufferSize, UInt32 _cutValue,
     UInt32 *distances, UInt32 maxLen);
 
-/* 
+/*
 Conditions:
   Mf_GetNumAvailableBytes_Func must be called before each Mf_GetMatchLen_Func.
   Mf_GetPointerToCurrentPos_Func's result must be used only before any other function

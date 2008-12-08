@@ -4,7 +4,10 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-1.5.4.3        <under development>
+1.5.5.1        <under development>
+- Added parallelization to block index search
+
+1.5.5 2008-12-08 Joel Yliluoma <bisqwit@iki.fi>
 - Using Intel ICC as the default compiler when available for
   increased performance (powerful vectorization and automatic
   parallelisation). (Version 10 or greater recommended.)
@@ -13,6 +16,8 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
   improving performance in huge filesystem creation (namely, prevent
   thrashing). Unfortunately, it will decrease performance in
   compressing of small filesystems.
+- Updated LZMA to version 4.62. It includes
+  apparently "speed optimizations" and "some fixes".
 
 1.5.4.2 2008-12-08 Joel Yliluoma <bisqwit@iki.fi>
 - Somehow the 1.5.4.1 release did not have all of the changes

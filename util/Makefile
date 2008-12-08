@@ -1,4 +1,4 @@
-VERSION=1.5.4.3
+VERSION=1.5.5
 
 include Makefile.sets
 
@@ -21,16 +21,12 @@ CPPFLAGS += -I../lib -I..
 #CPPFLAGS += -DCOMPRESS_MF_MT
 #CPPFLAGS += -DCOMPRESS_MT
 
-#OBJS_LZMA += ../lib/lzma/CPP/7zip/Compress/LZMA_Alone/LzmaAlone.o
-OBJS_LZMA += ../lib/lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.o
-OBJS_LZMA += ../lib/lzma/CPP/7zip/Compress/RangeCoder/RangeCoderBit.o
-OBJS_LZMA += ../lib/lzma/CPP/7zip/Common/StreamUtils.o
-OBJS_LZMA += ../lib/lzma/CPP/7zip/Common/OutBuffer.o
-OBJS_LZMA += ../lib/lzma/C/Compress/Lz/MatchFinder.o
-OBJS_LZMA += ../lib/lzma/C/Alloc.o
-OBJS_LZMA += ../lib/lzma/CPP/Common/CRC.o
-OBJS_LZMA += ../lib/lzma/C/7zCrc.o
+OBJS_LZMADEC += ../lib/lzma/C/LzmaDec.o
+OBJS_LZMA += $(OBJS_LZMADEC)
+OBJS_LZMA += ../lib/lzma/C/LzmaEnc.o
+OBJS_LZMA += ../lib/lzma/C/LzFind.o
 OBJS_LZMA += ../lib/lzma.o
+
 
 OBJS_MK += $(OBJS_LZMA)
 OBJS_MK += mkcromfs.o \
@@ -50,7 +46,8 @@ OBJS_UN += unmkcromfs.o ../cromfs.o \
 	   ../lib/fadvise.o \
 	   ../lib/util.o ../lib/fnmatch.o \
 	   ../lib/sparsewrite.o \
-	   ../lib/longfilewrite.o ../lib/cromfs-inodefun.o
+	   ../lib/longfilewrite.o ../lib/cromfs-inodefun.o \
+	   $(OBJS_LZMADEC)
 
 OBJS_CV += $(OBJS_LZMA)
 OBJS_CV += cvcromfs.o ../lib/util.o ../lib/sparsewrite.o \
