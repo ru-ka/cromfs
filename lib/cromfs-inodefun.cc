@@ -11,13 +11,13 @@ uint_fast64_t GetInodeSize(const cromfs_inode_internal& inode, uint_fast32_t sto
     return result;
 }
 
-const uint_fast64_t GetInodeOffset(cromfs_inodenum_t inonum)
+uint_fast64_t GetInodeOffset(cromfs_inodenum_t inonum)
 {
     /* Returns a byte offset into inotab when given an inode number. */
     return (inonum-2) * UINT64_C(4);
 }
 
-const cromfs_inodenum_t get_first_free_inode_number(uint_fast64_t inotab_size)
+cromfs_inodenum_t get_first_free_inode_number(uint_fast64_t inotab_size)
 {
     /* This is the formula for making inode number from inode address */
     return ((inotab_size+3)/4)+2;

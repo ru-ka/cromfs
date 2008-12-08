@@ -9,9 +9,14 @@ extern "C" {
 
 typedef uint_least32_t crc32_t;
 
-#define crc32_startvalue 0xFFFFFFFFUL
+enum { crc32_startvalue = 0xFFFFFFFFUL };
 
-extern crc32_t crc32_update(crc32_t c, unsigned char b)
+/* The second parameter type of crc32_update() is really 'unsigned char',
+ * but if we specify it so, the compiler will explicitly "and 0xFF" the
+ * value when it passes the parameter, and in this particular implementation,
+ * we don't need that happening.
+ */
+extern uint_fast32_t crc32_update(uint_fast32_t c, unsigned/* char*/b)
 #ifdef __GNUC__
                __attribute__((pure))
 #endif

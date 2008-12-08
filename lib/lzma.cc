@@ -10,6 +10,7 @@
 #include <vector>
 #include <algorithm>
 #include <string>
+#include <cstring> // std::memcpy
 
 #include <stdint.h>
 
@@ -188,7 +189,7 @@ public:
 
 STDMETHODIMP CInStreamRam::Read(void *data, UInt32 size, UInt32 *processedSize)
 {
-    UInt32 remain = input.size() - Pos;
+    size_t remain = input.size() - Pos;
     if (size > remain) size = remain;
   
     std::memcpy(data, &input[Pos], size);

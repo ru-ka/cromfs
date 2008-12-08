@@ -29,7 +29,7 @@
  *
  *   Virtual and non-virtual classes are supported.
  *
- * autoptr.hh version 1.3.10
+ * autoptr.hh version 1.3.11
  *
  * The difference to boost::shared_ptr<> is that
  * my autoptr does not keep two pointers around.
@@ -53,12 +53,12 @@ public:
     autoptr(const autoptr &a) : p(&*a) { Birth(); }
     
     // To enable boolean tests with this class: if(tmp) {...}
-    inline operator const bool() const { return p; }
-    inline const bool operator! () const { return !p; }
+    inline operator bool() const { return p; }
+    inline bool operator! () const { return !p; }
     
     // Act like if you were a pointer (for comparisons etc)
     inline operator T* () const { return p; }
-    inline const bool operator< (const autoptr &a) const { return p < a.p; }
+    inline bool operator< (const autoptr &a) const { return p < a.p; }
     
     // Dereferencing
     inline T &operator* () const { return *p; }
@@ -101,17 +101,32 @@ public:
 class ptrable
 {
     mutable unsigned long _ptr_ref_num;
-public:
-    /* These are not really public, but I don't know
-     * how to make them accessible to autoptr<> only.
-     */
-    inline void _ptr_got_you() const { ++_ptr_ref_num; }
-    inline void _ptr_lost_you() const { --_ptr_ref_num; }
+private:
+    template<typename> friend class autoptr;
+
+    inline void _ptr_got_you() const
+    {
+     /* This ifdef is not really required, but it avoids
+      * a nasty warning when the compiler does not support
+      * that #pragma directive.
+      */
+     #ifdef __OPENMP
+      #pragma omp atomic
+     #endif
+        ++_ptr_ref_num;
+    }
+    inline void _ptr_lost_you() const
+    {
+     #ifdef __OPENMP
+      #pragma omp atomic
+     #endif
+        --_ptr_ref_num;
+    }
     /* ptr_lost_you may not do "delete this", because the destructor is not
      * virtual. Deletion must be done by the caller (autoptr::Forget()), who
      * knows what this class actually is and how to delete it.
      */
-    inline const bool _ptr_is_dead() const { return !_ptr_ref_num; }
+    inline bool _ptr_is_dead() const { return !_ptr_ref_num; }
 public:
     /* Birth with refnum 0, not 1.
      * Refnum tells how many autoptr's are referring to this.
@@ -120,6 +135,9 @@ public:
     
     /* Copied element has no referrals, for the same reason. */
     ptrable(const ptrable &) : _ptr_ref_num(0) { }
+    
+    /* */
+    ptrable& operator=(const ptrable& ) { /* No changes to referrals */ return *this; }
     
     /* ptrable does not need to contain a virtual destructor,
      * because even though classes may be derived from ptrable,

@@ -101,7 +101,7 @@ public:
      *
      * May throw: ENOTDIR = not a directory
      */
-    const cromfs_inodenum_t dir_lookup(cromfs_inodenum_t inonum,
+    cromfs_inodenum_t dir_lookup(cromfs_inodenum_t inonum,
                                        const std::string& filename)
         throw (cromfs_exception, std::bad_alloc);
 

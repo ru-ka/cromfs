@@ -145,13 +145,13 @@ namespace fblock_private
             if(fd >= 0) RemapFd(fd);
             // fd will be automcally closed.
         }
-        const uint_fast32_t size()
+        uint_fast32_t size()
         {
             if(is_compressed) return get_raw().size();
             return filesize;
         }
         
-        const time_t get_last_access() const { return last_access; }
+        time_t get_last_access() const { return last_access; }
         
     private:
         void RemapFd(int fd) { mmapped.SetMap(fd, 0, filesize); }
@@ -216,7 +216,7 @@ public:
                             uint_fast32_t req_size) const
         { storage.InitDataReadBuffer(Buffer,size,req_offset,req_size); }
 
-    const time_t get_last_access() const { return storage.get_last_access(); }
+    time_t get_last_access() const { return storage.get_last_access(); }
 
     typedef fblock_private::fblock_storage::undo_t undo_t;
     undo_t create_backup() const { return storage.create_backup(); }

@@ -8,13 +8,13 @@
 class LongFileRead
 {
 public:
-    inline const unsigned char* const GetAddr() const
+    inline const unsigned char* GetAddr() const
         { return buf.Buffer; }
 public:
     LongFileRead(int fd, uint_fast64_t pos, uint_fast64_t size)
         : buf(), map()
     {
-        FadviseWillNeed(fd, pos, size);
+        FadviseNoReuse(fd, pos, size);
         
         map.SetMap(fd, pos, size);
         if(map)

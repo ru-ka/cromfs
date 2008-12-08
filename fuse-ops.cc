@@ -16,8 +16,9 @@ the fuse_reply_err() function.
 
 #include <cerrno>
 #include <fcntl.h>
-#include <sys/statvfs.h>
 #include <cstring>
+#include <sys/statvfs.h>
+#include <cstring> /* for std::memset */
 
 
 #define CROMFS_CTXP(obj,userdata) \
@@ -108,6 +109,10 @@ extern "C" {
     
     static void stat_inode(struct stat& attr, fuse_ino_t ino, const cromfs_inode_internal& i)
     {
+        using namespace std;
+        // ^Because gcc gives me a "error: 'memset' is not a member of 'std'"
+        // Yet, cstring is included
+        
         memset(&attr, 0, sizeof(attr));
         attr.st_dev     = 0;
         attr.st_ino     = ino;

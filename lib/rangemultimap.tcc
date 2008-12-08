@@ -1,5 +1,5 @@
-template<typename Key, typename Value>
-void rangemultimap<Key,Value>::erase(const Key& lo, const Key& up)
+template<typename Key, typename Value, typename Allocator>
+void rangemultimap<Key,Value,Allocator>::erase(const Key& lo, const Key& up)
 {
     for(typename Cont::iterator j, i = data.begin(); i != data.end(); i = j)
     {
@@ -9,12 +9,12 @@ void rangemultimap<Key,Value>::erase(const Key& lo, const Key& up)
     }
 }
 
-template<typename Key, typename Value>
-rangemultimap<Key, Value>
-rangemultimap<Key,Value>::get_slice(const Key& lo, const Key& up) const
+template<typename Key, typename Value, typename Allocator>
+rangemultimap<Key, Value,Allocator>
+rangemultimap<Key,Value,Allocator>::get_slice(const Key& lo, const Key& up) const
 {
     rangeset<Key> tmp; tmp.set(lo, up);
-    rangemultimap<Key, Value> result;
+    rangemultimap<Key, Value,Allocator> result;
     for(typename Cont::const_iterator i = data.begin(); i != data.end(); ++i)
     {
         rangeset<Key> intersection = i->second.intersect(tmp);
@@ -24,11 +24,11 @@ rangemultimap<Key,Value>::get_slice(const Key& lo, const Key& up) const
     return result;
 }
 
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Allocator>
 std::list<Value>
-rangemultimap<Key,Value>::get_valuelist(const Key& lo, const Key& up) const
+rangemultimap<Key,Value,Allocator>::get_valuelist(const Key& lo, const Key& up) const
 {
-    rangeset<Key> tmp; tmp.set(lo, up);
+    rangeset<Key,Allocator> tmp; tmp.set(lo, up);
     std::list<Value> result;
     for(typename Cont::const_iterator i = data.begin(); i != data.end(); ++i)
         if(!i->second.intersect(tmp).empty())

@@ -6,6 +6,7 @@ require_once '/WWW/email.php';
 $title = 'Cromfs: Compressed ROM filesystem for Linux (user-space)';
 $progname = 'cromfs';
 
+
 function usagetext($prog)
 {
   exec('/usr/local/bin/'.$prog.' --help', $kk);
@@ -125,14 +126,14 @@ and by no means a scientific study, but here goes:
   <th>Feature</th>
    <th>Cromfs</th>
    <th>Cramfs</th>
-   <th>Squashfs (3.0)</th>
+   <th>Squashfs (3.3)</th>
    <th>Cloop</th>
   </tr>
  <tr align=left>
   <th>Compression unit</th>
    <td class=good>adjustable arbitrarily (2 MB default)</td>
    <td class=hmm>adjustable, must be power of 2 (4 kB default)</td>
-   <td class=hmm>adjustable, must be power of 2 (64 kB max)</td>
+   <td class=hmm>adjustable, must be power of 2 (1 MB max)</td>
    <td class=hmm>adjustable in 512-byte units (1 MB max)</td>
   </tr>
  <tr align=left>
@@ -213,8 +214,9 @@ and by no means a scientific study, but here goes:
    <td class=good>Yes (fuse)</td>
    <td class=bad>No</td>
    <td class=hmm>An extraction tool (unsquashfs)</td>
-   <td class=bad>An extraction tool (extract_compressed_fs),
-     but cannot be used to extract a single file</td>
+   <td class=good><a href=\"http://fusecloop.sourceforge.net/\">Yes</a> (third-party, using fuse).<br>
+     Cloop itself provides an extraction tool (extract_compressed_fs),
+     but cannot be used to extract a single file.</td>
  <tr align=left>
   <th>Windows driver</th>
    <td class=bad>No</td>
@@ -253,7 +255,7 @@ and by no means a scientific study, but here goes:
       of blocks which consist entirely of nul bytes</th>
    <td class=good>Any two identical blocks are merged and stored only once.</th>
    <td class=good>Supported</td>
-   <td class=bad>Not supported</th>
+   <td class=good>Supported</th>
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Padding (partially filled sectors, wastes space)</th>

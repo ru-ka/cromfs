@@ -1,8 +1,8 @@
 #include "rangeset.hh"
 
-template<typename Key>
-const typename rangeset<Key>::const_iterator
-    rangeset<Key>::ConstructIterator(typename Cont::const_iterator i) const
+template<typename Key,typename Allocator>
+const typename rangeset<Key,Allocator>::const_iterator
+    rangeset<Key,Allocator>::ConstructIterator(typename Cont::const_iterator i) const
 {
     const_iterator tmp(data);
     while(i != data.end() && i->second.is_nil()) ++i;
@@ -10,8 +10,8 @@ const typename rangeset<Key>::const_iterator
     tmp.Reconstruct();
     return tmp;
 }
-template<typename Key>
-void rangeset<Key>::const_iterator::Reconstruct()
+template<typename Key,typename Allocator>
+void rangeset<Key,Allocator>::const_iterator::Reconstruct()
 {
     if(i != data.end())
     {
@@ -28,8 +28,8 @@ void rangeset<Key>::const_iterator::Reconstruct()
         }
     }
 }
-template<typename Key>
-void rangeset<Key>::const_iterator::operator++ ()
+template<typename Key,typename Allocator>
+typename rangeset<Key,Allocator>::const_iterator& rangeset<Key,Allocator>::const_iterator::operator++ ()
 {
     /* Note: The last node before end() is always nil. */
     while(i != data.end())
@@ -38,9 +38,10 @@ void rangeset<Key>::const_iterator::operator++ ()
         if(!i->second.is_nil())break;
     }
     Reconstruct();
+    return *this;
 }
-template<typename Key>
-void rangeset<Key>::const_iterator::operator-- ()
+template<typename Key,typename Allocator>
+typename rangeset<Key,Allocator>::const_iterator& rangeset<Key,Allocator>::const_iterator::operator-- ()
 {
     /* Note: The first node can not be nil. */
     while(i != data.begin())
@@ -49,12 +50,13 @@ void rangeset<Key>::const_iterator::operator-- ()
         if(!i->second.is_nil())break;
     }
     Reconstruct();
+    return *this;
 }
     
-template<typename Key>
-rangeset<Key> rangeset<Key>::intersect(const rangeset<Key>& b) const
+template<typename Key,typename Allocator>
+rangeset<Key,Allocator> rangeset<Key,Allocator>::intersect(const rangeset<Key,Allocator>& b) const
 {
-    rangeset<Key> result;
+    rangeset<Key,Allocator> result;
     const_iterator ai = begin();
     const_iterator bi = b.begin();
     

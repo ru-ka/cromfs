@@ -10,7 +10,7 @@
  *
  * Implemented using changepoints.
  */
-template<typename Key>
+template<typename Key, typename Allocator = std::allocator<Key> >
 class rangeset
 {
     class Valueholder
@@ -24,7 +24,7 @@ class rangeset
         bool operator==(const Valueholder& b) const { return nil==b.nil; }
         bool operator!=(const Valueholder& b) const { return nil!=b.nil; }
     };
-    typedef rangecollection<Key, Valueholder> Cont;
+    typedef rangecollection<Key, Valueholder, Allocator> Cont;
     Cont data;
     
 public:
@@ -38,8 +38,8 @@ public:
         
         bool operator==(const const_iterator& b) const { return i == b.i; }
         bool operator!=(const const_iterator& b) const { return !operator==(b); }
-        void operator++ ();
-        void operator-- ();
+        const_iterator& operator++ ();
+        const_iterator& operator-- ();
         
     private:
         const Cont& data;

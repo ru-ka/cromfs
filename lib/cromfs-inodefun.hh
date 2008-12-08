@@ -3,9 +3,9 @@
 
 uint_fast64_t GetInodeSize(const cromfs_inode_internal& inode, uint_fast32_t storage_opts);
 
-const uint_fast64_t GetInodeOffset(cromfs_inodenum_t inonum);
+uint_fast64_t GetInodeOffset(cromfs_inodenum_t inonum);
 
-const cromfs_inodenum_t get_first_free_inode_number(uint_fast64_t inotab_size);
+cromfs_inodenum_t get_first_free_inode_number(uint_fast64_t inotab_size);
 
 const std::vector<unsigned char> encode_inode
     (const cromfs_inode_internal& inode,

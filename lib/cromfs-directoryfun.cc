@@ -2,7 +2,9 @@
 #include "endian.hh"
 #include "cromfs-directoryfun.hh"
 
-const size_t
+#include <cstring> // std::memcpy
+
+size_t
     calc_encoded_directory_size(const cromfs_dirinfo& dir)
 {
     /* This function could simply be replaced with:
@@ -44,6 +46,7 @@ const std::vector<unsigned char>
         
         W64(&entries[entryoffs], ino);
         std::memcpy(&entries[entryoffs+8], name.c_str(), name.size()+1);
+        //^ basically strcpy, but since we already know the length, this is faster
         
         entryoffs = entries.size();
         ++diroffset;

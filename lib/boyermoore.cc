@@ -2,6 +2,8 @@
 #include "boyermoore.hh"
 #include "threadfun.hh" // for InterruptibleContext
 
+#include <cstdio>
+
 namespace BoyerMooreSearch {
 
 void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needle_length)
@@ -108,7 +110,7 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
         skip[needle_length_minus_1 - suff[i + 1]] = needle_length_minus_1 - i;
 }
 
-const size_t SearchInHorspool(const unsigned char* haystack, const size_t haystack_length,
+size_t SearchInHorspool(const unsigned char* haystack, const size_t haystack_length,
     const occtable_type& occ,
     const unsigned char* needle, const size_t needle_length)
 {
@@ -143,7 +145,7 @@ const size_t SearchInHorspool(const unsigned char* haystack, const size_t haysta
     return haystack_length;
 }
 
-const size_t SearchIn(const unsigned char* haystack, const size_t haystack_length,
+size_t SearchIn(const unsigned char* haystack, const size_t haystack_length,
     const occtable_type& occ,
     const skiptable_type& skip,
     const unsigned char* needle, const size_t needle_length)
@@ -187,7 +189,7 @@ const size_t SearchIn(const unsigned char* haystack, const size_t haystack_lengt
     return haystack_length;
 }
 
-const size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length,
+size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length,
     const occtable_type& occ,
     const skiptable_type& skip,
     const unsigned char* needle, const size_t needle_length)
