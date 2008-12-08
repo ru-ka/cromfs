@@ -6,8 +6,8 @@ include Makefile.sets
 # -fmudflap
 #LDOPTS += -fmudflap -lmudflap
 
-#OPTIM += -O3
-OPTIM += -O1 -g -fno-inline
+OPTIM += -O3
+#OPTIM += -O1 -g -fno-inline
 #OPTIM += -O3 -g -fno-inline -finline-level=0 -debug extended
 #OPTIM += -O0 -g -fno-inline
 # -ftree-vectorize 
