@@ -27,8 +27,11 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include <sys/time.h>
 #include <sys/stat.h>
 
-#include "lib/LzmaDecode.h"
-#include "lib/LzmaDecode.c"
+extern "C" {
+#include "lib/lzma/C/Alloc.h"
+#include "lib/lzma/C/LzmaDec.h"
+}
+
 #include "lib/longfileread.hh"
 #include "lib/cromfs-inodefun.hh"
 #include "lib/fadvise.hh"
@@ -64,27 +67,49 @@ static void EraseRandomlyOne(T& container)
     container.erase(container.lower_bound(random));
 }
 
+static void *SzAlloc(void *p, size_t size) { p = p; return MyAlloc(size); }
+static void SzFree(void *p, void *address) { p = p; MyFree(address); }
 static const std::vector<unsigned char> LZMADeCompress
     (const unsigned char* buf, size_t BufSize)
 {
-    if(BufSize <= 5+8) return std::vector<unsigned char> ();
-    
+    if(BufSize <= 5+8) 
+    {
+    /*clearly_not_ok:*/
+        //ok = false;
+        return std::vector<unsigned char> ();
+    }
+     
     uint_least64_t out_sizemax = R64(&buf[5]);
     
+    /*if(out_sizemax >= (size_t)~0ULL)
+    {
+        // cannot even allocate a vector this large.
+        goto clearly_not_ok;
+    }*/
+       
     std::vector<unsigned char> result(out_sizemax);
     
-    CLzmaDecoderState state;
-    LzmaDecodeProperties(&state.Properties, &buf[0], LZMA_PROPERTIES_SIZE);
-    state.Probs = new CProb[LzmaGetNumProbs(&state.Properties)];
+    ISzAlloc alloc = { SzAlloc, SzFree };
     
-    SizeT in_done;
-    SizeT out_done;
-    LzmaDecode(&state, &buf[13], BufSize-13, &in_done,
-               &result[0], result.size(), &out_done);
+    ELzmaStatus status;
+    SizeT destlen = result.size();
+    SizeT srclen = BufSize-13;
+    int res = LzmaDecode(
+        &result[0], &destlen,
+        &buf[13], &srclen,
+        &buf[0], 13,
+        LZMA_FINISH_END,
+        &status,
+        &alloc);
     
-    delete[] state.Probs;
-    
-    result.resize(out_done);
+    /*
+    fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
+        res, (int)in_done, (int)buf.size(),
+             (int)out_done, (int)out_sizemax);
+    */
+      
+    //ok = res == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK
+    //  && srclen == (BufSize-13) && destlen == out_sizemax;
     return result;
 }
 

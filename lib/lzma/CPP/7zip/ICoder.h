@@ -5,11 +5,7 @@
 
 #include "IStream.h"
 
-// "23170F69-40C1-278A-0000-000400xx0000"
-#define CODER_INTERFACE(i, x) \
-DEFINE_GUID(IID_ ## i, \
-0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x04, 0x00, x, 0x00, 0x00); \
-struct i: public IUnknown
+#define CODER_INTERFACE(i, x) DECL_INTERFACE(i, 4, x)
 
 CODER_INTERFACE(ICompressProgressInfo, 0x04)
 {
@@ -19,8 +15,8 @@ CODER_INTERFACE(ICompressProgressInfo, 0x04)
 CODER_INTERFACE(ICompressCoder, 0x05)
 {
   STDMETHOD(Code)(ISequentialInStream *inStream,
-      ISequentialOutStream *outStream, 
-      const UInt64 *inSize, 
+      ISequentialOutStream *outStream,
+      const UInt64 *inSize,
       const UInt64 *outSize,
       ICompressProgressInfo *progress) PURE;
 };
@@ -28,9 +24,9 @@ CODER_INTERFACE(ICompressCoder, 0x05)
 CODER_INTERFACE(ICompressCoder2, 0x18)
 {
   STDMETHOD(Code)(ISequentialInStream **inStreams,
-      const UInt64 **inSizes, 
+      const UInt64 **inSizes,
       UInt32 numInStreams,
-      ISequentialOutStream **outStreams, 
+      ISequentialOutStream **outStreams,
       const UInt64 **outSizes,
       UInt32 numOutStreams,
       ICompressProgressInfo *progress) PURE;
@@ -43,13 +39,14 @@ namespace NCoderPropID
     kDictionarySize = 0x400,
     kUsedMemorySize,
     kOrder,
+    kBlockSize,
     kPosStateBits = 0x440,
     kLitContextBits,
     kLitPosBits,
     kNumFastBytes = 0x450,
     kMatchFinder,
     kMatchFinderCycles,
-    kNumPasses = 0x460, 
+    kNumPasses = 0x460,
     kAlgorithm = 0x470,
     kMultiThread = 0x480,
     kNumThreads,
@@ -59,7 +56,7 @@ namespace NCoderPropID
 
 CODER_INTERFACE(ICompressSetCoderProperties, 0x20)
 {
-  STDMETHOD(SetCoderProperties)(const PROPID *propIDs, 
+  STDMETHOD(SetCoderProperties)(const PROPID *propIDs,
       const PROPVARIANT *properties, UInt32 numProperties) PURE;
 };
 
@@ -124,7 +121,7 @@ CODER_INTERFACE(ICompressFilter, 0x40)
   // Filter return outSize (UInt32)
   // if (outSize <= size): Filter have converted outSize bytes
   // if (outSize > size): Filter have not converted anything.
-  //      and it needs at least outSize bytes to convert one block 
+  //      and it needs at least outSize bytes to convert one block
   //      (it's for crypto block algorithms).
 };
 

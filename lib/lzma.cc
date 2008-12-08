@@ -1,7 +1,15 @@
 #include "endian.hh" /* For R64 */
 
-#include "lzma/CPP/Common/MyWindows.h"
-#include "lzma/CPP/Common/MyInitGuid.h"
+#include "lzma/CPP/Common/MyWindows.h"  // for obligatory GUID-related definitions
+#include "lzma/CPP/Common/MyInitGuid.h" // for IID_IUnknown (needed for LZMA linking)
+//#include "lzma/CPP/7zip/IDecl.h"
+//#include "lzma/CPP/7zip/ICoder.h"
+
+extern "C" {
+#include "lzma/C/Alloc.h"
+#include "lzma/C/LzmaDec.h"
+}
+
 #include "lzma/CPP/7zip/Compress/LZMA/LZMAEncoder.h"
 
 #include "lzma.hh"
@@ -317,9 +325,8 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 
 #undef RC_NORMALIZE
 
-#include "LzmaDecode.h"
-#include "LzmaDecode.c"
-
+static void *SzAlloc(void *p, size_t size) { p = p; return MyAlloc(size); }
+static void SzFree(void *p, void *address) { p = p; MyFree(address); }
 const std::vector<unsigned char> LZMADeCompress
     (const std::vector<unsigned char>& buf, bool& ok)
 {
@@ -340,14 +347,18 @@ const std::vector<unsigned char> LZMADeCompress
     
     std::vector<unsigned char> result(out_sizemax);
     
-    CLzmaDecoderState state;
-    LzmaDecodeProperties(&state.Properties, &buf[0], LZMA_PROPERTIES_SIZE);
-    state.Probs = new CProb[LzmaGetNumProbs(&state.Properties)];
+    ISzAlloc alloc = { SzAlloc, SzFree };
     
-    SizeT in_done;
-    SizeT out_done;
-    int res = LzmaDecode(&state, &buf[13], buf.size()-13, &in_done,
-                         &result[0], result.size(), &out_done);
+    ELzmaStatus status;
+    SizeT destlen = result.size();
+    SizeT srclen = buf.size()-13;
+    int res = LzmaDecode(
+        &result[0], &destlen,
+        &buf[13], &srclen,
+        &buf[0], 13,
+        LZMA_FINISH_END,
+        &status,
+        &alloc);
     
     /*
     fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
@@ -355,13 +366,8 @@ const std::vector<unsigned char> LZMADeCompress
              (int)out_done, (int)out_sizemax);
     */
     
-    ok = out_done == out_sizemax
-      && in_done+5+8 == buf.size()
-      && res == LZMA_RESULT_OK;
-    
-    delete[] state.Probs;
-    
-    result.resize(out_done);
+    ok = res == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK
+      && srclen == (buf.size()-13) && destlen == out_sizemax;
     return result;
 }
 
