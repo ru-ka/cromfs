@@ -4,6 +4,16 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.4.3        <under development>
+- Using Intel ICC as the default compiler when available for
+  increased performance (powerful vectorization and automatic
+  parallelisation). (Version 10 or greater recommended.)
+- mkcromfs: Changed the block index into a sparse temporary file to
+  turn a memory bottleneck into a diskspace bottleneck, hopefully
+  improving performance in huge filesystem creation (namely, prevent
+  thrashing). Unfortunately, it will decrease performance in
+  compressing of small filesystems.
+
 1.5.4.2 2008-12-08 Joel Yliluoma <bisqwit@iki.fi>
 - Somehow the 1.5.4.1 release did not have all of the changes
   I wanted to publish in it; 1.5.4.2 hopefully repacks it
@@ -21,6 +31,8 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
   format to allow each inode to have a different block size. Useful
   when creating filesystems that contain different types of files.
   Files of different type can have different block sizes.
+- Fixed some warnings spewed by gcc (none important).
+  LZMA code still outputs dozens of those, but there's little I can do.
 
 1.5.3.2	2007-09-04 Joel Yliluoma <bisqwit@iki.fi>
 - Added include for sys/statvfs.h, fixing a compilation error
