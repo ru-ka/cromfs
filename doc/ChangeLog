@@ -4,6 +4,11 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.4.2 2008-12-08 Joel Yliluoma <bisqwit@iki.fi>
+- Somehow the 1.5.4.1 release did not have all of the changes
+  I wanted to publish in it; 1.5.4.2 hopefully repacks it
+  and does work on gcc version 4.3.
+
 1.5.4.1	2008-11-24 Joel Yliluoma <bisqwit@iki.fi>
 - The next release WIP has been long overdue because of hairy
   thread-related crashing problems, but for now, I'll release
