@@ -10,6 +10,8 @@
 #include "autoclosefd.hh"
 #include "append.hh"
 
+#include "threadfun.hh"
+
 #include <vector>
 #include <string>
 #include <cstdio>
@@ -186,10 +188,14 @@ class mkcromfs_fblock
 {
 private:
     mutable fblock_private::fblock_storage storage;
+    mutable MutexType lock;
 
 public:
-    mkcromfs_fblock()            : storage()        { }
-    mkcromfs_fblock(int disk_id) : storage(disk_id) { }
+    mkcromfs_fblock()            : storage()       , lock() { }
+    mkcromfs_fblock(int disk_id) : storage(disk_id), lock() { }
+
+    mkcromfs_fblock(const mkcromfs_fblock& b) : storage(b.storage), lock() { }
+    mkcromfs_fblock& operator=(const mkcromfs_fblock& b) { storage = b.storage; return *this; }
 
     void EnsureMMapped() const { storage.EnsureMMapped(); }
 
@@ -199,6 +205,8 @@ public:
     void Unmap() { storage.Unmap(); }
     void Remap() { storage.Remap(); }
     void Delete() { storage.Delete(); }
+
+    MutexType& GetMutex() const { return lock; } // For use with ScopedLocks.
 
     const std::vector<unsigned char> get_raw() const { return storage.get_raw(); }
     const std::vector<unsigned char> get_compressed() const { return storage.get_compressed(); }

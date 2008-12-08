@@ -62,8 +62,15 @@ private:
      * that evaluates into false is returned.
      */
     const ReusingPlan CreateReusingPlan(
+        const unsigned char* data, uint_fast32_t size,
+        const BlockIndexHashType crc,
+        bool PreferRealIndex = true);
+
+    const ReusingPlan CreateReusingPlan(
         const std::vector<unsigned char>& data,
-        const BlockIndexHashType crc);
+        const BlockIndexHashType crc,
+        bool PreferRealIndex = true)
+    { return CreateReusingPlan(&data[0], data.size(), crc, PreferRealIndex); }
 
     /* Execute a reusing plan */
     cromfs_blocknum_t Execute(const ReusingPlan& plan, uint_fast32_t blocksize);

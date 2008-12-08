@@ -41,6 +41,16 @@ public:
             { fprintf(stderr, "- mutex unlocking failed: %d\n", res); fflush(stderr); throw this; }
 #endif
     }
+    bool TryLock() {
+        int res = pthread_mutex_trylock(&mut);
+#if THREAD_DEBUG >= 1
+        //{char tmp;fprintf(stderr, "- mutex locking by %p\n", &tmp); fflush(stderr);}
+        if(res != 0)
+            { fprintf(stderr, "- mutex locking failed: %d\n", res); fflush(stderr); throw this; }
+#endif
+        return res == 0;
+    }
+
     pthread_mutex_t& Get() { return mut; }
 private:
     pthread_mutex_t mut;

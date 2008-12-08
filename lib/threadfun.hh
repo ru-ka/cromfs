@@ -8,10 +8,14 @@
 template<typename MutexType>
 struct BasicScopedLock
 {
+    // lock
     explicit BasicScopedLock(MutexType& m) : mut(m), locked(true) { mut.Lock(); }
+    // try locking
+    BasicScopedLock(MutexType& m, int) : mut(m), locked(mut.TryLock()) { }
     ~BasicScopedLock() { Unlock(); }
     void Unlock() { if(!locked) return; locked=false; mut.Unlock(); }
     void LockAgain() { if(locked) return; mut.Lock(); locked=true; }
+    bool IsLocked() const { return locked; }
 private: // prevent copying the scoped lock.
     void operator=(const BasicScopedLock&);
     BasicScopedLock(const BasicScopedLock&);

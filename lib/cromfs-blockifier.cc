@@ -60,30 +60,166 @@ static void DisplayProgress(
 }*/
 
 const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
-    const std::vector<unsigned char>& data,
-    const BlockIndexHashType crc)
+    const unsigned char* data, uint_fast32_t size,
+    const BlockIndexHashType crc,
+    bool PreferRealIndex)
 {
-    /* Use CRC32 to find the identical block. */
+    /* Use hashing to find candidate identical blocks. */
 
+    /*
+    Information on threadability:
+    The functions called in this section are:
+      block_index.FindRealIndex()
+        - This uses pread64(), does no changes to data structures
+      block_index.FindAutoIndex()
+        - This uses pread64(), does no changes to data structures
+      block_is()
+        - This accesses fblocks:
+            fblocks[]
+            fblock.InitDataReadBuffer()
+            std::memcmp()
+          For safety, that is put into a critical block.
+    */
+ //{ RemapReadonly ro_marker;
+
+    /*if(crc != BlockIndexHashCalc(data, size))
+    {
+        throw "Wrong hash";
+    }*/
+
+#ifndef _OPENMP
+    /* This is what we want to achieve, in the smallest form. */
     cromfs_blocknum_t     real_match;
     cromfs_block_internal auto_match;
 
+    //Bprintf("                            Reusing-plan for %08X: %s\n", crc, DataDump(data, size).c_str());
+
+    /* The hash may match multiple times, but a hash match is not a sure indication of actual
+     * data match, so we must always use block_is() to actually verify whether we got a match.
+     */
     for(size_t matchcount=0; block_index.FindRealIndex(crc, real_match, matchcount); ++matchcount)
     {
-        /* Identical CRC was found */
-        /* It may be found more than once, and the finds may be
-         * false positives. Hence, we must verify each instance.
-         */
-        if(block_is(real_match, data)) return ReusingPlan(crc, real_match);
+        bool match = block_is(real_match, data, size);
+
+        /*{
+            const cromfs_block_internal& block = blocks[real_match];
+            const mkcromfs_fblock& fblock = fblocks[block.get_fblocknum(BSIZE,FSIZE)];
+            const uint_fast32_t my_offs = block.get_startoffs(BSIZE,FSIZE);
+
+            ScopedLock lck(fblock.GetMutex());
+            DataReadBuffer Buffer; uint_fast32_t BufSize;
+            fblock.InitDataReadBuffer(Buffer, BufSize, my_offs, size);
+            lck.Unlock();
+
+            printf("                            fblock %u:%u%s %s (%u should be >= %u)\n",
+                (unsigned)block.fblocknum, (unsigned)block.startoffs,
+                match ? " (match)" : " (no match)",
+                DataDump(Buffer.Buffer, size).c_str(),
+                (unsigned)BufSize,
+                (unsigned)(my_offs + size));
+
+            if(crc != BlockIndexHashCalc(Buffer.Buffer, size))
+            {
+                throw "Wrong hash";
+            }
+        }*/
+
+        if(match)
+            return ReusingPlan(crc, real_match);
     }
+
     for(size_t matchcount=0; block_index.FindAutoIndex(crc, auto_match, matchcount); ++matchcount)
+        if(block_is(auto_match, data, size))
+            return ReusingPlan(crc, auto_match);
+#else
+    /* OPENMP VERSION */
+    /* Goals: The same functionality as above, but with as much parallelism as possible. */
+
+    cromfs_blocknum_t     which_real_found;
+    cromfs_block_internal which_auto_found;
+    bool real_done=false, real_found=false;
+    bool auto_done=false, auto_found=false;
+    size_t real_matchno=0; MutexType real_matchno_lock, real_which_lock;
+    size_t auto_matchno=0; MutexType auto_matchno_lock, auto_which_lock;
+
+    #pragma omp parallel default(shared)
     {
-        /* Identical CRC was found */
-        /* It may be found more than once, and the finds may be
-         * false positives. Hence, we must verify each instance.
-         */
-        if(block_is(auto_match, data)) return ReusingPlan(crc, auto_match);
+        for(;;) // RealIndex tests
+        {
+            #pragma omp flush(real_done,real_found,auto_found)
+            if(real_done || real_found) break;
+            if(auto_found && !PreferRealIndex) break;
+
+            real_matchno_lock.Lock();
+            size_t matchno;
+            #pragma omp flush(real_matchno)
+            matchno = real_matchno++;
+            #pragma omp flush(real_matchno)
+            real_matchno_lock.Unlock();
+
+            cromfs_blocknum_t real_match;
+            if(!block_index.FindRealIndex(crc, real_match, matchno))
+            {
+                real_done = true;
+                #pragma omp flush(real_done)
+                break;
+            }
+
+            const cromfs_block_internal& block = blocks[real_match];
+            bool match = block_is(block, data, size);
+            //printf("                            fblock %u:%u%s %s\n", (unsigned)block.fblocknum, (unsigned)block.startoffs, match ? " (match)" : " (no match)", DataDump(data, size).c_str());
+            if(match)
+            {
+                if(real_which_lock.TryLock())
+                {
+                    which_real_found=real_match;
+                    real_found=true;
+                    #pragma omp flush(real_found,which_real_found)
+                    real_which_lock.Unlock();
+                }
+                break;
+            }
+        }
+
+        for(;;) // AutoIndex tests
+        {
+            #pragma omp flush(auto_done,real_found,auto_found)
+            if(real_found || auto_found || auto_done) break;
+
+            auto_matchno_lock.Lock();
+            size_t matchno;
+            #pragma omp flush(auto_matchno)
+            matchno = auto_matchno++;
+            #pragma omp flush(auto_matchno)
+            auto_matchno_lock.Unlock();
+
+            cromfs_block_internal auto_match;
+            if(!block_index.FindAutoIndex(crc, auto_match, matchno))
+            {
+                auto_done = true;
+                #pragma omp flush(auto_done)
+                break;
+            }
+
+            const mkcromfs_fblock& fblock = fblocks[auto_match.get_fblocknum(BSIZE,FSIZE)];
+            if(block_is(auto_match, data, size))
+            {
+                if(auto_which_lock.TryLock())
+                {
+                    which_auto_found=auto_match;
+                    auto_found=true;
+                    #pragma omp flush(auto_found,which_auto_found)
+                    auto_which_lock.Unlock();
+                }
+                break;
+            }
+        }
     }
+
+    /* Match? */
+    if(real_found) return ReusingPlan(crc, which_real_found);
+    if(auto_found) return ReusingPlan(crc, which_auto_found);
+#endif
 
     /* Didn't find match. */
     return ReusingPlan(false);
@@ -508,6 +644,8 @@ bool cromfs_blockifier::block_is(
     const mkcromfs_fblock& fblock = fblocks[block.get_fblocknum(BSIZE,FSIZE)];
     const uint_fast32_t my_offs = block.get_startoffs(BSIZE,FSIZE);
 
+    ScopedLock lck(fblock.GetMutex());
+
     /* Notice: my_offs + data_size may be larger than the fblock size.
      * This can happen if there is a collision in the checksum index. A smaller
      * block might have been indexed, and it matches to a larger request.
@@ -516,8 +654,11 @@ bool cromfs_blockifier::block_is(
 
     DataReadBuffer Buffer; uint_fast32_t BufSize;
     fblock.InitDataReadBuffer(Buffer, BufSize, my_offs, data_size);
-    if(BufSize < my_offs + data_size) return false;
-    return std::memcmp(Buffer.Buffer, &data[0], data_size) == 0;
+
+    lck.Unlock();
+
+    return BufSize >= my_offs + data_size
+          && std::memcmp(Buffer.Buffer, &data[0], data_size) == 0;
 }
 
 /* How many automatic indexes can be done in this amount of data? */
