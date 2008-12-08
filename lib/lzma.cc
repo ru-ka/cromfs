@@ -258,11 +258,22 @@ const std::vector<unsigned char> LZMACompress(
     }
     
     CLzmaEncHandle p = LzmaEnc_Create(&LZMAalloc);
+    struct AutoReleaseLzmaEnc
+    {
+        AutoReleaseLzmaEnc(CLzmaEncHandle pp) : p(pp) { }
+        ~AutoReleaseLzmaEnc()
+        {
+            LzmaEnc_Destroy(p, &LZMAalloc, &LZMAalloc);
+        }
+        CLzmaEncHandle p;
+    } AutoReleaser(p); // Create a destructor that ensures
+    // that the CLzmaEncHandle is not leaked, even if an
+    // exception happens
+    
     int res = LzmaEnc_SetProps(p, &props);
     if(res != SZ_OK)
     {
     Error:
-        LzmaEnc_Destroy(p, &LZMAalloc, &LZMAalloc);
         return std::vector<unsigned char> ();
     }
     
@@ -279,8 +290,6 @@ const std::vector<unsigned char> LZMACompress(
     res = LzmaEnc_Encode(p, &os, &is, 0, &LZMAalloc, &LZMAalloc);
     if(res != SZ_OK) goto Error;
 
-    LzmaEnc_Destroy(p, &LZMAalloc, &LZMAalloc);
-    
     return os.buf;
 }
 

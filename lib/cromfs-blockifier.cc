@@ -176,6 +176,11 @@ struct OverlapFinderParameter
     std::vector<cromfs_fblocknum_t> candidates;
 
     mutable MutexType       mutex;
+    
+    /* ICC complains of a missing constructor, but we
+     * cannot use a constructor, otherwise the {} initialization
+     * will be invalid syntax later on.
+     */
 };
 
 static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
