@@ -42,13 +42,16 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Wed Oct 10 13:48:45 EEST 2007
-# for Linux chii 2.6.23-rc8 #1 SMP Mon Oct 1 23:10:38 EEST 2007 x86_64 GNU/Linux
+# at Mon Dec  8 09:18:25 EET 2008
+# for Linux chii 2.6.26 #1 SMP Wed Jul 23 08:47:11 EEST 2008 x86_64 GNU/Linux
 # To change, run ./configure again.
 #
-CC=gcc-4.2
-CPP=cpp-4.2
-CXX=g++-4.2
-OPTIM +=  -ftree-vectorize
+CC=gcc-4.3
+CPP=cpp-4.3
+CXX=g++-4.3
+OPTIM +=  -ftree-vectorize -ffast-math -minline-stringops-dynamically -mmmx -msse -msse2
 CPPFLAGS +=  -fopenmp -DUSE_PTHREADS=0 -DHASH_MAP=1
 LDFLAGS +=  -fopenmp
+WARNINGS +=  -Wall -Wundef -Wcast-qual -Wpointer-arith -Wconversion -Wwrite-strings -Wsign-compare -Wredundant-decls -Winit-self -Wextra -Wcast-align -Wformat
+CWARNINGS +=  -Waggregate-return -Wshadow -Winline -Wstrict-prototypes -Wmissing-prototypes
+CXXWARNINGS +=  -Woverloaded-virtual -Weffc++
