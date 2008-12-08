@@ -2,7 +2,6 @@
 #include "datasource.hh"
 #include "cromfs-blockindex.hh"
 #include "cromfs-fblockfun.hh"
-#include "crc32.h"
 #include "autoptr"
 
 #include <list>
@@ -43,14 +42,14 @@ private:
         bool success;
         cromfs_blocknum_t blocknum;
         cromfs_block_internal block;
-        crc32_t crc;
+        BlockIndexHashType crc;
     public:
         ReusingPlan(bool) : success(false),blocknum(NO_BLOCK),block(),crc(0) { }
         
-        ReusingPlan(crc32_t c, cromfs_blocknum_t bn)
+        ReusingPlan(BlockIndexHashType c, cromfs_blocknum_t bn)
             : success(true),blocknum(bn),block(),crc(c) { }
         
-        ReusingPlan(crc32_t c, const cromfs_block_internal& b)
+        ReusingPlan(BlockIndexHashType c, const cromfs_block_internal& b)
             : success(true),blocknum(NO_BLOCK),block(b),crc(c) { }
         
         operator bool() const { return success; }
@@ -62,7 +61,7 @@ private:
      */
     const ReusingPlan CreateReusingPlan(
         const std::vector<unsigned char>& data,
-        const crc32_t crc);
+        const BlockIndexHashType crc);
 
     /* Execute a reusing plan */
     cromfs_blocknum_t Execute(const ReusingPlan& plan);
@@ -76,16 +75,16 @@ private:
         cromfs_fblocknum_t fblocknum;
         AppendInfo         appended;
         const BoyerMooreNeedleWithAppend& data;
-        crc32_t            crc;
+        BlockIndexHashType            crc;
         
         WritePlan(cromfs_fblocknum_t f, const AppendInfo& a,
-                  const BoyerMooreNeedleWithAppend& d, crc32_t c)
+                  const BoyerMooreNeedleWithAppend& d, BlockIndexHashType c)
             : fblocknum(f), appended(a), data(d), crc(c) { }
     };
     
     /* Create a plan on appending to a fblock. It will always work. */
     /* But which fblock to append to? */
-    const WritePlan CreateWritePlan(const BoyerMooreNeedleWithAppend& data, crc32_t crc,
+    const WritePlan CreateWritePlan(const BoyerMooreNeedleWithAppend& data, BlockIndexHashType crc,
         overlaptest_history_t& history) const;
     
     /* Execute an appension plan */
@@ -100,6 +99,16 @@ private:
         uint_fast32_t old_raw_size,
         uint_fast32_t new_raw_size,
         uint_fast32_t bsize);
+    void TryAutoIndex(const cromfs_fblocknum_t fblocknum,
+        const unsigned char* ptr,
+        uint_fast32_t bsize,
+        uint_fast32_t startoffs);
+    void AutoIndexBetween(const cromfs_fblocknum_t fblocknum,
+        const unsigned char* ptr,
+        uint_fast32_t min_offset,
+        uint_fast32_t max_size,
+        uint_fast32_t bsize,
+        uint_fast32_t stepping);
 
     bool block_is(const cromfs_block_internal& block,
                   const std::vector<unsigned char>& data) const
@@ -151,8 +160,8 @@ private:
     public:
         // The data that must be eventually found in _some_ fblock
         const std::vector<unsigned char> data;
-        // crc32 sum calculated from the data
-        const crc32_t crc;
+        // hash calculated from the data
+        const BlockIndexHashType crc;
         
         // Where to write the blocknum once it's decided
         unsigned char* const target;
@@ -169,7 +178,7 @@ private:
         individual_order(const std::vector<unsigned char>& d,
                          unsigned char* t)
             : data(d),
-              crc(crc32_calc(&d[0], d.size())),
+              crc(BlockIndexHashCalc(&d[0], d.size())),
               target(t),
               needle(),
               badness(0),

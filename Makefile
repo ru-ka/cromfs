@@ -61,6 +61,7 @@ ARCHFILES=\
 	lib/append.cc lib/append.hh \
 	lib/fnmatch.cc lib/fnmatch.hh \
 	lib/crc32.h lib/crc32.cc \
+	lib/newhash.h lib/newhash.cc \
 	lib/assert++.hh lib/assert++.cc \
 	lib/sparsewrite.cc lib/sparsewrite.hh \
 	lib/longfileread.hh \

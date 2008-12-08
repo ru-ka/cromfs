@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <stdexcept>
 #include <set>
 
 ///////////////////////////////////////////////
@@ -42,41 +43,30 @@ static void DisplayProgress(
 
 const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
     const std::vector<unsigned char>& data,
-    const crc32_t crc)
+    const BlockIndexHashType crc)
 {
     /* Use CRC32 to find the identical block. */
-    if(true)
+
+    cromfs_blocknum_t     real_match;
+    cromfs_block_internal auto_match;
+
+    for(size_t matchcount=0; block_index.FindRealIndex(crc, real_match, matchcount); ++matchcount)
     {
-        cromfs_blocknum_t match;
-        for(size_t matchcount=0; block_index.FindRealIndex(crc, match, matchcount); ++matchcount)
-        {
-            /* Identical CRC was found */
-            /* It may be found more than once, and the finds may be
-             * false positives. Hence, we must verify each instance.
-             */
-            if(block_is(match, data))
-            {
-                /* Match! */
-                return ReusingPlan(crc, match);
-            }
-        }
+        /* Identical CRC was found */
+        /* It may be found more than once, and the finds may be
+         * false positives. Hence, we must verify each instance.
+         */
+        if(block_is(real_match, data)) return ReusingPlan(crc, real_match);
     }
-    if(true)
+    for(size_t matchcount=0; block_index.FindAutoIndex(crc, auto_match, matchcount); ++matchcount)
     {
-        cromfs_block_internal match;
-        for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
-        {
-            /* Identical CRC was found */
-            /* It may be found more than once, and the finds may be
-             * false positives. Hence, we must verify each instance.
-             */
-            if(block_is(match, data))
-            {
-                /* Match! */
-                return ReusingPlan(crc, match);
-            }
-        }
+        /* Identical CRC was found */
+        /* It may be found more than once, and the finds may be
+         * false positives. Hence, we must verify each instance.
+         */
+        if(block_is(auto_match, data)) return ReusingPlan(crc, auto_match);
     }
+
     /* Didn't find match. */
     return ReusingPlan(false);
 }
@@ -87,7 +77,7 @@ struct SmallestInfo
     cromfs_fblocknum_t fblocknum;
     uint_fast32_t      adds;
     AppendInfo         appended;
-    
+
     int get_found() const
     {
         ScopedLock lck(mutex);
@@ -119,7 +109,7 @@ static void FindOverlap(
     long max_may_add = smallest.found ? smallest_adds : data.size();
     if(FblockSize + max_may_add > FSIZE) max_may_add = FSIZE - FblockSize;
     if(max_may_add < 0) max_may_add = 0;
-    
+
     long minimum_pos     = minimum_test_pos;
     long minimum_overlap = data.size() - max_may_add;
     if(minimum_overlap > FblockSize
@@ -128,29 +118,30 @@ static void FindOverlap(
         // No way this is going to work, skip this fblock
         return;
     }
-    
+
     if(AutoIndexPeriod == 1)
     {
-        // only search for append if autoindexperiod covers all possible full overlaps
+        // If autoindexperiod covers all possible full overlaps,
+        // then we need to only search for appends.
         minimum_pos = std::max(0l, (long)(FblockSize - data.size() + 1));
     }
-    
+
     AppendInfo appended = AnalyzeAppend(
         data, minimum_pos, minimum_overlap, OverlapGranularity,
         Buffer.Buffer, FblockSize);
-    
+
     minimum_test_pos = appended.AppendBaseOffset;
-    
+
     uint_fast32_t this_adds = appended.AppendedSize - appended.OldSize;
     uint_fast32_t overlap_size = data.size() - this_adds;
-    
+
     bool this_is_good =
         overlap_size
         ? (appended.AppendedSize < (uint_fast32_t)FSIZE)
         : (appended.AppendedSize < (uint_fast32_t)(FSIZE - MinimumFreeSpace));
 
     lck.LockAgain();
-    
+
     if(!smallest.found)
         {} // ok
     else if(this_adds < smallest.adds)
@@ -159,7 +150,7 @@ static void FindOverlap(
         {}
     else
         this_is_good = false;
-    
+
     if(this_is_good)
     {
         smallest.found     = this_adds == 0 ? 2 : 1;
@@ -190,20 +181,20 @@ struct OverlapFinderParameter
 static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
 {
     ScopedLock lck(params.mutex);
-    
+
     const int necessarity = a < MaxFblockCountForBruteForce ? 2 : 1;
 
     const int found = params.smallest.get_found();
     if(found == 2) return true; // cancel all
-    
+
     const bool is_necessary = necessarity > params.smallest.get_found();
     if(!is_necessary) return false;
-                            
+
     const cromfs_fblocknum_t fblocknum = params.candidates[a];
     size_t& minimum_tested_pos = params.minimum_tested_positions[fblocknum];
 
     lck.Unlock();
-            
+
     const mkcromfs_fblock& fblock = params.fblocks[fblocknum];
 
     FindOverlap(params.data,
@@ -216,23 +207,23 @@ static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
 }
 
 const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
-    const BoyerMooreNeedleWithAppend& data, crc32_t crc,
+    const BoyerMooreNeedleWithAppend& data, BlockIndexHashType crc,
     overlaptest_history_t& minimum_tested_positions) const
 {
     /* First check if we can write into an existing fblock. */
     if(true)
     {
-        OverlapFinderParameter params = 
+        OverlapFinderParameter params =
         {
             fblocks, data, minimum_tested_positions,
             { 0, 0, 0, AppendInfo(), MutexType() },
             std::vector<cromfs_fblocknum_t>(),
             MutexType()
         };
-        
+
         std::vector<cromfs_fblocknum_t>& candidates = params.candidates;
         candidates.reserve(fblocks.size());
-        
+
         /* First candidate: The fblock that we would get without brute force. */
         /* I.e. the fblock with smallest fitting hole. */
         { int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
@@ -240,7 +231,7 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
           {
             candidates.push_back(i);
         } }
-        
+
         /* Next candidates: last N (up to MaxFblockCountForBruteForce) */
         cromfs_fblocknum_t j = fblocks.size();
         while(j > 0 && candidates.size() < MaxFblockCountForBruteForce)
@@ -251,15 +242,15 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
                 candidates.push_back(j);
             }
         }
-        
+
 #if 0
         unsigned priority_candidates = candidates.size();
-        
+
         /* This code would get run only when the smallest fitting hole fblock
          * has no room for a block (and there's no full overlap). On large
          * filesystems, it causes a large memory use, so it's better be disabled.
          */
-        
+
         /* Add all the rest of fblocks as non-priority candidates. */
         for(cromfs_fblocknum_t a=fblocks.size(); a-- > 0; )
         {
@@ -269,24 +260,24 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
             candidates.push_back(a);
           skip_candidate: ;
         }
-        
+
         /* Randomly shuffle the non-priority candidates */
         std::random_shuffle(candidates.begin()+priority_candidates, candidates.end());
 #endif
-        
+
         /* Task description:
          * Check each candidate (up to MaxFblockCountForBruteForce)
          * for the fit which reuses the maximum amount of data.
          */
-        
+
         for(size_t a=0; a<candidates.size(); ++a)
             fblocks[candidates[a]].EnsureMMapped();
-        
+
         static ThreadWorkEngine<OverlapFinderParameter> engine;
         engine.RunTasks(UseThreads, candidates.size(),
                         params,
                         OverlapFindWorker);
-        
+
         /* Utilize the finding, if it's an overlap,
          * or it's an appension into a fblock that still has
          * so much room that it doesn't conflict with MinimumFreeSpace.
@@ -295,11 +286,11 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         {
             const cromfs_fblocknum_t fblocknum = params.smallest.fblocknum;
             AppendInfo appended = params.smallest.appended;
-            
+
             /* This is the plan. */
             return WritePlan(fblocknum, appended, data, crc);
         }
-        
+
         /* Oh, so it didn't fit anywhere! */
     }
 
@@ -318,7 +309,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan)
         if(DisplayBlockSelections)
         {
             const cromfs_block_internal& block = blocks[blocknum];
-            
+
             const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
             const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
 
@@ -329,12 +320,12 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan)
         }
         return blocknum;
     }
-    
+
     const cromfs_block_internal& block = plan.block;
-    
+
     const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
     const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
-    
+
     /* If this match didn't have a real block yet, create one */
     blocknum = CreateNewBlock(block);
     if(DisplayBlockSelections)
@@ -344,7 +335,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan)
             (unsigned)fblocknum,
             (unsigned)startoffs);
     }
-    
+
     /* Assign a real blocknumber to the autoindex */
     block_index.DelAutoIndex(plan.crc, block);
     block_index.AddRealIndex(plan.crc, blocknum);
@@ -357,7 +348,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
 {
     const cromfs_fblocknum_t fblocknum = plan.fblocknum;
     const AppendInfo& appended         = plan.appended;
-    
+
     /* Note: This line may automatically create a new fblock. */
     mkcromfs_fblock& fblock = fblocks[fblocknum];
 
@@ -386,7 +377,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
                 (unsigned)new_data_offset,
                 (unsigned)new_raw_size,
                 (int)new_remaining_room);
-            
+
             if(new_data_offset < old_raw_size)
             {
                 std::printf(" (overlap %d)", (int)(old_raw_size - new_data_offset));
@@ -399,27 +390,27 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     }
 
     fblock.put_appended_raw(appended, plan.data);
-    
+
     if(DoUpdateBlockIndex)
     {
         if(last_autoindex_length.size() <= fblocknum)
             last_autoindex_length.resize(fblocknum+1);
-        
+
         std::set<long> different_bsizes;
         different_bsizes.insert(BSIZE);
-        for(std::map<std::string, long>::const_iterator
+        for(std::vector<std::pair<std::string, long> >::const_iterator
             i = BSIZE_FOR.begin(); i != BSIZE_FOR.end(); ++i)
         {
             different_bsizes.insert(i->second);
         }
-        
+
         for(std::set<long>::const_iterator
             i = different_bsizes.begin(); i != different_bsizes.end(); ++i)
         {
             const long bsize = *i;
 
             size_t& last_raw_size = last_autoindex_length[fblocknum][bsize];
-            
+
             if(new_raw_size - last_raw_size >= 1024*256
             || new_raw_size >= FSIZE-MinimumFreeSpace - bsize)
             {
@@ -428,15 +419,15 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
             }
         }
     }
-    
+
     if(DisplayBlockSelections)
     {
         std::printf("\n");
     }
-    
+
     cromfs_block_internal block;
     block.define(fblocknum, new_data_offset);
-    
+
     /* If the block is uncompressed, preserve it fblock_index
      * so that CompressOneRandomly() may pick it some day.
      *
@@ -482,10 +473,43 @@ bool cromfs_blockifier::block_is(
 }
 
 /* How many automatic indexes can be done in this amount of data? */
-static const int CalcAutoIndexCount(int_fast32_t raw_size, uint_fast32_t bsize)
+static int CalcAutoIndexCount(int_fast32_t raw_size, uint_fast32_t bsize)
 {
     int_fast32_t a = (raw_size - bsize + AutoIndexPeriod);
     return a / (int_fast32_t)AutoIndexPeriod;
+}
+
+void cromfs_blockifier::TryAutoIndex(
+    const cromfs_fblocknum_t fblocknum,
+    const unsigned char* ptr,
+    uint_fast32_t bsize,
+    uint_fast32_t startoffs)
+{
+    const BlockIndexHashType crc = BlockIndexHashCalc(ptr, bsize);
+
+    /* Check if this checksum has already been indexed */
+    cromfs_block_internal match;
+    for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
+    {
+        if(block_is(match, ptr, bsize)) return;
+    }
+    match.define(fblocknum, startoffs);
+    block_index.AddAutoIndex(crc, match);
+}
+
+void cromfs_blockifier::AutoIndexBetween(const cromfs_fblocknum_t fblocknum,
+    const unsigned char* ptr,
+    uint_fast32_t min_offset,
+    uint_fast32_t max_size,
+    uint_fast32_t bsize,
+    uint_fast32_t stepping)
+{
+    while(min_offset + bsize <= max_size)
+    {
+        TryAutoIndex(fblocknum, ptr, bsize, min_offset);
+        ptr          += stepping;
+        min_offset   += stepping;
+    }
 }
 
 void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
@@ -495,40 +519,48 @@ void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
 {
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
 
+#if 0 /* NES indexing */
+    if(bsize == 128)
+    {
+        const uint_fast32_t min_offset = old_raw_size, new_size = new_raw_size - min_offset;
+        DataReadBuffer Buffer; uint_fast32_t BufSize;
+        fblock.InitDataReadBuffer(Buffer, BufSize, min_offset, new_size);
+        const unsigned char* const new_raw_data = Buffer.Buffer;
+
+        static const unsigned char NES_SIG[4] = {'N','E','S',0x1A};
+        static const BoyerMooreNeedle nes_needle(NES_SIG, 4);
+        /* Search for NES headers */
+
+        size_t prevpos = new_size;
+        for(size_t searchpos=0; ; )
+        {
+            const size_t nespos = nes_needle.SearchIn(new_raw_data+searchpos, new_size-searchpos)+searchpos;
+            if(prevpos < new_size)
+            {
+                AutoIndexBetween(fblocknum, new_raw_data+prevpos, prevpos+min_offset, new_raw_size, bsize, bsize);
+                prevpos = new_size;
+            }
+            if(nespos+bsize > new_size) break;
+            if(new_raw_data[nespos+4] < 0x10 && new_raw_data[nespos+9] == 0x00
+            && new_raw_data[nespos+10] == 0x00)
+            {
+                prevpos = nespos;
+            }
+        }
+    }
+#endif
+
     /* Index all new checksum data */
     const int OldAutoIndexCount = std::max(CalcAutoIndexCount(old_raw_size,bsize),0);
     const int NewAutoIndexCount = std::max(CalcAutoIndexCount(new_raw_size,bsize),0);
     if(NewAutoIndexCount > OldAutoIndexCount && NewAutoIndexCount > 0)
     {
         const uint_fast32_t min_offset = AutoIndexPeriod * OldAutoIndexCount;
-    
+
         DataReadBuffer Buffer; uint_fast32_t BufSize;
         fblock.InitDataReadBuffer(Buffer, BufSize, min_offset, new_raw_size - min_offset);
-        const unsigned char* const new_raw_data = Buffer.Buffer;
-        
-        for(int count=OldAutoIndexCount+1; count<=NewAutoIndexCount; ++count)
-        {
-            uint_fast32_t startoffs = AutoIndexPeriod * (count-1);
-            if(startoffs + bsize > new_raw_size) throw "error";
-            /*
-            std::printf("\nBlock reached 0x%X->0x%X bytes in size, (%d..%d), adding checksum for 0x%X; ",
-                old_raw_size, new_raw_size,
-                OldAutoMD5Count, NewAutoMD5Count,
-                startoffs);
-            */
-            const unsigned char* ptr = &new_raw_data[startoffs - min_offset];
-            const crc32_t crc = crc32_calc(ptr, bsize);
-            
-            /* Check if this checksum has already been indexed */
-            cromfs_block_internal match;
-            for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
-            {
-                if(block_is(match, ptr, bsize)) goto dont_add_crc;
-            }
-            match.define(fblocknum, startoffs);
-            block_index.AddAutoIndex(crc, match);
-          dont_add_crc: ;
-        }
+        const unsigned char* new_raw_data = Buffer.Buffer;
+        AutoIndexBetween(fblocknum, new_raw_data, min_offset, new_raw_size, bsize, AutoIndexPeriod);
     }
 }
 
@@ -541,9 +573,9 @@ void cromfs_blockifier::AddOrder(
     unsigned char* target)
 {
     individual_order order(data, target);
-    
+
     order.badness = offset; // a dummy sorting rule at first
-    
+
     std::fflush(stdout); std::fflush(stderr);
     const ReusingPlan plan1 = CreateReusingPlan(order.data, order.crc);
     if(plan1)
@@ -569,12 +601,12 @@ void cromfs_blockifier::HandleOrders(
     }
     std::printf("\n");
     */
-    
+
     ssize_t num_handle = blockify_orders.size() - max_remaining_orders;
     //printf("handling %d, got %u\n", (int)num_handle, (unsigned)blockify_orders.size());
 
     if(num_handle <= 0) return;
-    
+
     if(TryOptimalOrganization)
     {
 ReEvaluate:
@@ -582,10 +614,10 @@ ReEvaluate:
     }
     // Now the least bad are handled first.
     blockify_orders.sort( std::mem_fun_ref(&individual_order::CompareOrder) );
-    
+
     /* number of orders might have changed, recheck it */
     num_handle = blockify_orders.size() - max_remaining_orders;
-    
+
     for(orderlist_t::iterator j,i = blockify_orders.begin();
         num_handle > 0 && i != blockify_orders.end();
         i = j, --num_handle)
@@ -613,7 +645,7 @@ ReEvaluate:
         else
         {
             if(!order.needle) order.MakeNeedle();
-            
+
             const WritePlan plan2 = CreateWritePlan(*order.needle, order.crc,
                 order.minimum_tested_positions);
             /*
@@ -628,9 +660,9 @@ ReEvaluate:
             */
             order.Write(Execute(plan2));
         }
-        
+
         blockify_orders.erase(i);
-        
+
         if(TryOptimalOrganization >= 2) goto ReEvaluate;
     }
 }
@@ -638,15 +670,15 @@ ReEvaluate:
 void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
 {
     SuperStringFinder<orderlist_t::iterator> supfinder;
-    
+
     /*
         TODO: Devise an algorithm to sort the blocks in an order that yields
         best results.
-        
+
         The algorithms presented here seem to
         actually yield a *worse* compression!...
      */
-     
+
     /* Algorithm 1:
      *   Sort them in optimalness order. Most optimal first.
      *   Optimalness = - (size_added / original_size)
@@ -683,15 +715,15 @@ void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
             blockify_orders.erase(i);
             continue;
         }
-        
+
         order.badness = -overlap_size;
-        
+
         if(TryOptimalOrganization >= 2)
         {
             supfinder.AddData(order.needle, i);
         }
     }
-    
+
     /* Algorithm 2:
      *   Use the superstring finder (which reduces into asymmetric TSP)
      */
@@ -702,7 +734,7 @@ void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
         for(size_t a=0; a<sup_result.size(); ++a)
             sup_result[a]->badness = a;
     }
-    
+
     /* Algorithm 3:
      *   Sort them in optimalness order. Most optimal first.
      *   Optimalness = - (total size if this block goes first,
@@ -727,15 +759,15 @@ void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
         {
             const WritePlan plan = CreateWritePlan(*j->needle, j->crc,
                 j->minimum_tested_positions);
-            
+
             uint_fast32_t size_added_here
                 = plan.appended.AppendedSize - plan.appended.OldSize;
-            
+
             // create backup
             SituationBackup backup;
             backup.n_blocks     = blocks.size();
             backup.fblock_state = fblocks.create_backup();
-            
+
             // try what happens
             std::printf("> false write- ");
             Execute(plan, false);
@@ -754,13 +786,13 @@ void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
                 size_added_sub += appended.AppendedSize - appended.OldSize;
                 ++size_added_count;
             }
-            
+
             j->badness = size_added_here;
             if(size_added_count)
                 j->badness += size_added_sub / (double)size_added_count;
-            
+
             std::printf(">> badness %g\n", j->badness);
-            
+
             // restore backup
             blocks.resize(backup.n_blocks);
             fblocks.restore_backup(backup.fblock_state);
@@ -776,10 +808,10 @@ void cromfs_blockifier::FlushBlockifyRequests()
     static const char label[] = "Blockifying";
 
     orderlist_t blockify_orders;
-    
+
     std::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
-    
+
     uint_fast64_t total_size = 0, blocks_total = 0;
     uint_fast64_t total_done = 0, blocks_done  = 0;
     for(size_t a=0; a<schedule.size(); ++a)
@@ -789,11 +821,11 @@ void cromfs_blockifier::FlushBlockifyRequests()
         total_size   += size;
         blocks_total += CalcSizeInBlocks(size, blocksize);
     }
-    
+
     for(ssize_t a=0; a < (ssize_t) schedule.size(); ++a)
     {
         schedule_item& s = schedule[a];
-        
+
         datasource_t* source  = s.GetDataSource();
         unsigned char* target = s.GetBlockTarget();
         uint_fast64_t nbytes  = source->size();
@@ -801,9 +833,9 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
         if(DisplayBlockSelections)
             std::printf("%s\n", source->getname().c_str());
-        
+
         ssize_t HandlingCounter = BlockifyAmount2;
-        
+
         source->open();
         uint_fast64_t offset = 0;
         while(nbytes > 0)
@@ -811,31 +843,32 @@ void cromfs_blockifier::FlushBlockifyRequests()
             DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
 
             uint_fast64_t eat = std::min(blocksize, nbytes);
-            
+
             /* TODO: Threading, possibly? */
-            
+
+            if(unlikely(source == 0)) throw std::logic_error("source should not be 0");
             AddOrder(blockify_orders, source->read(eat), offset, target);
-            
+
             nbytes -= eat;
             offset += eat;
             target += BLOCKNUM_SIZE_BYTES(); // where pointer will be written to.
             total_done += eat;
             ++blocks_done;
-            
+
             if(--HandlingCounter <= 0)
                 { HandlingCounter = BlockifyAmount2;
                   HandleOrders(blockify_orders, BlockifyAmount1); }
         }
         source->close();
         HandleOrders(blockify_orders, BlockifyAmount1);
-        
+
         schedule.erase(schedule.begin() + a);
         --a;
     }
     schedule.clear();
-    
+
     DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
-    
+
     HandleOrders(blockify_orders, 0);
 }
 
@@ -858,13 +891,13 @@ void cromfs_blockifier::NoMoreBlockifying()
 void cromfs_blockifier::EnablePackedBlocksIfPossible()
 {
     /*long MinimumBsize = BSIZE;
-    for(std::map<std::string, long>::const_iterator
+    for(std::vector<std::pair<std::string, long> >::const_iterator
         i = BSIZE_FOR.begin(); i != BSIZE_FOR.end(); ++i)
     {
         MinimumBsize = std::min(MinimumBsize, i->second);
     }*/
     long MinimumBsize = 1; // partial blocks may be even this small.
-    
+
     if(MayPackBlocks)
     {
         uint_fast64_t max_blockoffset = FSIZE - MinimumBsize;

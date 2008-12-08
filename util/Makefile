@@ -35,7 +35,7 @@ OBJS_LZMA += ../lib/lzma.o
 OBJS_MK += $(OBJS_LZMA)
 OBJS_MK += mkcromfs.o \
 	   ../lib/fadvise.o \
-	   ../lib/crc32.o ../lib/util.o \
+	   ../lib/newhash.o ../lib/util.o \
 	   ../lib/fnmatch.o ../lib/assert++.o ../lib/append.o \
 	   ../lib/sparsewrite.o \
 	   ../lib/longfilewrite.o \
@@ -79,5 +79,5 @@ include depfun.mak
 include .libdepend
 
 clean:
-	rm -f $(OBJS_MK) $(OBJS_UN)
+	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV)
 	rm -f mkcromfs unmkcromfs
