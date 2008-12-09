@@ -5,7 +5,7 @@ require_once '/WWW/email.php';
 
 $title = 'Cromfs: Compressed ROM filesystem for Linux (user-space)';
 $progname = 'cromfs';
-
+$git = 'git://bisqwit.iki.fi/cromfs.git';
 
 function usagetext($prog)
 {
