@@ -1,4 +1,4 @@
-VERSION=1.5.4.2
+VERSION=1.5.4.3
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -61,6 +61,7 @@ ARCHFILES=\
 	lib/append.cc lib/append.hh \
 	lib/fnmatch.cc lib/fnmatch.hh \
 	lib/crc32.h lib/crc32.cc \
+	lib/newhash.h lib/newhash.cc \
 	lib/assert++.hh lib/assert++.cc \
 	lib/sparsewrite.cc lib/sparsewrite.hh \
 	lib/longfileread.hh \
@@ -69,6 +70,7 @@ ARCHFILES=\
 	lib/boyermoore.hh lib/boyermoore.cc \
 	lib/superstringfinder.hh \
 	lib/asymmetrictsp.hh \
+	lib/fsballocator.hh \
 	lib/autoptr \
 	\
 	lib/range.hh lib/range.tcc \

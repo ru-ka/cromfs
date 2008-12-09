@@ -1,5 +1,4 @@
 #include "../cromfs-defs.hh"
-#include "crc32.h"
 
 #if 1
 # include "bucketcontainer.hh"
@@ -12,6 +11,12 @@
 
 #define NO_BLOCK   ((cromfs_blocknum_t)~UINT64_C(0))
 
+/* Methods for calculating the block hash (used to be CRC-32) */
+typedef uint_least32_t BlockIndexHashType;
+extern BlockIndexHashType
+    BlockIndexHashCalc(const unsigned char* buf, unsigned long size);
+
+
 /* Block index may contain two different types of things:
  *   crc32 -> cromfs_blocknum_t
  *            (real index)
@@ -23,9 +28,7 @@
  * is turned into a real index entry, no deletion&reinsertion
  * is required.
  *
- * However, we now use two separate indexes to conserve RAM.
- * Also, the performance of std::multimap<> matches the intended
- * use of real_index better than that of BucketContainer does.
+ * However, we now use two separate indexes to conserve resources.
  */
 
 /* Index for reusable material */
@@ -36,128 +39,70 @@
  */
 class block_index_type
 {
-private:
-    template<typename IndexT, typename LastT, typename ValueT>
-    static bool FindBucketIndex(crc32_t crc, ValueT& result, size_t find_index,
-                          const IndexT& index, LastT& lasts)
-    {
-        if(crc != lasts.crc
-        || find_index < lasts.index)
-        {
-            lasts.crc   = crc;
-            lasts.i     = index.find(crc);
-            lasts.index = 0;
-        }
-        if(lasts.i == index.end()) return false;
+public:
+    bool FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const;
+    bool FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const;
+    
+    void AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t value);
+    void AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
 
-        while(lasts.index < find_index)
-        {
-            ++lasts.i;
-            ++lasts.index;
-
-            if(lasts.i == index.end()) return false;
-            
-            if(lasts.i.get_key() != crc)
-            {
-                lasts.i = index.end();
-                return false;
-            }
-        }
-        if(lasts.i == index.end())
-            return false;
-        
-        result = lasts.i.get_value();
-        return true;
-    }
-
-    template<typename IndexT, typename LastT, typename ValueT>
-    static bool FindMapIndex(crc32_t crc, ValueT& result, size_t find_index,
-                          const IndexT& index, LastT& lasts)
-    {
-        if(crc != lasts.crc
-        || find_index < lasts.index)
-        {
-            lasts.crc   = crc;
-            lasts.i     = index.find(crc);
-            lasts.index = 0;
-        }
-        if(lasts.i == index.end()) return false;
-
-        while(lasts.index < find_index)
-        {
-            ++lasts.i;
-            ++lasts.index;
-
-            if(lasts.i == index.end()) return false;
-            
-            if(lasts.i->first != crc)
-            {
-                lasts.i = index.end();
-                return false;
-            }
-        }
-        if(lasts.i == index.end())
-            return false;
-        
-        result = lasts.i->second;
-        return true;
-    }
+    void DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
 
 public:
-    block_index_type(): autoindex(),realindex(),
-                        last_search_a(),
-                        last_search_r()
-                       { }
+    block_index_type() { }
     
-    void clear() { last_search_a.reset(); autoindex.clear();
-                   last_search_r.reset(); realindex.clear();
-                 }
+    block_index_type(const block_index_type& b)
+        : realindex_fds(b.realindex_fds),
+          autoindex_fds(b.autoindex_fds)
+    {
+        Clone();
+    }
+    block_index_type& operator= (const block_index_type& b)
+    {
+        Close();
+        realindex_fds = b.realindex_fds;
+        autoindex_fds = b.autoindex_fds;
+        Clone();
+        return *this;
+    }
     
-    bool FindRealIndex(crc32_t crc, cromfs_blocknum_t& result,     size_t find_index) const
-        { return FindMapIndex(crc, result, find_index, realindex, last_search_r); }
-
-    bool FindAutoIndex(crc32_t crc, cromfs_block_internal& result, size_t find_index) const
-        { return FindBucketIndex(crc, result, find_index, autoindex, last_search_a); }
+    ~block_index_type()
+    {
+        Close();
+    }
     
-    void AddRealIndex(crc32_t crc, cromfs_blocknum_t value)
-        { last_search_r.reset();
-          realindex.insert(std::make_pair(crc, value)); }
+    void clear()
+    {
+        Close();
+        realindex_fds.clear();
+        autoindex_fds.clear();
+    }
     
-    void AddAutoIndex(crc32_t crc, const cromfs_block_internal& value)
-        { last_search_a.reset();
-          autoindex.insert(std::make_pair(crc, value)); }
-
-    void DelAutoIndex(crc32_t crc, const cromfs_block_internal& value)
-        { last_search_a.reset();
-          autoindex.erase(std::make_pair(crc, value)); }
-
-    block_index_type(const block_index_type& b);
-    block_index_type& operator=(const block_index_type& b);
-
 private:
-    typedef BucketContainer<cromfs_block_internal> autoindex_t;
-    autoindex_t autoindex;
-    
-    typedef std::multimap<crc32_t, cromfs_blocknum_t> realindex_t;
-    realindex_t realindex;
-
-    mutable struct last_srch_a
+    void Clone()
     {
-        crc32_t crc;
-        size_t index;
-        autoindex_t::const_iterator i;
-        
-        last_srch_a() : crc(0),index( (size_t)-1 ), i() { }
-        void reset() { index = (size_t)-1; }
-    } last_search_a;
-
-    mutable struct last_srch_r
+        for(size_t a=0; a<realindex_fds.size(); ++a)
+            realindex_fds[a] = dup(realindex_fds[a]);
+        for(size_t a=0; a<autoindex_fds.size(); ++a)
+            autoindex_fds[a] = dup(autoindex_fds[a]);
+    }
+    void Close()
     {
-        crc32_t crc;
-        size_t index;
-        realindex_t::const_iterator i;
-        
-        last_srch_r() : crc(0),index( (size_t)-1 ), i() { }
-        void reset() { index = (size_t)-1; }
-    } last_search_r;
+        for(size_t a=0; a<realindex_fds.size(); ++a) close(realindex_fds[a]);
+        for(size_t a=0; a<autoindex_fds.size(); ++a) close(autoindex_fds[a]);
+    }
+    size_t new_real();
+    size_t new_auto();
+
+    inline uint_fast64_t RealPos(BlockIndexHashType crc) const
+    {
+        uint_fast64_t res = crc; res *= 4; return res;
+    }
+    inline uint_fast64_t AutoPos(BlockIndexHashType crc) const
+    {
+        uint_fast64_t res = crc; res *= 8; return res;
+    }
+private:
+    std::vector<int> realindex_fds;
+    std::vector<int> autoindex_fds;
 };

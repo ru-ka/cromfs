@@ -22,7 +22,7 @@ EOF
     echo "	conftest.cpp:" >> $DEVNULL
     cat conftest.cpp >> $DEVNULL
     echo "	$CXX conftest.cpp $CXXFLAGS $LDFLAGS $2 -o conftest" >> $DEVNULL
-    $CXX conftest.cpp $CXXFLAGS $LDFLAGS $2 -o conftest 2>>$DEVNULL
+    $CXX conftest.cpp $CXXFLAGS $LDFLAGS $2 -o conftest 1>>$DEVNULL 2>>$DEVNULL
     TMP="$?"
     rm -f conftest*
     return $TMP
@@ -56,15 +56,33 @@ do_echo() {
   echo "$*" >> $DEVNULL
 }
 
+cpu_check() {
+  do_echo -n "Checking if your CPU supports $1... "
+  if grep flags /proc/cpuinfo |sed 's/.*://'|tr ' ' '\012'|grep -q '^'"$2"'$'; then
+    if cc_check '<stdio.h>' "$3" 'puts("ok");'; then
+      OPTIM="$OPTIM $3"
+      do_echo "Yes, using $3"
+    else
+      do_echo "Yes, but your compiler does not support $3"
+      if [ ! "$4" = "" ]; then
+        do_echo "But using -D$4 anyway"
+        OPTIM="$OPTIM -D$4"
+      fi
+    fi
+  else
+    do_echo No
+  fi
+}
+
 CFLAGS=""
 CPPFLAGS=""
 LDFLAGS=""
 OPTIM=""
 
 do_echo -n "Determining compiler version to use... "
-select_tool CXX g++ `(IFS=':'; for s in $PATH;do cd "$s"&&echo g++-*;done) 2>/dev/null`
-select_tool CPP cpp `(IFS=':'; for s in $PATH;do cd "$s"&&echo cpp-*;done) 2>/dev/null`
-select_tool CC  gcc cc `(IFS=':'; for s in $PATH;do cd "$s"&&echo gcc-*;done) 2>/dev/null`
+select_tool CXX g++    icc  `(IFS=':'; for s in $PATH;do cd "$s"&&echo g++-*;done) 2>/dev/null`
+select_tool CPP cpp    icc `(IFS=':'; for s in $PATH;do cd "$s"&&echo cpp-*;done) 2>/dev/null`
+select_tool CC  gcc cc icc `(IFS=':'; for s in $PATH;do cd "$s"&&echo gcc-*;done) 2>/dev/null`
 do_echo ""
 
 do_echo -n "Checking if the determined compiler works... "
@@ -77,8 +95,36 @@ else
   exit 1
 fi
 
+if [ "$CC" = icc ]; then
+  CPPFLAGS="$CPPFLAGS -w1 -inline-level=2"
+  do_echo -n "Checking if your compiler supports -ipo... "
+  if cc_check '<stdio.h>' '-fipo' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+    do_echo Yes
+    OPTIM="$OPTIM -ipo"
+  else
+    do_echo No
+  fi
+  
+  cat > conftest.cpp << EOF
+  int main() { }
+EOF
+  # Figure out where ICC lives, and by extension, its library paths
+  ICC_PATH="`"$CC" -v conftest.cpp 2>&1 | grep mcpcom | head -n 1 | sed 's@/mcpcom.*@@'`"
+  # Explicitly add ICC's libs to the LDFLAGS -- shouldn't be needed,
+  #  but it is, at least when you're using ICC on a distribution that
+  #  isn't supported by Intel, such as Debian on x86_64.
+  LDFLAGS="$LDFLAGS -L$ICC_PATH""/lib -lirc -lguide -lpthread -lstdc++"
+fi
+
 do_echo -n "Checking if your compiler supports -fopenmp... "
-if cc_check '<stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+if [ "$CC" = "icc" ] && \
+    cc_check '<stdio.h>' '-openmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+  do_echo Yes
+  do_echo "- Will use OpenMP (-openmp), not checking for -pthread"
+  CPPFLAGS="$CPPFLAGS -openmp"
+  LDFLAGS="$LDFLAGS -openmp"
+  CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=0"
+elif cc_check '<stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
   do_echo Yes
   do_echo "- Will use OpenMP, not checking for -pthread"
   CPPFLAGS="$CPPFLAGS -fopenmp"
@@ -117,25 +163,97 @@ else
   exit 1
 fi
 
-do_echo -n "Checking if your compiler supports -ftree-vectorize... "
-if cc_check '<stdio.h>' '-ftree-vectorize' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
-  do_echo Yes
-  OPTIM="$OPTIM -ftree-vectorize"
-else
-  do_echo No
-fi
+WARNINGS=""
+CWARNINGS=""
+CXXWARNINGS=""
+
+if [ ! "$CC" = "icc" ]; then
+  do_echo -n "Checking if your compiler supports -ftree-vectorize... "
+  if cc_check '<stdio.h>' '-ftree-vectorize' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+    do_echo Yes
+    OPTIM="$OPTIM -ftree-vectorize"
+  else
+    do_echo No
+  fi
+  do_echo -n "Checking if your compiler supports -ffast-math... "
+  if cc_check '<stdio.h>' '-ffast-math' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+    do_echo Yes
+    OPTIM="$OPTIM -ffast-math"
+  else
+    do_echo No
+  fi
+  
+  do_echo -n "Checking if your compiler supports -minline-stringops-dynamically... "
+  if cc_check '<stdio.h>' '-minline-stringops-dynamically' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+    do_echo Yes
+    OPTIM="$OPTIM -minline-stringops-dynamically"
+  else
+    do_echo No
+  fi
+ 
+  T_WARNINGS="-Wall \
+    -Wundef \
+    -Wcast-qual \
+    -Wpointer-arith \
+    -Wconversion \
+    -Wwrite-strings \
+    -Wsign-compare \
+    -Wredundant-decls \
+    -Winit-self \
+    -Wextra \
+    -Wcast-align -Wformat"
+  T_CWARNINGS="-Waggregate-return -Wshadow -Winline \
+    -Wstrict-prototypes \
+    -Wmissing-prototypes"
+  T_CXXWARNINGS="-Woverloaded-virtual -Weffc++"
+
+  for s in $T_WARNINGS;do
+    do_echo -n "Checking if your compiler supports -$s... "
+    if cc_check '<stdio.h>' "$s" ''; then
+      do_echo Yes
+      WARNINGS="$WARNINGS $s"
+    else
+      do_echo No
+    fi
+  done
+  for s in $T_CWARNINGS;do
+    do_echo -n "Checking if your compiler supports -$s... "
+    if cc_check '<stdio.h>' "$s" ''; then
+      do_echo Yes
+      CWARNINGS="$CWARNINGS $s"
+    else
+      do_echo No
+    fi
+  done
+  for s in $T_CXXWARNINGS;do
+    do_echo -n "Checking if your compiler supports -$s... "
+    if cc_check '<stdio.h>' "$s" ''; then
+      do_echo Yes
+      CXXWARNINGS="$CXXWARNINGS $s"
+    else
+      do_echo No
+    fi
+  done
+fi  
+
+cpu_check MMX   mmx   -mmmx   __MMX__
+cpu_check 3dnow 3dnow -m3dnow
+cpu_check SSE   sse   -msse   __SSE__
+cpu_check SSE2  sse2  -msse2  __SSE2__
 
 do_echo "Updating Makefile.sets ..."
 
 DATE="`LC_ALL=C date`"
 UNAME="`uname -a`"
 sed_cmd=""
-for s in CC CPP CXX OPTIM CPPFLAGS LDFLAGS FUSELIBS DATE UNAME; do
+for s in CC CPP CXX OPTIM CPPFLAGS LDFLAGS FUSELIBS DATE UNAME WARNINGS CWARNINGS CXXWARNINGS; do
   eval value=\"\$$s\"
   sed_cmd="$sed_cmd;s§{CONFIG_$s}§$value§"
 done
 
 sed "$sed_cmd" < Makefile.sets.in > Makefile.sets
+cp -p Makefile.sets util/
+cp -p Makefile.sets  lib/
 
 for dir in . lib util; do
   rm $dir/.depend $dir/.libdepend; make -C $dir .depend

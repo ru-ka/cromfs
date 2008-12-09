@@ -65,7 +65,7 @@ int TryOptimalOrganization = 0;
 
 long FSIZE = 2097152;
 long BSIZE = 65536;
-std::map<std::string, long> BSIZE_FOR;
+std::vector<std::pair<std::string, long> > BSIZE_FOR;
 
 //uint_fast32_t MaxSearchLength = FSIZE;
 
@@ -131,19 +131,19 @@ static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
 
 static long CalcBSIZEfor(const std::string& pathfn)
 {
-    for(std::map<std::string, long>::const_iterator
+    long result = BSIZE;
+    
+    for(std::vector<std::pair<std::string, long> >::const_iterator
         i = BSIZE_FOR.begin(); i != BSIZE_FOR.end(); ++i)
     {
-        //fprintf(stderr, "bsize for %s ? %ld : %s\n", pathfn.c_str(), i->second, i->first.c_str());
         if(MatchFile(pathfn, i->first))
         {
-            //fprintf(stderr, "bsize for %s = %ld\n", pathfn.c_str(), i->second);
-            return i->second;
+            result = i->second;
         }
     }
     
-    //fprintf(stderr, "bsize for %s = %ld\n", pathfn.c_str(), BSIZE);    
-    return BSIZE;
+    //fprintf(stderr, "bsize for %s = %ld\n", pathfn.c_str(), result);
+    return result;
 }
 
 namespace cromfs_creator
@@ -829,18 +829,22 @@ namespace cromfs_creator
         }
       #endif
         
+        /* Note: Using "long" for loop iteration variable, because OpenMP
+         * requires the loop iteration variable to be of _signed_ type,
+         * and cromfs_fblocknum_t is unsigned.
+         */
       #pragma omp parallel for ordered schedule(dynamic) \
             reduction(+:compressed_total) \
             reduction(+:uncompressed_total)
-        for(cromfs_fblocknum_t fblocknum=0; fblocknum<fblocks.size(); ++fblocknum)
+        for(long/*cromfs_fblocknum_t*/ fblocknum=0; fblocknum<(long)fblocks.size(); ++fblocknum)
         {
       #ifdef _OPENMP
           omp_set_num_threads(backup_max_threads);
       #endif
 
-          #pragma omp flush(terminate_for)
             mkcromfs_fblock& fblock = fblocks[fblocknum];
             
+          #pragma omp flush(terminate_for)
             if(!terminate_for)
                 FinalCompressFblock(fblocknum, fblock, compressed_total, uncompressed_total);
           
@@ -1324,6 +1328,8 @@ int main(int argc, char** argv)
                     "     Exclude files matching the patterns in <file>\n"
                     " --followsymlinks, -l\n"
                     "     Follow symlinks instead of storing them (same the referred contents)\n"
+                    " Note: The pathname seen by the exclude\n"
+                    "       matchers includes the source path.\n"
                     "\n"
                     "Operation parameters:\n"
                     " --decompresslookups, -e\n"
@@ -1366,6 +1372,8 @@ int main(int argc, char** argv)
                     "     allows each file to have a different block size. You can specify\n"
                     "     this option multiple times for each different pattern. Files that\n"
                     "     do not match any pattern use the default bsize (--bsize)\n"
+                    "     Note: The pathname seen by the pattern\n"
+                    "           matcher includes the source path.\n"
 #if 0
                     " --sparse, -S <opts>\n"
                     "     Commaseparated list of items to store sparsely. -Sf = fblocks\n"
@@ -1508,7 +1516,7 @@ int main(int argc, char** argv)
                     return -1;
                 }
                 
-                BSIZE_FOR[pattern] = size;
+                BSIZE_FOR.push_back(std::make_pair(pattern, size));
                 storage_opts |= CROMFS_OPT_VARIABLE_BLOCKSIZES;
                 break;
             }

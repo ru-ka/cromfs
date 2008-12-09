@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.5.4.
+  This is the documentation of .
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlist">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -137,14 +137,14 @@ and by no means a scientific study, but here goes:
   <th>Feature</th>
    <th>Cromfs</th>
    <th>Cramfs</th>
-   <th>Squashfs (3.0)</th>
+   <th>Squashfs (3.3)</th>
    <th>Cloop</th>
   </tr>
  <tr align=left>
   <th>Compression unit</th>
    <td class=good>adjustable arbitrarily (2 MB default)</td>
    <td class=hmm>adjustable, must be power of 2 (4 kB default)</td>
-   <td class=hmm>adjustable, must be power of 2 (64 kB max)</td>
+   <td class=hmm>adjustable, must be power of 2 (1 MB max)</td>
    <td class=hmm>adjustable in 512-byte units (1 MB max)</td>
   </tr>
  <tr align=left>
@@ -225,8 +225,9 @@ and by no means a scientific study, but here goes:
    <td class=good>Yes (fuse)</td>
    <td class=bad>No</td>
    <td class=hmm>An extraction tool (unsquashfs)</td>
-   <td class=bad>An extraction tool (extract_compressed_fs),
-     but cannot be used to extract a single file</td>
+   <td class=good><a href="http://fusecloop.sourceforge.net/">Yes</a> (third-party, using fuse).<br>
+     Cloop itself provides an extraction tool (extract_compressed_fs),
+     but cannot be used to extract a single file.</td>
  <tr align=left>
   <th>Windows driver</th>
    <td class=bad>No</td>
@@ -265,7 +266,7 @@ and by no means a scientific study, but here goes:
       of blocks which consist entirely of nul bytes</th>
    <td class=good>Any two identical blocks are merged and stored only once.</th>
    <td class=good>Supported</td>
-   <td class=bad>Not supported</th>
+   <td class=good>Supported</th>
    <td class=good>Depends on slave filesystem</td>
  <tr align=left>
   <th>Padding (partially filled sectors, wastes space)</th>
@@ -888,8 +889,8 @@ The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml41><b id=eml27 class=nonmail>fhl</b><span id=eml28 class=ismail>Joel</span><span id=eml29 class=nonmail><b>poB305</b></span><span id=eml30 class=ismail> Yli</span><b id=eml31 class=nonmail>en@59m</b><span id=eml32 class=ismail>luom</span><span id=eml33 class=nonmail><b>q.i@akqme</b></span><span id=eml34 class=ismail>a &lt;bi</span><b id=eml35 class=nonmail>jx4eYty</b><span id=eml36 class=ismail>sqwi</span><span id=eml37 class=nonmail><b>6ei@z5vgy</b></span><span id=eml38 class=ismail>t@ik</span><b id=eml39 class=nonmail>hCy</b><span id=eml40 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=27;i<41;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml25><b id=eml11 class=nonmail>avlw</b><span id=eml12 class=ismail>Joel</span><span id=eml13 class=nonmail><b>.v</b></span><span id=eml14 class=ismail> Yli</span><b id=eml15 class=nonmail>p@ewy9l</b><span id=eml16 class=ismail>luom</span><span id=eml17 class=nonmail><b>vAje@Ugu</b></span><span id=eml18 class=ismail>a &lt;bi</span><b id=eml19 class=nonmail>1@n62enzX</b><span id=eml20 class=ismail>sqwi</span><span id=eml21 class=nonmail><b>ge/6</b></span><span id=eml22 class=ismail>t@ik</span><b id=eml23 class=nonmail>1H5s0w@.i</b><span id=eml24 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=11;i<25;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -992,9 +993,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 </div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Sun, 26 Aug 2007 13:52:46 +0300)<br>
-  with <tt>docmaker.php</tt> (last updated: Sun, 12 Jun 2005 06:08:02 +0300)<br>
-  at Mon, 15 Oct 2007 01:12:07 +0300</small>
+       <tt>progdesc.php</tt> (last updated: Mon, 08 Dec 2008 09:58:33 +0200)<br>
+  with <tt>docmaker.php</tt> (last updated: Wed, 24 Sep 2008 12:27:32 +0300)<br>
+  at Mon, 08 Dec 2008 10:44:42 +0200</small>
  </p>
 </body>
 </html>
