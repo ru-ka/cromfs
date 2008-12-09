@@ -30,6 +30,69 @@ THE SOFTWARE.
 #include <cassert>
 #include <vector>
 
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OPENMP
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_PTHREAD
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#define FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+#include <boost/thread.hpp>
+typedef boost::mutex FSBAllocator_Mutex;
+#endif
+
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OPENMP
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_PTHREAD
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#define FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+#include <omp.h>
+
+class FSBAllocator_Mutex
+{
+    omp_lock_t mutex;
+
+ public:
+    FSBAllocator_Mutex() { omp_init_lock(&mutex); }
+    ~FSBAllocator_Mutex() { omp_destroy_lock(&mutex); }
+    void lock() { omp_set_lock(&mutex); }
+    void unlock() { omp_unset_lock(&mutex); }
+};
+#endif
+
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_PTHREAD
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OPENMP
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#define FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+#include <pthread.h>
+
+class FSBAllocator_Mutex
+{
+    pthread_mutex_t mutex;
+
+ public:
+    FSBAllocator_Mutex() { pthread_mutex_init(&mutex, NULL); }
+    ~FSBAllocator_Mutex() { pthread_mutex_destroy(&mutex); }
+    void lock() { pthread_mutex_lock(&mutex); }
+    void unlock() { pthread_mutex_unlock(&mutex); }
+};
+#endif
+
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OPENMP
+#undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_PTHREAD
+#define FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+class FSBAllocator_Mutex
+{
+    volatile int lockFlag;
+
+ public:
+    FSBAllocator_Mutex(): lockFlag(0) {}
+    void lock() { while(!__sync_bool_compare_and_swap(&lockFlag, 0, 1)) {} }
+    void unlock() { lockFlag = 0; }
+};
+#endif
+
 template<unsigned ElemSize>
 class FSBAllocator_ElemAllocator
 {
@@ -117,20 +180,31 @@ class FSBAllocator_ElemAllocator
     static BlocksVector blocksVector;
     static std::vector<Data_t> blocksWithFree;
 
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
-    volatile static int lockFlag;
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+    static FSBAllocator_Mutex& getMutex()
+    {
+        static FSBAllocator_Mutex mutex;
+        return mutex;
+    }
 
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
+    struct Lock: boost::mutex::scoped_lock
+    {
+        Lock(): boost::mutex::scoped_lock(getMutex()) {}
+    };
+#else
     struct Lock
     {
-        Lock() { while(!__sync_bool_compare_and_swap(&lockFlag, 0, 1)) {} }
-        ~Lock() { lockFlag = 0; }
+        Lock() { getMutex().lock(); }
+        ~Lock() { getMutex().unlock(); }
     };
+#endif
 #endif
 
  public:
     static void* allocate()
     {
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
         Lock lock;
 #endif
 
@@ -154,7 +228,7 @@ class FSBAllocator_ElemAllocator
     {
         if(!ptr) return;
 
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
         Lock lock;
 #endif
 
@@ -176,10 +250,6 @@ template<unsigned ElemSize>
 std::vector<typename FSBAllocator_ElemAllocator<ElemSize>::Data_t>
 FSBAllocator_ElemAllocator<ElemSize>::blocksWithFree;
 
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
-template<unsigned ElemSize>
-volatile int FSBAllocator_ElemAllocator<ElemSize>::lockFlag = 0;
-#endif
 
 
 template<unsigned ElemSize>
@@ -213,14 +283,25 @@ class FSBAllocator2_ElemAllocator
     static size_t* freeList;
     static size_t allocatedElementsAmount;
 
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
-    volatile static int lockFlag;
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+    static FSBAllocator_Mutex& getMutex()
+    {
+        static FSBAllocator_Mutex mutex;
+        return mutex;
+    }
 
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
+    struct Lock: boost::mutex::scoped_lock
+    {
+        Lock(): boost::mutex::scoped_lock(getMutex()) {}
+    };
+#else
     struct Lock
     {
-        Lock() { while(!__sync_bool_compare_and_swap(&lockFlag, 0, 1)) {} }
-        ~Lock() { lockFlag = 0; }
+        Lock() { getMutex().lock(); }
+        ~Lock() { getMutex().unlock(); }
     };
+#endif
 #endif
 
     static void freeAll()
@@ -235,7 +316,7 @@ class FSBAllocator2_ElemAllocator
  public:
     static void* allocate()
     {
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
         Lock lock;
 #endif
 
@@ -263,7 +344,7 @@ class FSBAllocator2_ElemAllocator
     {
         if(ptr)
         {
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
             Lock lock;
 #endif
 
@@ -278,7 +359,7 @@ class FSBAllocator2_ElemAllocator
 
     static void cleanSweep(size_t unusedValue = size_t(-1))
     {
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
         Lock lock;
 #endif
 
@@ -343,10 +424,6 @@ size_t* FSBAllocator2_ElemAllocator<ElemSize>::freeList = 0;
 template<unsigned ElemSize>
 size_t FSBAllocator2_ElemAllocator<ElemSize>::allocatedElementsAmount = 0;
 
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
-template<unsigned ElemSize>
-volatile int FSBAllocator2_ElemAllocator<ElemSize>::lockFlag = 0;
-#endif
 
 
 template<typename Ty>
