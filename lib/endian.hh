@@ -28,6 +28,15 @@ static inline uint_fast16_t R16(const void* p)
     return R8(data)  | (R8(data+1) << UINT16_C(8));
   #endif
 }
+static inline uint_fast16_t R16r(const void* p)
+{
+  #ifdef BIG_ENDIAN_AND_UNALIGNED_ACCESS_OK
+    return *(const uint_least16_t*)p;
+  #else
+    const unsigned char* data = (const unsigned char*)p;
+    return R8(data+1)  | (R8(data) << UINT16_C(8));
+  #endif
+}
 static inline uint_fast32_t R24(const void* p)
 {
     /* Note: This might be faster if implemented through R32 and a bitwise and,
@@ -37,6 +46,11 @@ static inline uint_fast32_t R24(const void* p)
     const unsigned char* data = (const unsigned char*)p;
     return R16(data) | (R8(data+2) << UINT32_C(16));
 }
+static inline uint_fast32_t R24r(const void* p)
+{
+    const unsigned char* data = (const unsigned char*)p;
+    return R16(data+1) | (R8(data) << UINT32_C(16));
+}
 static inline uint_fast32_t R32(const void* p)
 {
   #ifdef LITTLE_ENDIAN_AND_UNALIGNED_ACCESS_OK
@@ -44,6 +58,15 @@ static inline uint_fast32_t R32(const void* p)
   #else
     const unsigned char* data = (const unsigned char*)p;
     return R16(data) | (R16(data+2) << UINT32_C(16));
+  #endif
+}
+static inline uint_fast32_t R32r(const void* p)
+{
+  #ifdef BIG_ENDIAN_AND_UNALIGNED_ACCESS_OK
+    return *(const uint_least32_t*)p;
+  #else
+    const unsigned char* data = (const unsigned char*)p;
+    return R16(data+2) | (R16(data) << UINT32_C(16));
   #endif
 }
 
@@ -56,6 +79,15 @@ static inline uint_fast64_t R64(const void* p)
   #else
     const unsigned char* data = (const unsigned char*)p;
     return (L R32(data)) | ((L R32(data+4)) << UINT64_C(32));
+  #endif
+}
+static inline uint_fast64_t R64r(const void* p)
+{
+  #ifdef BIG_ENDIAN_AND_UNALIGNED_ACCESS_OK
+    return *(const uint_least64_t*)p;
+  #else
+    const unsigned char* data = (const unsigned char*)p;
+    return (L R32(data+4)) | ((L R32(data)) << UINT64_C(32));
   #endif
 }
 

@@ -75,43 +75,51 @@ static const std::vector<unsigned char> LZMADeCompress
 {
     if(BufSize <= LZMA_PROPS_SIZE+8) 
     {
-    /*clearly_not_ok:*/
-        //ok = false;
+    clearly_not_ok:
+        throw EBADF;
         return std::vector<unsigned char> ();
     }
      
     uint_least64_t out_sizemax = R64(&buf[LZMA_PROPS_SIZE]);
-    
-    /*if(out_sizemax >= (size_t)~0ULL)
+
+    if(out_sizemax >= (size_t)~0ULL)
     {
         // cannot even allocate a vector this large.
         goto clearly_not_ok;
-    }*/
-       
+    }
+
     std::vector<unsigned char> result(out_sizemax);
     
     ISzAlloc alloc = { SzAlloc, SzFree };
     
     ELzmaStatus status;
-    SizeT destlen = result.size();
-    SizeT srclen = BufSize-(LZMA_PROPS_SIZE+8);
+    SizeT out_done = result.size();
+    SizeT in_done = BufSize-(LZMA_PROPS_SIZE+8);
     int res = LzmaDecode(
-        &result[0], &destlen,
-        &buf[LZMA_PROPS_SIZE+8], &srclen,
+        &result[0], &out_done,
+        &buf[LZMA_PROPS_SIZE+8], &in_done,
         &buf[0], LZMA_PROPS_SIZE+8,
         LZMA_FINISH_END,
         &status,
         &alloc);
     
     /*
-    fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
-        res, (int)in_done, (int)buf.size(),
-             (int)out_done, (int)out_sizemax);
+    fprintf(stderr, "res=%d, status=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
+        res,
+        (int)status,
+        (int)in_done, (int)(BufSize-(LZMA_PROPS_SIZE+8)),
+        (int)out_done, (int)out_sizemax);
     */
-      
-    //ok = res == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK
-    //  && srclen == (BufSize-13) && destlen == out_sizemax;
-    return result;
+
+    if(res == SZ_OK
+    && (status == LZMA_STATUS_FINISHED_WITH_MARK
+     || status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK)
+    && in_done == (BufSize-(LZMA_PROPS_SIZE+8))
+    && out_done == out_sizemax)
+    {
+        return result;
+    }
+    goto clearly_not_ok;
 }
 
 static const std::vector<unsigned char>

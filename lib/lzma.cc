@@ -339,8 +339,9 @@ const std::vector<unsigned char> LZMADeCompress
         res, (int)in_done, (int)buf.size(),
              (int)out_done, (int)out_sizemax);
     */
-    
-    ok = res == SZ_OK && status == LZMA_STATUS_FINISHED_WITH_MARK
+
+    ok = res == SZ_OK && (status == LZMA_STATUS_FINISHED_WITH_MARK
+                       || status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK)
       && srclen == (buf.size()-LZMA_PROPS_SIZE) && destlen == out_sizemax;
     return result;
 }
