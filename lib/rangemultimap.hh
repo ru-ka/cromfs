@@ -9,10 +9,11 @@
 /***************
  *
  */
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename Allocator = std::allocator<Key> >
 class rangemultimap
 {
-    typedef std::map<Value, rangeset<Key> > Cont;
+    typedef std::map<Value, rangeset<Key, Allocator>, std::less<Value>,
+      typename Allocator::template rebind<std::pair<Key, rangeset<Key> > >::other > Cont;
     Cont data;
     
 public:
@@ -61,7 +62,7 @@ public:
     
     // default copy cons. and assign-op. are fine
     
-    const rangeset<Key>& get_rangelist(const Value& v) const { return data.find(v)->second; }
+    const rangeset<Key,Allocator>& get_rangelist(const Value& v) const { return data.find(v)->second; }
     
     /* Get the list of values existing in this map */
     std::list<Value> get_valuelist() const
@@ -73,7 +74,8 @@ public:
     }
     
     /* Get a slice of this map from given range */
-    rangemultimap<Key, Value> get_slice(const Key& lo, const Key& up) const;
+    rangemultimap<Key, Value, Allocator>
+      get_slice(const Key& lo, const Key& up) const;
     
     /* This is a short for get_slice(lo, up).get_valuelist() */
     std::list<Value> get_valuelist(const Key& lo, const Key& up) const;

@@ -37,10 +37,12 @@ struct rangetype
 };
 
 
-template<typename Key, typename Valueholder>
+template<typename Key, typename Valueholder, typename Allocator = std::allocator<Key> >
 class rangecollection
 {
-    typedef std::map<Key, Valueholder> Cont;
+    typedef std::map<Key, Valueholder, std::less<Key>,
+      typename Allocator::template rebind<std::pair<Key, Valueholder> >::other
+                    > Cont;
     Cont data;
 public:
     template<typename Valuetype>

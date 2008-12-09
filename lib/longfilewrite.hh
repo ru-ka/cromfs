@@ -27,7 +27,7 @@ protected:
     void FlushBuffer();
     void Close();
 private:
-    const uint_fast64_t getbufend() const { return bufpos + Buffer.size(); }
+    uint_fast64_t getbufend() const { return bufpos + Buffer.size(); }
 protected:
     int fd; 
 private:

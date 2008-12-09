@@ -18,7 +18,7 @@ struct datasource_t: public ptrable
     virtual bool open() { return true; }
     virtual void close() { }
     virtual const std::string getname() const = 0;
-    virtual const uint_fast64_t size() const = 0;
+    virtual uint_fast64_t size() const = 0;
     virtual ~datasource_t() {};
 };
 
@@ -36,7 +36,7 @@ struct datasource_vector: public datasource_t
         pos += n;
         return result;
     }
-    virtual const uint_fast64_t size() const { return data.size(); }
+    virtual uint_fast64_t size() const { return data.size(); }
 private:
     const std::vector<unsigned char> data;
     std::string name;
@@ -90,7 +90,7 @@ public:
         }
         return result;
     }
-    virtual const uint_fast64_t size() const { return siz; }
+    virtual uint_fast64_t size() const { return siz; }
     virtual void close() { buffer = std::vector<unsigned char> (); bufpos = 0; }
 protected:
     static uint_fast64_t stat_get_size(int fild)
@@ -122,7 +122,7 @@ struct datasource_file_name: public datasource_file
         fd = ::open(path.c_str(), O_RDONLY | O_LARGEFILE);
         if(fd < 0) { std::perror(path.c_str()); return false; }
         FadviseSequential(fd, 0, siz);
-        FadviseWillNeed(fd, 0, siz);
+        FadviseNoReuse(fd, 0, siz);
         return true;
     }
     virtual void close()

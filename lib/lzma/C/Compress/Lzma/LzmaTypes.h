@@ -5,28 +5,28 @@ Types for LZMA Decoder
 
 This file written and distributed to public domain by Igor Pavlov.
 This file is part of LZMA SDK 4.40 (2006-05-01)
-
--- Typedefs changed by Bisqwit to use stdint.h
 */
 
 #ifndef __LZMATYPES_H
 #define __LZMATYPES_H
 
-#include <stdint.h>
-
 #ifndef _7ZIP_BYTE_DEFINED
 #define _7ZIP_BYTE_DEFINED
-typedef uint_least8_t Byte;
+typedef unsigned char Byte;
 #endif 
 
 #ifndef _7ZIP_UINT16_DEFINED
 #define _7ZIP_UINT16_DEFINED
-typedef uint_least16_t UInt16;
+typedef unsigned short UInt16;
 #endif 
 
 #ifndef _7ZIP_UINT32_DEFINED
 #define _7ZIP_UINT32_DEFINED
-typedef uint_least32_t UInt32;
+#ifdef _LZMA_UINT32_IS_ULONG
+typedef unsigned long UInt32;
+#else
+typedef unsigned int UInt32;
+#endif
 #endif 
 
 /* #define _LZMA_NO_SYSTEM_SIZE_T */

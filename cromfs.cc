@@ -747,14 +747,14 @@ int_fast64_t cromfs::read_file_data(
     /* Collect a list of fblocks that are required to complete this read. */
     if(true) /* scope */
     {
-        const unsigned bitset_bitness = sizeof(long)*8; //__WORDSIZE;
+        const unsigned bitset_bitness = sizeof(unsigned long)*8; //__WORDSIZE;
         
         /* Using an adhoc bitset here.
          * std::set<cromfs_fblocknum_t>  would also be an option, but bitset
          * is more optimal when we know the maximum value of the entries
          * (which is generally rather small, around 400 at maximum).
          */
-        std::vector<uint_least32_t> required_fblocks_set
+        std::vector<unsigned long> required_fblocks_set
             ( (fblktab.size() + bitset_bitness-1) / bitset_bitness );
 
         for(uint_fast64_t pos    = std::min(inode.bytesize, offset),
@@ -1000,8 +1000,8 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
     return result;
 }
 
-const cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
-                                           const std::string& search_name)
+cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
+                                     const std::string& search_name)
     throw (cromfs_exception, std::bad_alloc)
 {
     cromfs_dirinfo* cached = readdir_cache.Find(inonum);

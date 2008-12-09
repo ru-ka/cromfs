@@ -1,6 +1,7 @@
 #include "sparsewrite.hh"
 
 #include <algorithm>
+#include <unistd.h>
 
 #ifdef __GNUC__
 # define likely(x)       __builtin_expect(!!(x), 1)

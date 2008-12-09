@@ -1,4 +1,4 @@
-VERSION=1.5.4.1
+VERSION=1.5.4.2
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -41,6 +41,7 @@ ARCHFILES=\
 	\
 	lib/endian.hh \
 	lib/hash.hh \
+	lib/simd.hh \
 	lib/threadfun.hh \
 	lib/threadfun_none.hh \
 	lib/threadfun_openmp.hh \

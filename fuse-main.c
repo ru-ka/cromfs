@@ -43,6 +43,7 @@ static int multithreaded = 0;
 
 int main(int argc, char *argv[])
 {
+    int err = -1;
     char *mountpoint = NULL;
     int fd = open(argv[1], O_RDONLY);
     if(fd >= 0) { --argc; ++argv; }
@@ -55,6 +56,7 @@ int main(int argc, char *argv[])
         goto out;
     }
 
+{//scopebegin1
     void* userdata = cromfs_create(fd);
     if(!userdata)
     {
@@ -67,12 +69,12 @@ int main(int argc, char *argv[])
     {
         goto out;
     }
+{//scopebegin2
 
 #if 0
     fprintf(stderr, "fuse_mount gives fd %d\n", fd);
 #endif
 
-    int err = -1;
     struct fuse_session *se
         = fuse_lowlevel_new(&args, &cromfs_oper, sizeof(cromfs_oper),
                             userdata);
@@ -113,6 +115,8 @@ int main(int argc, char *argv[])
  #endif
 
     cromfs_uncreate(userdata);
+}//scopeend2
+}//scopeend1
     
 out:
     fuse_opt_free_args(&args);

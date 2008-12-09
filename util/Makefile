@@ -1,4 +1,4 @@
-VERSION=1.5.4.1
+VERSION=1.5.4.2
 
 include Makefile.sets
 
@@ -8,6 +8,7 @@ include Makefile.sets
 
 OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
+#OPTIM += -O3 -g -fno-inline -finline-level=0 -debug extended
 #OPTIM += -O0 -g -fno-inline
 # -ftree-vectorize 
 

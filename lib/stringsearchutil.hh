@@ -10,12 +10,10 @@
 
 #include "endian.hh"
 #include "duffsdevice.hh"
+#include "simd.hh"
 
 #include <algorithm>
-
-#if defined(__SSE__) && defined(__GNUC__)
-# include <xmmintrin.h>
-#endif
+#include <cstring> // std::memchr, std::memcmp
 
 #if defined(__SSE__) && defined(__GNUC__)
 # include <xmmintrin.h>
@@ -23,16 +21,20 @@
 
 namespace StringSearchUtil {
 template<typename T>
-static inline bool MultiByteNeq(T a,T b) { return a!=b; }
+inline bool MultiByteNeq(T a,T b) { return a!=b; }
+
+/* - This does not work. comieq only compares the lower 32-bit values.
 #if defined(__SSE__) && defined(__GNUC__)
 template<>
-static inline bool MultiByteNeq(const __m128 a,
-                                const __m128 b)
+inline bool MultiByteNeq(const __m128 a,
+                         const __m128 b)
 {
     //fprintf(stderr, "multibyteneq(%p,%p)\n",&a,&b); fflush(stderr);
     return _mm_comieq_ss(a,b) == 0;
 }
 #endif
+*/
+
 }
 
 /*
@@ -65,7 +67,7 @@ template<bool NoMisalignment,
          typename WordType, typename Smaller1,
                             typename Smaller2,
                             typename Smaller3>
-static inline size_t const backwards_match_len_common_alignment(
+static inline size_t backwards_match_len_common_alignment(
     const unsigned char* const ptr1,
     const unsigned char* const ptr2,
     const size_t strlen,
@@ -212,7 +214,7 @@ static inline size_t const backwards_match_len_common_alignment(
         ( ptr1,ptr2, strlen, maxlen, result);
 }
 
-static inline size_t const backwards_match_len(
+static inline size_t backwards_match_len(
     const unsigned char* ptr1,
     const unsigned char* ptr2,
     const size_t strlen,
@@ -273,7 +275,7 @@ static inline size_t const backwards_match_len(
         (ptr1,ptr2,strlen,maxlen,minlen);
   #endif
 }
-static inline size_t const backwards_match_len(
+static inline size_t backwards_match_len(
     const unsigned char* ptr1,
     const unsigned char* ptr2,
     size_t maxlen)
@@ -281,7 +283,7 @@ static inline size_t const backwards_match_len(
     return backwards_match_len(ptr1, ptr2, maxlen, maxlen);
 }
 
-static inline const unsigned char* const ScanByte(
+static inline const unsigned char* ScanByte(
     const unsigned char* begin,
     const unsigned char byte,
     size_t n_bytes,
