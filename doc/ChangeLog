@@ -4,8 +4,12 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-1.5.5.1        <under development>
+1.5.5.2        <under development>
 - Added parallelization to block index search
+
+1.5.5.1 2008-12-09 Joel Yliluoma <bisqwit@iki.fi>
+- Minor fixes
+- Publicized the git repository at git://bisqwit.iki.fi/cromfs.git
 
 1.5.5 2008-12-08 Joel Yliluoma <bisqwit@iki.fi>
 - Using Intel ICC as the default compiler when available for
