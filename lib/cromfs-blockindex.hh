@@ -59,10 +59,13 @@ public:
     }
     block_index_type& operator= (const block_index_type& b)
     {
-        Close();
-        realindex_fds = b.realindex_fds;
-        autoindex_fds = b.autoindex_fds;
-        Clone();
+        if(&b != this)
+        {
+            Close();
+            realindex_fds = b.realindex_fds;
+            autoindex_fds = b.autoindex_fds;
+            Clone();
+        }
         return *this;
     }
     
