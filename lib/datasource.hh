@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h> // O_RDONLY, O_LARGEFILE
 #include <string>
+#include <cstring> // std::memcpy
 
 #include <vector>
 

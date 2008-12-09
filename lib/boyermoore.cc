@@ -1,3 +1,4 @@
+#include <cstring>
 #include "boyermoore.hh"
 #include "threadfun.hh" // for InterruptibleContext
 

@@ -1,4 +1,4 @@
-VERSION=1.5.4
+VERSION=1.5.4.1
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/

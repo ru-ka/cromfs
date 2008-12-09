@@ -12,7 +12,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <errno.h>
-
+#include <cstdlib>
 #include <vector>
 
 int LZMA_HeavyCompress = 0;
@@ -473,7 +473,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "cvcromfs v"VERSION" - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "cvcromfs v"VERSION" - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Converts cromfs images between different versions.\n"
                     "\n"

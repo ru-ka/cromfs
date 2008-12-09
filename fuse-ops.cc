@@ -1,5 +1,5 @@
 /*
-cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL3
 
 cromfs-ops.cc: The filesystem access functions for Fuse. It translates
@@ -17,6 +17,7 @@ the fuse_reply_err() function.
 #include <cerrno>
 #include <fcntl.h>
 #include <sys/statvfs.h>
+#include <cstring>
 
 
 #define CROMFS_CTXP(obj,userdata) \
