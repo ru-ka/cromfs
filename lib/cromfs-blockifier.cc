@@ -519,7 +519,36 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
     /* Assign a real blocknumber to the autoindex */
     block_index.DelAutoIndex(plan.crc, block);
     block_index.AddRealIndex(plan.crc, blocknum);
+
+    /* Also autoindex the block right after this, just in case we get a match */
+    PredictiveAutoIndex(fblocknum, startoffs+blocksize, blocksize);
+
     return blocknum;
+}
+
+void cromfs_blockifier::PredictiveAutoIndex(
+    cromfs_fblocknum_t fblocknum,
+    uint_fast32_t startoffs,
+    uint_fast32_t blocksize)
+{
+    const mkcromfs_fblock& fblock = fblocks[fblocknum];
+
+    uint_fast32_t after_block = startoffs + blocksize;
+
+    if(after_block <= fblock.size())
+    {
+        DataReadBuffer Buffer; uint_fast32_t BufSize;
+        fblock.InitDataReadBuffer(Buffer, BufSize, startoffs, blocksize);
+        TryAutoIndex(fblocknum, Buffer.Buffer, blocksize, startoffs);
+    }
+    else if(fblocknum+1 < fblocks.size())
+    {
+        // So we could not index the next block after our match...
+        // But how about the next after that?
+
+        uint_fast32_t new_block_start = after_block - fblock.size();
+        PredictiveAutoIndex(fblocknum+1, new_block_start, blocksize);
+    }
 }
 
 /* Execute an appension plan */
@@ -540,7 +569,9 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
 
     if(DisplayBlockSelections)
     {
-        if(new_data_offset + plan.data.size() <= old_raw_size)
+        uint_fast32_t after_block = new_data_offset + plan.data.size();
+
+        if(after_block <= old_raw_size)
         {
             std::printf("block %u => (%u) [%u @ %u] (overlap fully)",
                 (unsigned)blocks.size(),
@@ -566,6 +597,14 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
         if(new_remaining_room < 0)
         {
             std::printf(" (OVERUSE)");
+        }
+        std::printf("\n");
+
+        if(after_block <= old_raw_size)
+        {
+            /* In case of a full overlap,
+             * also autoindex the block right after this, just in case we get a match */
+            PredictiveAutoIndex(fblocknum, after_block, plan.data.size());
         }
     }
 
@@ -598,11 +637,6 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
                 last_raw_size = new_raw_size;
             }
         }
-    }
-
-    if(DisplayBlockSelections)
-    {
-        std::printf("\n");
     }
 
     cromfs_block_internal block;

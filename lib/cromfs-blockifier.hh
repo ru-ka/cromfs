@@ -108,16 +108,23 @@ private:
         uint_fast32_t old_raw_size,
         uint_fast32_t new_raw_size,
         uint_fast32_t bsize);
+
     void TryAutoIndex(const cromfs_fblocknum_t fblocknum,
         const unsigned char* ptr,
         uint_fast32_t bsize,
         uint_fast32_t startoffs);
+
     void AutoIndexBetween(const cromfs_fblocknum_t fblocknum,
         const unsigned char* ptr,
         uint_fast32_t min_offset,
         uint_fast32_t max_size,
         uint_fast32_t bsize,
         uint_fast32_t stepping);
+
+    void PredictiveAutoIndex(
+        cromfs_fblocknum_t fblocknum,
+        uint_fast32_t startoffs,
+        uint_fast32_t blocksize);
 
     bool block_is(const cromfs_block_internal& block,
                   const std::vector<unsigned char>& data) const
