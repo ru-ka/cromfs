@@ -103,11 +103,12 @@ void SparseWrite(int fd,
             AppendBuf(BlockSize);
 
     if(BufSize > 0)
+    {
         if(is_zero_block(Buffer, BufSize))
             SkipBuf(BufSize);
         else
             AppendBuf(BufSize);
-
+    }
     FlushBuf();
 
     #undef AppendBuf

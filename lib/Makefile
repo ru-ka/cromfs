@@ -7,6 +7,7 @@ include Makefile.sets
 #LDOPTS += -fmudflap -lmudflap
 
 OPTIM += -O3
+#OPTIM += -O1 -g -fno-inline
 CPPFLAGS += -pthread -I..
 #OPTIM += -O1 -g
 # -ftree-vectorize 

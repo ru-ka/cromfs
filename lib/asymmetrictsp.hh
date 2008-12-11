@@ -182,8 +182,8 @@ private:
     struct FavouriteFinder
     {
         FavouriteFinder(const std::vector<DistanceType>& d, size_t n)
-            : distances(d), num_nodes(n) { }
-        
+            : distances(d), num_nodes(n), whose() { }
+
         bool operator() (size_t a, size_t b) const
         {
             return distances[whose * num_nodes + a]

@@ -6,7 +6,11 @@
 
 template<typename WorkType>
 void ThreadWorkEngine<WorkType>::RunTasks(
-    size_t num_threads, /* Note: <- unused when OPENMP */
+    size_t
+    #ifndef _OPENMP
+           num_threads /* Note: <- unused when OPENMP */
+    #endif
+                      ,
     ssize_t num_workunits,
     WorkType& workparams,
     bool (*DoWork)(size_t index, WorkType& )

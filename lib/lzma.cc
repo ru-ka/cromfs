@@ -262,10 +262,13 @@ const std::vector<unsigned char> LZMACompress(
     {
         AutoReleaseLzmaEnc(CLzmaEncHandle pp) : p(pp) { }
         ~AutoReleaseLzmaEnc()
-        {
-            LzmaEnc_Destroy(p, &LZMAalloc, &LZMAalloc);
-        }
+        { LzmaEnc_Destroy(p, &LZMAalloc, &LZMAalloc); }
         CLzmaEncHandle p;
+
+
+        AutoReleaseLzmaEnc(const AutoReleaseLzmaEnc&);
+        void operator=(const AutoReleaseLzmaEnc&);
+
     } AutoReleaser(p); // Create a destructor that ensures
     // that the CLzmaEncHandle is not leaked, even if an
     // exception happens

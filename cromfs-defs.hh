@@ -57,6 +57,10 @@ struct cromfs_inode_internal
     uint_fast64_t bytesize;
     uint_fast32_t blocksize;
     std::vector<cromfs_blocknum_t> blocklist;
+
+    cromfs_inode_internal() // -Weffc++
+        : mode(),time(),links(),rdev(),uid(),gid(),
+          bytesize(),blocksize(),blocklist() {}
 };
 struct cromfs_fblock_internal
 {

@@ -11,7 +11,9 @@ struct rangetype
     /* Example range: 0-5 includes the numbers 0,1,2,3,4 but not 5. */
     /* Reverse ranges are not allowed. */
     Key lower, upper;
-    
+
+    rangetype(): lower(), upper() { }
+
     /* Compareoperators. Without these we can't belong into a std::set or std::map. */
     bool operator< (const rangetype& b) const
     { return lower!=b.lower?lower<b.lower
@@ -45,6 +47,8 @@ class rangecollection
                     > Cont;
     Cont data;
 public:
+    rangecollection(): data() {}
+
     template<typename Valuetype>
     void set(const Key& lo, const Key& up, const Valuetype& val);
     void erase(const Key& lo, const Key& up);

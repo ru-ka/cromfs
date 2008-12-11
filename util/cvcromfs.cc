@@ -65,7 +65,9 @@ struct StorageOptToucher: public BlockToucher
 {
     uint_fast32_t old_opts; bool read_old;
     uint_fast32_t new_opts; bool write_new;
-    
+
+    StorageOptToucher():old_opts(),read_old(),new_opts(),write_new() { } // -Weffc++
+
     virtual bool NeedsData() const { return read_old || write_new; }
     virtual void Got(std::vector<unsigned char>& Buffer)
     {
@@ -88,7 +90,9 @@ struct BlkTabConverter: public BlockToucher
     uint_fast32_t bsize,fsize;
     bool HadPacked;
     bool WantPacked;
-    
+
+    BlkTabConverter(): bsize(),fsize(),HadPacked(),WantPacked() { } // -Weffc++
+
     virtual bool NeedsData() const { return HadPacked != WantPacked; }
     
     virtual void Got(std::vector<unsigned char>& Buffer)
@@ -362,8 +366,8 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
         cromfs_fblock_internal fblock;
         fblock.filepos = read_offs+4;
         fblock.length  = R32(Buf+0);
-        uint_fast64_t orig_size = R64(Buf+9);
-        
+        //uint_fast64_t orig_size = R64(Buf+9);
+
         double position = (read_offs-read_begin) * 100.0 / (read_end-read_begin);
         
         std::printf("\r%75s\rfblock %u... (%s)... %.0f%% done: ",
@@ -643,7 +647,7 @@ int main(int argc, char** argv)
 
     if(argc < optind+1)
     {
-    ArgError:
+    //ArgError:
         std::fprintf(stderr, "cvcromfs: invalid parameters. See `cvcromfs --help'\n");
         return 1;
     }

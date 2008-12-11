@@ -10,11 +10,15 @@ struct DataReadBuffer
 private:
     enum { None, Allocated } State;
 public:
-    DataReadBuffer() : Buffer(NULL), State(None) { }
-    
+    DataReadBuffer() : Buffer(NULL), State(None)
+    {
+    #pragma omp flush(State,Buffer)
+    }
+
     void AssignRefFrom(const unsigned char* d, unsigned)
     {
         Buffer = d; State = None;
+    #pragma omp flush(State,Buffer)
     }
     void AssignCopyFrom(const unsigned char* d, unsigned size)
     {
@@ -22,6 +26,7 @@ public:
         std::memcpy(p, d, size);
         State = Allocated;
         Buffer = p;
+    #pragma omp flush(State,Buffer)
     }
     int LoadFrom(int fd, uint_fast32_t size, uint_fast64_t pos = 0)
     {
@@ -29,6 +34,7 @@ public:
         int res = pread64(fd, pp, size, pos);
         Buffer = pp;
         State = Allocated;
+    #pragma omp flush(State,Buffer)
         return res;
     }
     ~DataReadBuffer()

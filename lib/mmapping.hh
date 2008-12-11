@@ -62,6 +62,19 @@ public:
     const unsigned char* operator+ (uint_fast64_t f) const
         { return get_ptr() + f; }
     */
+
+    MemMappingType(const MemMappingType<AutoUnmap>& b)
+        : ptr(b.ptr), size(b.size), align_factor(b.align_factor)
+    {
+    }
+    MemMappingType& operator=(const MemMappingType<AutoUnmap>& b)
+    {
+        ptr = b.ptr;
+        size = b.size;
+        align_factor = b.align_factor;
+        return *this;
+    }
+
 private:
     void* ptr;
     size_t size;

@@ -55,8 +55,8 @@ struct c64_MMX: public c64_common
     typedef c64_MMX c64;
 
     __m64 value;
-    
-    inline c64_MMX() { }
+
+    inline c64_MMX() : value() { }
     inline c64_MMX(__m64 v) : value(v) { }
     inline c64_MMX(const uint64_t& v) : value( *(const __m64*)& v) { }
     inline c64_MMX(int v) : value(_m_from_int(v)) { }
@@ -182,11 +182,11 @@ struct c64_nonMMX: public c64_common
     typedef c64_nonMMX c64;
     
     uint_least64_t value;
-    
-    inline c64_nonMMX() { }
+
+    inline c64_nonMMX() : value() { }
     inline c64_nonMMX(uint64_t v) : value(v) { }
     inline c64_nonMMX(int v) : value(v) { }
-    inline c64_nonMMX(short a,short b,short c, short d)
+    inline c64_nonMMX(short a,short b,short c, short d) : value()
         { Init16(a,b,c,d); }
 
     c64 operator<< (int b) const { if(b < 0) return *this >> -b; return shl64(b); }

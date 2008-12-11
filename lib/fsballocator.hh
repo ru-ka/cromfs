@@ -113,7 +113,7 @@ class FSBAllocator_ElemAllocator
         MemBlock():
             block(0),
             firstFreeUnitIndex(Data_t(-1)),
-            allocatedElementsAmount(0)
+            allocatedElementsAmount(0), endIndex()
         {}
 
         bool isFull() const
@@ -168,7 +168,7 @@ class FSBAllocator_ElemAllocator
     {
         std::vector<MemBlock> data;
 
-        BlocksVector() { data.reserve(1024); }
+        BlocksVector() : data() { data.reserve(1024); }
 
         ~BlocksVector()
         {

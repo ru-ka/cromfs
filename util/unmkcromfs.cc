@@ -6,7 +6,7 @@
 #include "lib/util.hh"
 
 #if HASH_MAP
-# include <ext/hash_set>
+# include <tr1/unordered_set>
 # include "hash.hh"
 #endif
 #ifdef _OPENMP
@@ -109,7 +109,9 @@ private:
      */
     std::set<cromfs_inodenum_t> extra_dirs;
 public:
-    cromfs_decoder(int fd): cromfs(fd)
+    cromfs_decoder(int fd)
+        : cromfs(fd),
+          fblock_users(), inode_files(), dir(), extra_dirs() // -Weffc++
     {
         cromfs::Initialize();
         
@@ -191,7 +193,7 @@ public:
 
 
 #if HASH_MAP
-        typedef __gnu_cxx::hash_set<cromfs_inodenum_t> handled_inodes_t;
+        typedef std::tr1::unordered_set<cromfs_inodenum_t> handled_inodes_t;
 #else
         typedef std::set<cromfs_inodenum_t> handled_inodes_t;
 #endif

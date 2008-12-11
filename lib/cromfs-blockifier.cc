@@ -80,6 +80,13 @@ struct SmallestInfo
     cromfs_fblocknum_t fblocknum;
     uint_fast32_t      adds;
     AppendInfo         appended;
+    mutable MutexType    mutex;
+
+    SmallestInfo():
+        found(0), fblocknum(0), adds(0),
+        appended(), mutex()
+    {
+    }
 
     int get_found() const
     {
@@ -91,8 +98,6 @@ struct SmallestInfo
         ScopedLock lck(mutex);
         found=0; fblocknum=0; adds=0; appended=AppendInfo();
     }
-
-    mutable MutexType    mutex;
 };
 
 static void FindOverlap(
@@ -184,6 +189,19 @@ struct OverlapFinderParameter
      * cannot use a constructor, otherwise the {} initialization
      * will be invalid syntax later on.
      */
+
+    OverlapFinderParameter(
+        const mkcromfs_fblockset& f,
+        const BoyerMooreNeedleWithAppend& d,
+        cromfs_blockifier::overlaptest_history_t& m)
+            : fblocks(f),
+              data(d),
+              minimum_tested_positions(m),
+              smallest(),
+              candidates(),
+              mutex()
+    {
+    }
 };
 
 static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
@@ -221,13 +239,7 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
     /* First check if we can write into an existing fblock. */
     if(true)
     {
-        OverlapFinderParameter params =
-        {
-            fblocks, data, minimum_tested_positions,
-            { 0, 0, 0, AppendInfo(), MutexType() },
-            std::vector<cromfs_fblocknum_t>(),
-            MutexType()
-        };
+        OverlapFinderParameter params(fblocks, data, minimum_tested_positions);
 
         std::vector<cromfs_fblocknum_t>& candidates = params.candidates;
         candidates.reserve(fblocks.size());
@@ -759,6 +771,8 @@ void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
         {
             size_t n_blocks;
             mkcromfs_fblockset::undo_t fblock_state;
+
+            SituationBackup(): n_blocks(),fblock_state() { }
         };
 
         for(orderlist_t::iterator
