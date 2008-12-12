@@ -14,7 +14,7 @@ void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needl
 
     for(unsigned a=0; a<UCHAR_MAX+1; ++a)
         occ[a] = needle_length;
-    
+
     if(unlikely(needle_length <= 1)) return;
 
     /* Populate it with the analysis of the needle */
@@ -30,7 +30,7 @@ void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needl
 void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t needle_length)
 {
     if(unlikely(needle_length <= 1)) return;
-    
+
     /* I have absolutely no idea how this works. I just copypasted
      * it from http://www-igm.univ-mlv.fr/~lecroq/string/node14.html
      * and have since edited it in trying to seek clarity and efficiency.
@@ -39,16 +39,16 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
      * preinitialized into needle_length is utilized.
      * -Bisqwit
      */
-    
+
     const size_t needle_length_minus_1 = needle_length-1;
-    
+
 #ifdef __GNUC__
     size_t suff[needle_length+1];
 #else
     std::vector<size_t> suff(needle_length+1);
 #endif
     suff[needle_length] = needle_length;
-    
+
     size_t j = 0; // index for writing into skip[]
     for(size_t f = needle_length-1, // Location of previously attempted match
                g = needle_length,   // Unknown purpose
@@ -70,7 +70,7 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
                 if(unlikely(tmp == i))
                 {
                     fprintf(stderr, "app1\n");
-                    
+
                     for(const size_t jlimit = needle_length - i; j < jlimit; ++j)
                         skip[j] = jlimit;
                 }
@@ -78,15 +78,15 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
                 continue;
             }
         }
-        else 
+        else
         {
             g = i; // if g >= i.
         }
-        
+
         // At this line:    i >= g.
         f = needle_length - i;
         // Also this holds: f + g <= needle_length.
-        
+
         const size_t match_len = backwards_match_len(
                 needle,
                 needle + f,
@@ -95,7 +95,7 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
         g -= match_len;  // After this, 0 <= g <= i.
 
         suff[i] = i - g; // This is usually same as match_len but not always
-        
+
         if(g == 0)
         {
             // This "if" matches sometimes. Less so on random data.
@@ -105,7 +105,7 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
     }
 
     //while(j < needle_length) skip[j++] = needle_length; -- not required; assumed to be already set so.
-    
+
     for (size_t i = 0; i < needle_length_minus_1; ++i)
         skip[needle_length_minus_1 - suff[i + 1]] = needle_length_minus_1 - i;
 }
@@ -117,23 +117,23 @@ size_t SearchInHorspool(const unsigned char* haystack, const size_t haystack_len
     if(unlikely(needle_length > haystack_length)) return haystack_length;
 
     InterruptibleContext make_interruptible;
-    
+
     if(unlikely(needle_length == 1))
     {
         const unsigned char* result = (const unsigned char*)ScanByte(haystack, *needle, haystack_length);
         return result ? result-haystack : haystack_length;
     }
-    
+
     const size_t needle_length_minus_1 = needle_length-1;
-    
+
     const unsigned char last_needle_char = needle[needle_length_minus_1];
     const size_t search_room = haystack_length-needle_length;
-    
+
     size_t hpos=0;
     while(hpos <= search_room)
     {
         const unsigned char occ_char = haystack[hpos + needle_length_minus_1];
-        
+
         if(last_needle_char == occ_char
         && std::memcmp(needle, haystack+hpos, needle_length_minus_1) == 0)
         {
@@ -153,37 +153,37 @@ size_t SearchIn(const unsigned char* haystack, const size_t haystack_length,
     if(unlikely(needle_length > haystack_length)) return haystack_length;
 
     InterruptibleContext make_interruptible;
-    
+
     if(unlikely(needle_length == 1))
     {
         const unsigned char* result =
             (const unsigned char*)ScanByte(haystack, *needle, haystack_length);
         return result ? result-haystack : haystack_length;
     }
-    
+
     const size_t needle_length_minus_1 = needle_length-1;
     const size_t search_room = haystack_length-needle_length;
-    
+
     size_t hpos=0;
     while(hpos <= search_room)
     {
         //fprintf(stderr, "haystack_length=%u needle_length=%u\n", hpos, needle_length);
-        
+
         const size_t match_len = backwards_match_len(
             needle,
             haystack+hpos,
             needle_length);
         if(match_len == needle_length) return hpos;
-        
+
         const size_t mpos = needle_length_minus_1 - match_len;
-        
+
         const unsigned char occ_char = haystack[hpos + mpos];
-        
+
         const ssize_t bcShift = occ[occ_char] - match_len;
         const ssize_t gcShift = skip[mpos];
-        
+
         size_t shift = std::max(gcShift, bcShift);
-        
+
         hpos += shift;
     }
     return haystack_length;
@@ -197,24 +197,24 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
     if(unlikely(needle_length > haystack_length)) return haystack_length;
 
     InterruptibleContext make_interruptible;
-    
+
     if(unlikely(needle_length == 1))
     {
         const unsigned char* result =
             (const unsigned char*)ScanByte(haystack, *needle, haystack_length);
         return result ? result-haystack : haystack_length;
     }
-    
+
     const size_t needle_length_minus_1 = needle_length-1;
     const size_t search_room = haystack_length-needle_length;
-    
+
     size_t hpos = 0;
     size_t ignore_num = 0, shift = needle_length;
-    
+
     while(hpos <= search_room)
     {
         //fprintf(stderr, "haystack_length=%u needle_length=%u\n", hpos, needle_length);
-        
+
         size_t match_len;
         if(ignore_num == 0)
         {
@@ -230,7 +230,7 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
                 backwards_match_len(needle, haystack+hpos, needle_length,
                     shift
                    );
-            
+
             if(match_len == shift)
             {
                 //if(shift + ignore_num >= needle_length) return hpos;
@@ -240,17 +240,17 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
             }
             if(match_len >= needle_length) return hpos;
         }
-        
+
         const size_t mpos = needle_length_minus_1 - match_len;
-        
+
         const unsigned char occ_char = haystack[hpos + mpos];
-        
+
         const ssize_t bcShift = occ[occ_char] - match_len;
         const size_t gcShift  = skip[mpos];
         const ssize_t turboShift = ignore_num - match_len;
-        
+
         shift = std::max(std::max((ssize_t)gcShift, bcShift), turboShift);
-        
+
         if(shift == gcShift)
             ignore_num = std::min( needle_length - shift, match_len);
         else

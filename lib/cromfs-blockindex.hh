@@ -42,7 +42,7 @@ class block_index_type
 public:
     bool FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const;
     bool FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const;
-    
+
     void AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t value);
     void AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
 
@@ -68,19 +68,19 @@ public:
         }
         return *this;
     }
-    
+
     ~block_index_type()
     {
         Close();
     }
-    
+
     void clear()
     {
         Close();
         realindex_fds.clear();
         autoindex_fds.clear();
     }
-    
+
 private:
     void Clone()
     {

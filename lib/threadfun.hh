@@ -51,7 +51,7 @@ static inline void JoinThread(ThreadType& t) { t.End(); }
 #include <sched.h>
 #define ForceSwitchThread() sched_yield()
 #else
-#define ForceSwitchThread() 
+#define ForceSwitchThread()
 #endif
 
 #endif

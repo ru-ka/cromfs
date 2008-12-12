@@ -102,22 +102,22 @@ struct cromfs_superblock_internal
     uint_fast64_t bsize; /* 64-bit to reduce the number of casts */
     uint_fast64_t bytes_of_files;
     uint_fast64_t sig;
-    
+
     enum { MaxBufferSize = 0x50 };
     typedef unsigned char BufferType[MaxBufferSize];
-    
+
     void RecalcRoom()
     {
         rootdir_room = inotab_offs  - rootdir_offs;
-        inotab_room  = blktab_offs  - inotab_offs; 
-        blktab_room  = fblktab_offs - blktab_offs; 
+        inotab_room  = blktab_offs  - inotab_offs;
+        blktab_room  = fblktab_offs - blktab_offs;
     }
-    
+
     void SetOffsets(unsigned headersize)
     {
         rootdir_offs = headersize;
         inotab_offs  = rootdir_offs + rootdir_room;
-        blktab_offs  = inotab_offs  + inotab_room; 
+        blktab_offs  = inotab_offs  + inotab_room;
         fblktab_offs = blktab_offs  + blktab_room;
     }
     void SetOffsets()
@@ -129,7 +129,7 @@ struct cromfs_superblock_internal
               ? 0x50 : 0x38
                    );
     }
-    
+
     void ReadFromBuffer(BufferType Superblock)
     {
         sig                     = R64(Superblock+0x0000);
@@ -139,14 +139,14 @@ struct cromfs_superblock_internal
         rootdir_offs            = R64(Superblock+0x0020);
         fsize                   = R32(Superblock+0x0028);
         bsize                   = R32(Superblock+0x002C);
-        bytes_of_files          = R64(Superblock+0x0030);   
-        
+        bytes_of_files          = R64(Superblock+0x0030);
+
         RecalcRoom();
 
         rootdir_size = rootdir_room;
-        inotab_size = inotab_room;  
-        blktab_size = blktab_room;  
-        
+        inotab_size = inotab_room;
+        blktab_size = blktab_room;
+
         if(GetSize() >= 0x50)
         {
             rootdir_size = R64(Superblock+0x0038);
@@ -164,7 +164,7 @@ struct cromfs_superblock_internal
         W32(Superblock+0x28, fsize);
         W32(Superblock+0x2C, bsize);
         W64(Superblock+0x30, bytes_of_files);
-        
+
         if(rootdir_offs >= 0x50)
         {
             W64(Superblock+0x0038, rootdir_size);
@@ -172,7 +172,7 @@ struct cromfs_superblock_internal
             W64(Superblock+0x0048, blktab_size);
         }
     }
-    
+
     unsigned GetSize(bool sparse_mode) const
     {
         if(sig == CROMFS_SIGNATURE_01

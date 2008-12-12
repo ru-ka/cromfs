@@ -15,7 +15,7 @@ public:
         : buf(), map()
     {
         FadviseNoReuse(fd, pos, size);
-        
+
         map.SetMap(fd, pos, size);
         if(map)
             buf.AssignRefFrom(map.get_ptr(), size);

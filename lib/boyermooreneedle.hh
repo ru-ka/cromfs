@@ -30,7 +30,7 @@ public:
         InitOcc();
         InitSkip();
     }
-    
+
     explicit BoyerMooreNeedle(const std::string& n)
         : needle( (const unsigned char*) n.data()), nlen(n.size()), occ(), skip(nlen, nlen)
     {
@@ -38,7 +38,7 @@ public:
         InitOcc();
         InitSkip();
     }
-    
+
     explicit BoyerMooreNeedle(const unsigned char* n, size_t nl)
         : needle(n), nlen(nl), occ(), skip(nlen, nlen)
     {
@@ -71,7 +71,7 @@ public:
             occ, skip,
             needle, nlen);
     }
-    
+
     /* A turbo variant of above. */
     size_t SearchInTurbo(const std::vector<unsigned char>& haystack) const
     {
@@ -87,7 +87,7 @@ public:
             occ, skip,
             needle, nlen);
     }
-    
+
     /* A variant of the general purpose search method,
      * that does not utilize the skip[] table. It only
      * uses the occ[] table. This may be used when a faster
@@ -97,7 +97,7 @@ public:
     {
         return SearchInHorspool(&haystack[0], haystack.size());
     }
-    
+
     size_t SearchInHorspool(const unsigned char* haystack, const size_t hlen) const
     {
         return BoyerMooreSearch::SearchInHorspool(haystack,hlen, occ, needle, nlen);
@@ -149,7 +149,7 @@ public:
                                           const size_t overlap_granularity = 1) const
     {
         InterruptibleContext make_interruptible;
-        
+
         if(likely(nlen))
         {
             size_t remain = std::min(hlen, nlen);
@@ -159,15 +159,15 @@ public:
                     remain - minimum_overlap;
                 // ^ no +1 here, let the "regular append" be caught as the
                 // default case, i.e. "return hlen".
-                
+
                 const unsigned char* searchptr = haystack + hlen - remain;
                 /*fprintf(stderr, "searchptr=%u(%p), remain=%u \n",
                     searchptr-haystack, searchptr, remain);*/
-                
+
                 const unsigned char* leftptr =
                     ScanByte(searchptr, *needle, n_allowable_starting_positions, overlap_granularity);
                 if(!leftptr) break;
-                
+
                 //fprintf(stderr, "got byte %u\n", leftptr-haystack);
                 size_t remainhere = remain - (leftptr-searchptr);
                 if(std::memcmp(leftptr+1, needle+1, remainhere-1) == 0)
@@ -180,13 +180,13 @@ public:
         }
         return hlen;
     }
-    
+
 private:
     void InitOcc()
     {
         BoyerMooreSearch::InitOcc(occ, needle, nlen);
     }
-    
+
     void InitSkip()
     {
         BoyerMooreSearch::InitSkip(skip, needle, nlen);
@@ -237,13 +237,13 @@ public:
             // When granularity is 1, we are more optimal.
             // When it is 2, we are about equal.
             // When it is >= 3, we are slower, so use the parent.
-            
+
             return BoyerMooreNeedle::SearchInWithAppendOnly(haystack, hlen, minimum_overlap, overlap_granularity);
         }
         if(unlikely(minimum_overlap > nlen)) return hlen;
-        
+
         InterruptibleContext make_interruptible;
-        
+
         /* For the tail part, we'll search for the first part of the needle,
          * first half of it, then half of that half, halving the amount
          * until a singlebyte needle is being searched...
@@ -254,18 +254,18 @@ public:
          */
         size_t first_begin_pos = hlen - nlen;
         size_t really_first_begin_pos = first_begin_pos;
-        
+
         size_t sublen = std::min((nlen+1)/2, (hlen+1)/2);
 
         const size_t max_begin_pos = hlen - minimum_overlap;
-        
+
         for(; sublen > 0; sublen /= 2)
         {
             const size_t occ_entries_before = sub_occ.size();
             occtable_type& tabref = sub_occ[sublen];
             if(sub_occ.size()  != occ_entries_before) // if this table is uninitialized?
                 BoyerMooreSearch::InitOcc(tabref, needle, sublen);
-            
+
             size_t begin_pos = first_begin_pos;
             while(begin_pos < max_begin_pos)
             {
@@ -280,7 +280,7 @@ public:
                     );
                 if(trial_pos >= max_begin_pos) break;
                 //fprintf(stderr, "found at %u, test...\n", trial_pos);
-               
+
              #if 1  // if granularity testing is done.
                 int granu_error = ((trial_pos - really_first_begin_pos) % overlap_granularity);
                 if(likely(overlap_granularity == 1)
@@ -290,13 +290,13 @@ public:
                     size_t check_pos  = trial_pos + sublen;
                     const unsigned char* needle_pos = needle + sublen;
                     size_t needle_remain = nlen - sublen;
-                    
+
                     if(std::memcmp(haystack + check_pos,
                                    needle_pos,
                                    std::min(needle_remain, hlen - check_pos)
                                   ) == 0) return trial_pos;
                 }
-             
+
              #if 1 // if granularity testing is done.
                 begin_pos = trial_pos + overlap_granularity - granu_error;
              #else

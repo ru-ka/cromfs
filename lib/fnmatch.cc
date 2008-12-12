@@ -5,10 +5,12 @@
 
 bool MatchFile(const std::string& pathname, const std::string& pattern)
 {
-    return fnmatch(
+    int result;
+    //#pragma omp critical(fnmatch) // fnmatch() is not re-entrant?
+    result = fnmatch(
         pattern.c_str(),
         pathname.c_str(),
-        0 
+        0
 #if 0
         | FNM_PATHNAME
         /* disabled. It is nice if *Zelda* also matches subdir/Zelda. */
@@ -20,18 +22,19 @@ bool MatchFile(const std::string& pathname, const std::string& pattern)
          * those will too be extracted, without need to append / and *
          */
 #endif
-      ) == 0;
+      );
+    return result == 0;
 }
 
 bool MatchFileFrom(const std::string& pathname, MatchingFileListType& list, bool empty_means)
 {
     if(list.empty()) return empty_means;
-    
+
     bool retval = false;
     for(unsigned a=0; a<list.size(); ++a)
     {
         const std::string& pattern = list[a].first;
-        
+
         if(MatchFile(pathname, pattern))
         {
             retval = true;

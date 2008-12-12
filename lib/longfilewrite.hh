@@ -18,10 +18,10 @@ public:
                            uint_fast64_t size,
                            const unsigned char* buf,
                            bool use_sparse = true);
-    
+
     void write(const unsigned char* buf, uint_fast64_t size, uint_fast64_t offset,
                bool use_sparse = true);
-    
+
     ~LongFileWrite() { FlushBuffer(); }
 protected:
     void FlushBuffer();
@@ -29,7 +29,7 @@ protected:
 private:
     uint_fast64_t getbufend() const { return bufpos + Buffer.size(); }
 protected:
-    int fd; 
+    int fd;
 private:
     uint_fast64_t bufpos;
     uint_fast64_t expected_size;

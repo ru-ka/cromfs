@@ -24,19 +24,19 @@ class cromfs_write_data
      * Invert to get list of free areas. */
     typedef rangeset<uint_fast64_t/*offset*/>
         fblock_utilization_map;
-    
+
     /* List of objects that are utilizing the particular fblock
      */
     typedef rangemultimap<uint_fast64_t, cromfs_inodenum_t>
         fblock_utilizers_list;
-   
+
     struct fblock_info
     {
         fblock_utilizers_list utlist;
         fblock_utilization_map utmap;
-        
+
         void rebuild();
-        
+
         void allocate_range_for(
             uint_fast64_t start, uint_fast64_t size,
             cromfs_inodenum_t inonum);

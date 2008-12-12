@@ -13,7 +13,7 @@ namespace {
     /* This code constructs the CRC32 table at compile-time,
      * avoiding the need for a huge explicitly written table of magical numbers. */
     static const uint_least32_t crc32_poly = 0xEDB88320UL;
-    
+
     /*
     template<uint_fast32_t crc> // One bit of a CRC32:
     struct b1 { enum { res = (crc >> 1) ^ (( crc&1) ? crc32_poly : 0UL) }; };
@@ -50,7 +50,7 @@ namespace {
     // The whole table, index by steps of 16
     static const uint_least32_t crctable[256] =
     { R(0x00),R(0x10),R(0x20),R(0x30), R(0x40),R(0x50),R(0x60),R(0x70),
-      R(0x80),R(0x90),R(0xA0),R(0xB0), R(0xC0),R(0xD0),R(0xE0),R(0xF0) }; 
+      R(0x80),R(0x90),R(0xA0),R(0xB0), R(0xC0),R(0xD0),R(0xE0),R(0xF0) };
     #undef R
     #undef B4
 }
@@ -113,7 +113,7 @@ crc32_t crc32_calc_upd(crc32_t c, const unsigned char* buf, unsigned long size)
         }
         //switch(size % 2)
         {
-            //default: 
+            //default:
                  do { size -= 2; buf += 2;
             case_0: value = crc32_update(value, buf[0]);
             case_1: value = crc32_update(value, buf[1]);
@@ -125,6 +125,6 @@ crc32_t crc32_calc_upd(crc32_t c, const unsigned char* buf, unsigned long size)
 #if 0
     while(size-- > 0) value = crc32_update(value, *buf++);
 #endif
-    
+
     return value;
 }

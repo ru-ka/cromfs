@@ -119,7 +119,7 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     /*------------------------------------- handle the last 23 bytes */
     c = c + uint64_t(size);
     if(len >16)      { c += (c64)Rn(buf+15, len-15) & ~UINT64_C(0xFF);
-                       b += (c64)R64(buf+8); 
+                       b += (c64)R64(buf+8);
                        a += (c64)R64(buf); }
     else if(len > 8) { b += (c64)Rn(buf+8,  std::min(8UL, len-8));
                        a += (c64)R64(buf); }
@@ -150,7 +150,7 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     /*------------------------------------- handle the last 11 bytes */
     c = c+size;
     if(len >8)       { c += Rn(buf+7, len-7) & ~UINT32_C(0xFF);
-                       b += R32(buf+8); 
+                       b += R32(buf+8);
                        a += R32(buf); }
     else if(len > 4) { b += Rn(buf+4,  std::min(4UL, len-4));
                        a += R32(buf); }

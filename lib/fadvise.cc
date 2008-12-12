@@ -1,7 +1,7 @@
 #define _XOPEN_SOURCE 600
 #include <fcntl.h> // For posix_fadvise
 #include <sys/mman.h> //  for madvise
-              
+
 #include "fadvise.hh"
 
 void FadviseSequential(int fd, uint_fast64_t offset, uint_fast64_t length)

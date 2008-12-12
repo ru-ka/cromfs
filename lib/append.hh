@@ -25,7 +25,7 @@ const AppendInfo AnalyzeAppend(
     size_t minimum_pos,
     size_t minimum_overlap,
     size_t overlap_granularity,
-    
+
     const unsigned char* const data,
     size_t datasize
 );

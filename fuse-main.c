@@ -23,17 +23,17 @@ used to initialize the cromfs_oper struct.
 static const struct fuse_lowlevel_ops cromfs_oper =
 {
     .statfs  = cromfs_statfs,
-    
+
     .lookup  = cromfs_lookup,
-    
+
     .getattr  = cromfs_getattr,
     .access  = cromfs_access,
-    
+
     .readlink = cromfs_readlink,
-    
+
     .open    = cromfs_open,
     .read    = cromfs_read,
-    
+
     .opendir = cromfs_opendir,
     .readdir = cromfs_readdir
 };
@@ -47,9 +47,9 @@ int main(int argc, char *argv[])
     char *mountpoint = NULL;
     int fd = open(argv[1], O_RDONLY);
     if(fd >= 0) { --argc; ++argv; }
-    
+
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-    
+
     if(fuse_parse_cmdline(&args, &mountpoint, &multithreaded, &foreground) == -1)
     {
         if(fd >= 0) close(fd);
@@ -86,13 +86,13 @@ int main(int argc, char *argv[])
             if (ch != NULL)
             {
                 fuse_session_add_chan(se, ch);
-                
+
 #if ALLOW_OUTPUT_IN_FORK_MODE
                 int fdt = dup(2);
 #endif
                 if(foreground) fprintf(stderr, "ready\n");
                 fuse_daemonize(foreground);
-                
+
                 cromfs_initialize(userdata);
 
 #if ALLOW_OUTPUT_IN_FORK_MODE
@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
     cromfs_uncreate(userdata);
 }//scopeend2
 }//scopeend1
-    
+
 out:
     fuse_opt_free_args(&args);
 

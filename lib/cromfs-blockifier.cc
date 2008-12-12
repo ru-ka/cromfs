@@ -25,7 +25,7 @@ static void DisplayProgress(
     uint_fast64_t bpos, uint_fast64_t bmax)
 {
     char Buf[4096];
-    std::sprintf(Buf, "%s: %5.1f%% (%llu/%llu)",
+    std::sprintf(Buf, "%s: %5.2f%% (%llu/%llu)",
         label,
         pos
         * 100.0
@@ -186,7 +186,7 @@ struct OverlapFinderParameter
     std::vector<cromfs_fblocknum_t> candidates;
 
     mutable MutexType       mutex;
-    
+
     /* ICC complains of a missing constructor, but we
      * cannot use a constructor, otherwise the {} initialization
      * will be invalid syntax later on.
@@ -647,6 +647,9 @@ ReEvaluate:
     /* number of orders might have changed, recheck it */
     num_handle = blockify_orders.size() - max_remaining_orders;
 
+    /* Don't parallelize this loop; it will do bad things
+     * for compression.
+     */
     for(orderlist_t::iterator j,i = blockify_orders.begin();
         num_handle > 0 && i != blockify_orders.end();
         i = j, --num_handle)
@@ -840,7 +843,8 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
     orderlist_t blockify_orders;
 
-    MAYBE_PARALLEL_NS::stable_sort(schedule.begin(), schedule.end(),
+    // Note: using __gnu_parallel in this sort() will crash the program.
+    std::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
 
     uint_fast64_t total_size = 0, blocks_total = 0;

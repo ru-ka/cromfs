@@ -3,7 +3,7 @@
 void cromfs_write_data::fblock_info::rebuild()
 {
     utlist.clear();
-    
+
     std::list<cromfs_inodenum_t> valuelist = utmap.get_valuelist();
     for(std::list<cromfs_inodenum_t>::const_iterator
         i = valuelist.begin(); i != valuelist.end(); ++i)

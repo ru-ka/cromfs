@@ -21,12 +21,12 @@ namespace BoyerMooreSearch
     /////////////////////
 
     void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needle_length);
-    
+
     /* Note: this function expects skip to be resized to needle_length and initialized with needle_length. */
     void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t needle_length);
-    
+
     //////////////////
-    
+
     size_t SearchInHorspool(const unsigned char* haystack, const size_t haystack_length,
         const occtable_type& occ,
         const unsigned char* needle, const size_t needle_length);

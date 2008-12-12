@@ -37,22 +37,22 @@ public:
      */
     cromfs(int fild)
         throw (cromfs_exception, std::bad_alloc);
-    
+
     /* Deallocates the structures associated with this filesystem. */
     ~cromfs() throw();
-    
+
     /* To be called after the constructor, before any real
      * file access. Separated from the constructor so that
      * it may use threads in the same context as the rest
      * of the program (fork() in fuse_main confuses otherwise).
      */
     void Initialize() throw (cromfs_exception, std::bad_alloc);
-    
+
     /* Returns the superblock of the filesystem, indicating various
      * statistics about the filesystem.
      */
     const cromfs_superblock_internal& get_superblock() { return sblock; }
-    
+
     /* Returns the inode corresponding to the root directory.
      * It is equivalent to read_inode_and_blocks(1), except
      * that it's a bit faster.
@@ -67,7 +67,7 @@ public:
                                 unsigned char* target, uint_fast64_t size,
                                 const char* purpose)
         throw (cromfs_exception, std::bad_alloc);
-    
+
     /* Reads the inode based on inode number. */
     /* It only reads the inode header, useful for returning data
      * for stat(), but cannot be used by read_file_data().
@@ -75,7 +75,7 @@ public:
      */
     const cromfs_inode_internal read_inode(cromfs_inodenum_t inonum)
         throw (cromfs_exception, std::bad_alloc);
-    
+
     /* Reads the inode based on inode number. */
     /* It reads the inode header and the block table.
      * Use this function when you are going to pass the data
@@ -85,8 +85,8 @@ public:
      */
     const cromfs_inode_internal read_inode_and_blocks(cromfs_inodenum_t inonum)
         throw (cromfs_exception, std::bad_alloc);
-    
-    /* Returns the contents of the directory denoted by the given inode number. 
+
+    /* Returns the contents of the directory denoted by the given inode number.
      *
      * May throw: ENOTDIR = not a directory
      */
@@ -139,36 +139,36 @@ protected:
         throw (cromfs_exception, std::bad_alloc);
     void reread_fblktab()
         throw (cromfs_exception, std::bad_alloc);
-    
+
     void read_block(cromfs_blocknum_t ind, uint_fast32_t offset,
                     unsigned char* target,
                     uint_fast32_t size)
         throw (cromfs_exception, std::bad_alloc);
-    
+
     cromfs_inode_internal read_special_inode
         (uint_fast64_t offset, uint_fast64_t size,
          bool ignore_blocks)
         throw (cromfs_exception, std::bad_alloc);
-    
+
     cromfs_cached_fblock& read_fblock(cromfs_fblocknum_t ind)
         throw (cromfs_exception, std::bad_alloc);
     cromfs_cached_fblock read_fblock_uncached(cromfs_fblocknum_t ind) const
         throw (cromfs_exception, std::bad_alloc);
-    
+
 protected:
     int fd; // file handle
-    
+
     cromfs_inode_internal rootdir, inotab;
     cromfs_superblock_internal sblock;
-    
+
     std::vector<cromfs_fblock_internal> fblktab;
     std::vector<cromfs_block_internal> blktab;
-    
+
     DataCache<cromfs_inodenum_t, cromfs_dirinfo> readdir_cache;
     DataCache<cromfs_fblocknum_t, cromfs_cached_fblock> fblock_cache;
-    
+
     uint_fast32_t storage_opts;
-    
+
 private:
     cromfs(cromfs&);
     void operator=(const cromfs&);

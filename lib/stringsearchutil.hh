@@ -79,7 +79,7 @@ static inline size_t backwards_match_len_common_alignment(
     register size_t result = minlen;
 
     /* The Duff's device is used to optimize this function in many parts. */
-    
+
     /* Comparison of a compile-time constant yields
      * conditional compilation, so this is good. */
     if(WordSize == 1)
@@ -89,7 +89,7 @@ static inline size_t backwards_match_len_common_alignment(
         if(likely(remain > 0))
         {
             /*
-            DuffsDevice3_once(remain%4, 
+            DuffsDevice3_once(remain%4,
                 if(ptr1[pos+remain] != ptr2[pos+remain]) return maxlen-remain;
                 --remain; );*/
           #if defined(__x86_64) && 0
@@ -134,11 +134,11 @@ static inline size_t backwards_match_len_common_alignment(
                                                                  return maxlen-(remain+1);
                 }
             }
-            
-            DuffsDevice3_once(remain, 
+
+            DuffsDevice3_once(remain,
                 if(ptr1[pos+remain] != ptr2[pos+remain]) return maxlen-remain;
                 --remain; );
-            
+
             return maxlen-remain;
         }
       #elif 0
@@ -151,7 +151,7 @@ static inline size_t backwards_match_len_common_alignment(
       #elif 0
         DuffsDevice8( (maxlen-result),
                       result < maxlen,
-                      
+
                       if(ptr1[strlen-(result+1)] != ptr2[strlen-(result+1)])
                           return result; ++result;
                     );
@@ -163,17 +163,17 @@ static inline size_t backwards_match_len_common_alignment(
       #endif
         return result;
     }
-    
+
     if(unlikely(result >= maxlen)) return result;
-    
+
     /* Attempts to compare WordSize bytes at time. */
-    
+
     if(NoMisalignment)
     {
         /* First peel off the badly aligned bytes at the end */
       #if 0
         const size_t num_unaligned_at_end = (strlen-result) % (WordSize);
-        
+
         /* This loop may be completely unrolled by compiler, so don't add duff's device here */
         for(size_t n=0; n<num_unaligned_at_end; ++n)
         {
@@ -190,16 +190,16 @@ static inline size_t backwards_match_len_common_alignment(
         }
       #endif
     }
-    
+
     size_t aligned_anchor = (strlen-result) / WordSize;
     const WordType* ptr1_aligned = reinterpret_cast<const WordType*> (ptr1);
     const WordType* ptr2_aligned = reinterpret_cast<const WordType*> (ptr2);
     size_t num_aligned_match = 0;
     size_t max_aligned_match = (maxlen-result) / WordSize;
-    
+
     DuffsDevice8( (max_aligned_match - num_aligned_match),
                   num_aligned_match < max_aligned_match,
-                    
+
                   if( StringSearchUtil::
                     MultiByteNeq(ptr1_aligned[aligned_anchor-(num_aligned_match+1)],
                                  ptr2_aligned[aligned_anchor-(num_aligned_match+1)]) )
@@ -207,7 +207,7 @@ static inline size_t backwards_match_len_common_alignment(
                   ++num_aligned_match;
                 );
  done_aligned_loop: ;
- 
+
     result += num_aligned_match * WordSize;
 
     return backwards_match_len_common_alignment<NoMisalignment,Smaller1,Smaller2,Smaller3,Smaller3>
@@ -222,11 +222,11 @@ static inline size_t backwards_match_len(
     const size_t minlen = 0)
 {
     typedef uint_fast64_t ptr_int_type;
-    
+
     /* Note: comparing uint_least16_t seems to always cause worse
      * performance.
      */
-  
+
   #define AlignedAccessCheck(type1,type2,type3,type4) do { \
     const size_t offset1 = ( (ptr_int_type)ptr1 % sizeof(type1)); \
     const size_t offset2 = ( (ptr_int_type)ptr2 % sizeof(type1)); \
@@ -236,24 +236,24 @@ static inline size_t backwards_match_len(
         return backwards_match_len_common_alignment<true, type1,type2,type3,type4> \
             (ptr1-offset, ptr2-offset, strlen+offset, maxlen, minlen); \
     } } while(0)
-    
+
     /* Turns out any and all of these are slower than without. */
    #if defined(__SSE__) && defined(__GNUC__)
   //AlignedAccessCheck(__m128, uint_least32_t, uint_least8_t, uint_least8_t);
   //AlignedAccessCheck(__m128, uint_least8_t, uint_least8_t, uint_least8_t);
    #endif
-  
+
   // 8 * (1/(8*8)), i.e. 1/8 chance of succeeding:
   //AlignedAccessCheck(uint_least64_t, uint_least32_t, uint_least8_t, uint_least8_t);
-  
+
   // 4 * (1/(4*4)), i.e. 1/4 chance of succeeding:
   //AlignedAccessCheck(uint_least32_t, uint_least8_t, uint_least8_t, uint_least8_t);
 
   // 2 * (1/(2*2)), i.e. 1/2 chance of succeeding:
   //AlignedAccessCheck(uint_least16_t, uint_least8_t, uint_least8_t, uint_least8_t);
-  
+
   #undef AlignedAccessCheck
-  
+
   #if defined(__x86_64) && 0
     /* These methods ignore possible unoptimal alignment */
     #if 0 // slower than 32-bit-only
@@ -292,7 +292,7 @@ static inline const unsigned char* ScanByte(
     if(granularity == 1)
     {
       #if defined(__x86_64) && 0
-        /* This is a port of the memchr algorithm 
+        /* This is a port of the memchr algorithm
          * employed in glibc-2.6.1/sysdeps/i386/memchr.S
          *      and in glibc-2.6.1/generic/memchr.c
          * But for unknown reason, it seems to perform
@@ -318,7 +318,7 @@ static inline const unsigned char* ScanByte(
             const uint_fast64_t got_pattern
                 = fullword ^ *reinterpret_cast<const uint_least64_t*> (begin);
             begin += 8;
-            
+
             if(got_pattern + magic >= magic // test carry flag
             || (((got_pattern + magic) ^ got_pattern) | magic) != UINT64_C(-1))
             {/*
@@ -346,7 +346,7 @@ static inline const unsigned char* ScanByte(
             n_bytes -= 8;
         }
       #endif
-      
+
         size_t n=0;
         DuffsDevice8(n_bytes, n<n_bytes,
             if(begin[n] == byte) return begin+n; ++n; );
@@ -361,9 +361,9 @@ static inline const unsigned char* ScanByte(
         /*fprintf(stderr, "begin=%p, n_bytes=%u, granu=%u\n",
             begin,n_bytes,granularity);*/
         if(*begin == byte) return begin;
-        
+
         if(n_bytes <= granularity) break;
-        
+
         begin += granularity;
         n_bytes -= granularity;
     }

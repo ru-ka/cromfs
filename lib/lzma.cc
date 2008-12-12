@@ -29,7 +29,7 @@ am wrong), this refers to the optimal parsing algorithm. The algorithm
 tries many different combinations of matches to find the best one. If a
 match is found that is over the fb value, then it will not be optimised,
 and will just be used straight.
-This speeds up corner cases such as pic.   
+This speeds up corner cases such as pic.
 */
 
 /* apparently, 0 and 1 are valid values. 0 = fast mode */
@@ -40,7 +40,7 @@ unsigned LZMA_MatchFinderCycles = 0; // default: 0
 // -pb
 unsigned LZMA_PosStateBits = 0; // default: 2, range: 0..4
 /*from lzma.txt:
-          pb switch is intended for periodical data 
+          pb switch is intended for periodical data
           when period is equal 2^N.
 */
 
@@ -48,8 +48,8 @@ unsigned LZMA_PosStateBits = 0; // default: 2, range: 0..4
 // -lp
 unsigned LZMA_LiteralPosStateBits = 0; // default: 0, range: 0..4
 /*from lzma.txt:
-          lp switch is intended for periodical data when period is 
-          equal 2^N. For example, for 32-bit (4 bytes) 
+          lp switch is intended for periodical data when period is
+          equal 2^N. For example, for 32-bit (4 bytes)
           periodical data you can use lp=2.
           Often it's better to set lc0, if you change lp switch.
 */
@@ -80,7 +80,7 @@ Discoveries:
     Start LZMA(inotab, 379112 bytes)
     Yay result with pb0 lp0 lc0: 24504
     Best LZMA for inotab(379112->24504): pb0 lp0 lc0
- 
+
  BLKTAB:
     Best LZMA for raw_blktab(10068->2940): pb2 lp2 lc0
 
@@ -100,7 +100,7 @@ Discoveries:
     Yay result with pb3 lp2 lc0: 1172994
     Yay result with pb3 lp3 lc0: 1169048
     Best LZMA for blktab(12536608->1169048): pb3 lp3 lc0
-    
+
     It seems, lc=0 and pb=lp=N is a wise choice,
     where N is 2 for packed blktab and 3 for unpacked.
 
@@ -116,8 +116,8 @@ Discoveries:
       pb3 lp1 lc0
       pb1 lp2 lc0
       pb2 lp1 lc0
-      
-    For C source code data, the best results 
+
+    For C source code data, the best results
      are between:
       pb1 lp0 lc3 (10%)
       pb0 lp0 lc3 (90%)
@@ -160,7 +160,7 @@ static UInt32 SelectDictionarySizeFor(unsigned datasize)
     if(datasize <= 512) return 512;
     if(datasize <= 1024) return 1024;
     if(datasize <= 4096) return 4096;
-    if(datasize <= 16384) return 32768; 
+    if(datasize <= 16384) return 32768;
     if(datasize <= 65536) return 528288;
     if(datasize <= 528288) return 1048576*4;
     if(datasize <= 786432) reutrn 1048576*16;
@@ -204,7 +204,7 @@ public:
     std::vector<unsigned char> buf;
 public:
     MemWriter(): ISeqOutStream(), buf() { Write = WriteMethod; }
-    
+
     static size_t WriteMethod(void*pp, const void* from, size_t size)
     {
         MemWriter& p = *(MemWriter*)pp;
@@ -231,7 +231,7 @@ const std::vector<unsigned char> LZMACompress(
     unsigned dictionarysize)
 {
     if(buf.empty()) return buf;
-    
+
     CLzmaEncProps props;
     LzmaEncProps_Init(&props);
     props.dictSize = dictionarysize;
@@ -242,7 +242,7 @@ const std::vector<unsigned char> LZMACompress(
     props.mc       = LZMA_MatchFinderCycles;
     props.algo     = LZMA_AlgorithmNo;
     props.numThreads = 1;
-    
+
     switch(LZMA_AlgorithmNo)
     {
         case 0: // quick: HC4
@@ -256,7 +256,7 @@ const std::vector<unsigned char> LZMACompress(
             props.numHashBytes = 4;
             break;
     }
-    
+
     CLzmaEncHandle p = LzmaEnc_Create(&LZMAalloc);
     struct AutoReleaseLzmaEnc
     {
@@ -272,24 +272,24 @@ const std::vector<unsigned char> LZMACompress(
     } AutoReleaser(p); // Create a destructor that ensures
     // that the CLzmaEncHandle is not leaked, even if an
     // exception happens
-    
+
     int res = LzmaEnc_SetProps(p, &props);
     if(res != SZ_OK)
     {
     Error:
         return std::vector<unsigned char> ();
     }
-    
+
     unsigned char propsEncoded[LZMA_PROPS_SIZE + 8];
     size_t propsSize = sizeof propsEncoded;
     res = LzmaEnc_WriteProperties(p, propsEncoded, &propsSize);
     if(res != SZ_OK) goto Error;
-    
+
     MemReader is(buf);
     MemWriter os;
     W64(propsEncoded+LZMA_PROPS_SIZE, buf.size());
     os.buf.insert(os.buf.end(), propsEncoded, propsEncoded+LZMA_PROPS_SIZE+8);
-    
+
     res = LzmaEnc_Encode(p, &os, &is, 0, &LZMAalloc, &LZMAalloc);
     if(res != SZ_OK) goto Error;
 
@@ -309,23 +309,23 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 const std::vector<unsigned char> LZMADeCompress
     (const std::vector<unsigned char>& buf, bool& ok)
 {
-    if(buf.size() <= LZMA_PROPS_SIZE+8) 
+    if(buf.size() <= LZMA_PROPS_SIZE+8)
     {
     /*clearly_not_ok:*/
         ok = false;
         return std::vector<unsigned char> ();
     }
-    
+
     uint_least64_t out_sizemax = R64(&buf[LZMA_PROPS_SIZE]);
-    
+
     /*if(out_sizemax >= (size_t)~0ULL)
     {
         // cannot even allocate a vector this large.
         goto clearly_not_ok;
     }*/
-    
+
     std::vector<unsigned char> result(out_sizemax);
-    
+
     ELzmaStatus status;
     SizeT destlen = result.size();
     SizeT srclen = buf.size()-(LZMA_PROPS_SIZE+8);
@@ -336,7 +336,7 @@ const std::vector<unsigned char> LZMADeCompress
         LZMA_FINISH_END,
         &status,
         &LZMAalloc);
-    
+
     /*
     fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
         res, (int)in_done, (int)buf.size(),
@@ -378,28 +378,28 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
         fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)buf.size());
         fflush(stderr);
     }
-    
+
     unsigned minresultsize=0, maxresultsize=0;
     unsigned sizemap[5][5][9] = {{{0}}};
-    
+
     bool use_small_dict = false;
-    
+
   #pragma omp parallel for
     for(int compress_mode = 0; compress_mode < (5*5*9); ++compress_mode)
     {
         const unsigned pb = compress_mode % 5;
         const unsigned lp = (compress_mode / 5) % 5;
         const unsigned lc = (compress_mode / 5 / 5) % 9;
-        
+
         std::vector<unsigned char>
             result = use_small_dict
                 ? LZMACompress(buf,pb,lp,lc, 4096)
                 : LZMACompress(buf,pb,lp,lc);
-        
+
       #pragma omp critical (lzmacompressheavy_updatestatistics)
        {
         sizemap[pb][lp][lc] = result.size();
-        
+
         if(first || result.size() < minresultsize) minresultsize = result.size();
         if(first || result.size() > maxresultsize) maxresultsize = result.size();
         if(first || result.size() < bestresult.size())
@@ -428,7 +428,7 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
             {
                 char buf[64]; sprintf(buf, "pb%u:%11s", pbt,"");
                 lines[0] += buf;
-                
+
                 for(unsigned lpt = 0; lpt <= 4; ++lpt)
                 {
                     char buf[64]; sprintf(buf, "lp%u:", lpt);
@@ -454,7 +454,7 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
     }
     if(LZMA_verbose >= 2)
         fprintf(stderr, "\n\n\n\n\n\n\n\n");
-    
+
     if(LZMA_verbose >= 1)
     {
         fprintf(stderr, "Best LZMA for %s(%u->%u): %s\n",
@@ -541,16 +541,16 @@ public:
           LeftRightSwap(false)
     {
     }
-    
+
     InstructionType GetNextInstruction(unsigned& attempt)
     {
       InstructionType result = End;
-      
+
       const int Last  = begin + results.size()-1;
-      
+
       #define RetIns(n) do{ result = (n); goto DoneCrit; }while(0)
       #define RetVal(n) do{ state[attempt = (n)] = Pending; RetIns(HereYouGo); }while(0)
-      
+
       #pragma omp critical(LZMA_ParabolicFinderState)
       {
         /*
@@ -561,7 +561,7 @@ public:
                :state[a]==Done?"Ok"
                :"..");
         fprintf(stderr, "\n");*/
-        
+
         if(CountUnknown() == 0)
         {
             // No unassigned slots remain. Don't need more workers.
@@ -572,7 +572,7 @@ public:
         {
             // Alternate which side to do next if both are available.
             bool LeftSideFirst = LeftRightSwap ^= 1;
-            
+
             // Check left side descend type
             int LeftSideNext = -1; bool LeftSideDoable = false;
             for(int c=0; c<=Last; ++c)
@@ -592,7 +592,7 @@ public:
                             LeftSideFirst = true;
                 }
         ExitLeftSideFor: ;
-            
+
             // Check right side descend type
             int RightSideNext = -1; bool RightSideDoable = false;
             for(int c=Last; c>=0; --c)
@@ -612,26 +612,26 @@ public:
                             LeftSideFirst = false;
                 }
         ExitRightSideFor: ;
-        
+
             if(!LeftSideFirst)
                  { std::swap(LeftSideDoable, RightSideDoable);
                    std::swap(LeftSideNext,   RightSideNext); }
-            
+
             if(LeftSideDoable) RetVal(LeftSideNext);
             if(RightSideDoable) RetVal(RightSideNext);
-            
+
             // If we have excess threads and work to do, give them something
             if(CountHandled() > 2) if(LeftSideNext >= 0) RetVal(LeftSideNext);
             if(CountHandled() > 3) if(RightSideNext >= 0) RetVal(RightSideNext);
-            
+
             RetIns(WaitingResults);
         }
-        
+
       DoneCrit: ;
       }
       return result;
     }
-    
+
     void GotResult(unsigned attempt, unsigned value)
     {
       #pragma omp critical(LZMA_ParabolicFinderState)
@@ -680,15 +680,15 @@ static void LZMACompressAutoHelper(
                 ForceSwitchThread();
                 continue;
         }
-        
+
         const unsigned try_pb = &which_iterate == &pb ? t : pb;
         const unsigned try_lp = &which_iterate == &lp ? t : lp;
         const unsigned try_lc = &which_iterate == &lc ? t : lc;
-        
+
         if(LZMA_verbose >= 2)
             fprintf(stderr, "%s:Trying pb%u lp%u lc%u\n",
                 why,try_pb,try_lp,try_lc);
-        
+
         std::vector<unsigned char> result = use_small_dict
             ? LZMACompress(buf,try_pb,try_lp,try_lc, 65536)
             : LZMACompress(buf,try_pb,try_lp,try_lc);
@@ -696,9 +696,9 @@ static void LZMACompressAutoHelper(
         if(LZMA_verbose >= 2)
             fprintf(stderr, "%s:       pb%u lp%u lc%u -> %u\n",
                 why,try_pb,try_lp,try_lc, (unsigned)result.size());
-        
+
         finder.GotResult(t, result.size());
-        
+
       #pragma omp critical(LZMA_Auto_UpdateStats)
       {
         if(first || result.size() <= bestresult.size())
@@ -720,17 +720,17 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
         fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)buf.size());
         fflush(stderr);
     }
-    
+
     unsigned backup_algorithm = LZMA_AlgorithmNo;
-    
+
     bool use_small_dict = false;//buf.size() >= 1048576;
-    
+
     if(use_small_dict) LZMA_AlgorithmNo = 0;
-    
+
     unsigned pb=0, lp=0, lc=0;
 
     std::vector<unsigned char> bestresult;
-  
+
   {
     ParabolicFinder pb_finder(0,4);
     ParabolicFinder lp_finder(0,4);
@@ -744,7 +744,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
      * one being focused change, it won't work. Only one parameter
      * must change in the loop.
      */
-    
+
     /* step 1: find best value in pb axis */
     LZMACompressAutoHelper(buf,use_small_dict,why,
         pb, lp, lc,
@@ -754,7 +754,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
 
     #pragma omp single
     lp_finder.GotResult(lp, bestresult.size());
-    
+
     /* step 2: find best value in lp axis */
     LZMACompressAutoHelper(buf,use_small_dict,why,
         pb, lp, lc,
@@ -764,20 +764,20 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
 
     #pragma omp single
     lc_finder.GotResult(lc, bestresult.size());
-    
+
     /* step 3: find best value in lc axis */
     LZMACompressAutoHelper(buf,use_small_dict,why,
         pb, lp, lc,
         lc, lc_finder, first, bestresult);
    }
   }
-  
+
     if(use_small_dict || LZMA_AlgorithmNo != backup_algorithm)
     {
         LZMA_AlgorithmNo = backup_algorithm;
         bestresult = LZMACompress(buf, pb,lp,lc);
     }
-    
+
     if(LZMA_verbose >= 1)
     {
         fprintf(stderr, "Best LZMA for %s(%u->%u): pb%u lp%u lc%u\n",
@@ -787,7 +787,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
             pb,lp,lc);
     }
     fflush(stderr);
-    
+
     return bestresult;
 }
 

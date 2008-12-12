@@ -43,13 +43,13 @@ void fblock_storage::Check_Existing_File()
         is_compressed = false;
         return;
     }
-    
+
     filesize = lseek64(fd, 0, SEEK_END);
     std::vector<unsigned char> Buffer(filesize);
     LongFileRead(fd, 0, filesize, &Buffer[0]);
-    
+
     is_compressed = true;
-    
+
     bool is_lzma_ok = false;
     try
     {
@@ -61,7 +61,7 @@ void fblock_storage::Check_Existing_File()
         // out of memory, probably invalid lzma data
         is_lzma_ok = false;
     }
-    
+
     if(!is_lzma_ok)
     {
         is_compressed = false;
@@ -71,14 +71,14 @@ void fblock_storage::Check_Existing_File()
 void fblock_storage::put_raw(const std::vector<unsigned char>& raw)
 {
     Unmap();
-    
+
     is_compressed = false;
-    
+
     size_t res=0;
     {autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
      res = std::fwrite(&raw[0], 1, filesize=raw.size(), fp);
     }
-    
+
     if(res != raw.size())
     {
         std::fprintf(stderr, "fwrite: res=%d, should be %d\n", (int)res, (int)raw.size());
@@ -93,7 +93,7 @@ void fblock_storage::put_raw(const std::vector<unsigned char>& raw)
 void fblock_storage::put_compressed(const std::vector<unsigned char>& compressed)
 {
     Unmap();
-    
+
     //fprintf(stderr, "[1;mstoring compressed[m\n");
     is_compressed = true;
 
@@ -119,11 +119,11 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
         {
             /* If the caller wants raw, just copy it. */
             if(raw) raw->assign(mmapped.get_ptr(), mmapped.get_ptr()+filesize);
-            
+
             /* If the caller wants compressed... */
             if(compressed)
             {
-                *compressed = DoLZMACompress(LZMA_HeavyCompress, 
+                *compressed = DoLZMACompress(LZMA_HeavyCompress,
                     raw ? *raw /* If we already copied the raw data, use that */
                           /* Otherwise, create a vector for LZMACompress to use */
                         : std::vector<unsigned char> (mmapped.get_ptr(), mmapped.get_ptr()+filesize)
@@ -133,7 +133,7 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
         }
         /* mmapping didn't work. Fortunately we have got a plan B. */
     }
-    
+
     /* The data could not be mmapped. So we have to read a copy from the file. */
     const autoclosefd fd(open(getfn().c_str(), O_RDONLY | O_LARGEFILE));
 
@@ -145,7 +145,7 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
         if(compressed) *compressed = dummy;
         return;
     }
-    
+
     /* Read the file contents */
 
     /* Is the file data compressed? */
@@ -189,7 +189,7 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
             *compressed = DoLZMACompress(LZMA_HeavyCompress, result, "fblock");
         }
     }
-    
+
     // fd will be automatically closed.
 }
 
@@ -201,7 +201,7 @@ void fblock_storage::put_appended_raw(
     last_access = std::time(NULL);
 
     Unmap();
-    
+
     const uint32_t cap = append.AppendBaseOffset + datasize;
     if(cap <= append.OldSize)
     {
@@ -214,54 +214,54 @@ void fblock_storage::put_appended_raw(
         /* File does not need to be changed */
         return;
     }
-    
+
     assertvar(cap);
     assertvar(append.AppendedSize);
     assert(cap == append.AppendedSize);
     assertflush();
-    
+
     if(is_compressed)
     {
         /* We cannot append into compressed data. Must decompress it first. */
-        
+
         std::vector<unsigned char> buf = get_raw();
         int open_flags = O_RDWR /*| O_CREAT*/ | O_LARGEFILE;
         autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
         if(fd < 0) { std::perror(getfn().c_str()); return; }
 
         is_compressed = false;
-        
+
         assertvar(buf.size());
         assertvar(append.AppendBaseOffset);
         assert(buf.size() >= append.AppendBaseOffset);
         assertflush();
-        
+
         // Write preceding part:
         if(!buf.empty()) write(fd, &buf[0], append.AppendBaseOffset);
         // Write appended part:
         if(datasize > 0) write(fd, &data[0], datasize);
-        
+
         /* Note: We need not worry about what comes after datasize.
          * If the block was fully submerged in the existing data,
          * we don't reach this far (already checked above).
          */
-        
+
         filesize = cap;
-        
+
         RemapFd(fd);
-        
+
         // fd will be automatically closed.
         return;
     }
-    
+
     /* not truncating */
     const uint32_t added_length = append.AppendedSize - append.OldSize;
-    
+
     int open_flags = O_RDWR | O_LARGEFILE;
     if(append.OldSize == 0) open_flags |= O_CREAT;
     autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
     if(fd < 0) { std::perror(getfn().c_str()); return; }
-    
+
     try
     {
         ( LongFileWrite(fd, append.OldSize, added_length, &data[datasize - added_length],
@@ -307,11 +307,11 @@ void fblock_storage::InitDataReadBuffer(
                 if(mmapped) goto UseMMapping;
             }
         }
-        
+
         if(req_offset > size) req_offset = size;
 
         //fprintf(stderr, "Using copy of compressed\n"); fflush(stderr);
-        
+
         Buffer.AssignCopyFrom(&rawdata[req_offset],
             std::min(size - req_offset, req_size)
                              );
@@ -321,7 +321,7 @@ void fblock_storage::InitDataReadBuffer(
         size = filesize;
 
         if(req_offset > size) req_offset = size;
-        
+
         if(!mmapped) Remap();
         if(mmapped)
         {
@@ -367,7 +367,7 @@ mkcromfs_fblock& mkcromfs_fblockset::operator[] (size_t index)
 {
     if(index >= size())
         fblocks.resize(index+1);
-    
+
     return fblocks[index];
 }
 
@@ -415,11 +415,11 @@ void mkcromfs_fblockset::restore_backup(const undo_t& e)
 {
     for(size_t a = e.n_fblocks; a<fblocks.size(); ++a)
         fblocks[a].Delete();
-    
+
     fblocks.resize(e.n_fblocks);
-    
+
     for(size_t a = 0; a < e.fblock_state.size(); ++a)
-        fblocks[a].restore_backup(e.fblock_state[a]);  
+        fblocks[a].restore_backup(e.fblock_state[a]);
     index = e.fblock_index;
 }
 
@@ -447,14 +447,14 @@ void mkcromfs_fblockset::FreeSomeResources()
     for(size_t a=0; a<fblocks.size(); ++a)
         fblocknums[a]=a;
     std::sort(fblocknums.begin(), fblocknums.end(), OrderByAccessTime(fblocks) );
-    
+
     time_t now = std::time(NULL);
     for(size_t a=0; a<fblocks.size(); ++a)
     {
         mkcromfs_fblock& fblock = fblocks[fblocknums[a]];
-        
+
         time_t last_access = fblock.get_last_access();
-        
+
         if(std::difftime(now, last_access) >= FblockMaxAccessAgeBeforeDealloc)
         {
             if(do_randomcompress && fblock.is_uncompressed())
@@ -467,7 +467,7 @@ void mkcromfs_fblockset::FreeSomeResources()
             fblock.Unmap();
         }
     }
-    
+
     if(do_randomcompress)
         counter = 0; /* postpone it if we cannot comply */
 }

@@ -47,7 +47,7 @@ void block_index_type::AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t va
         ++find_index;
     }
     if(find_index >= realindex_fds.size()) find_index = new_real();
-    
+
     char Packet[4];
     W32(Packet, value);
     pwrite64( realindex_fds[find_index], Packet, 4, RealPos(crc));
@@ -63,7 +63,7 @@ void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_i
         ++find_index;
     }
     if(find_index >= autoindex_fds.size()) find_index = new_auto();
-    
+
     char Packet[4+4];
     W32(Packet,   value.fblocknum);
     W32(Packet+4, value.startoffs);
@@ -112,10 +112,10 @@ size_t block_index_type::new_auto()
     std::stringstream tmp;
     tmp << GetTempDir() << "/auto-" << (void*)(this) << "-" << result << ".dat";
     const std::string fn = tmp.str();
-    
+
     int fd = open(fn.c_str(), O_RDWR | O_TRUNC | O_CREAT | O_NOATIME | O_EXCL, 0600);
     if(fd < 0) perror(fn.c_str()); // TODO: A better error resolution
-    
+
     unlink(fn.c_str());
     autoindex_fds.push_back(fd);
     return result;
@@ -124,18 +124,18 @@ size_t block_index_type::new_auto()
 
 /*************************************************
   Goals of this hash calculator:
-  
+
   1. Minimize chances of duplicate matches
   2. Increase data locality (similar data gives similar hashes)
   3. Be fast to calculate
-  
+
   Obviously, aiming for goal #2 subverts goal #1.
-  
+
   Note: Among goals is _not_:
   1. Endianess safety
   The hash will never be exposed outside this program,
   so it does not need to be endian safe.
- 
+
 **************************************************/
 
 #include "newhash.h"

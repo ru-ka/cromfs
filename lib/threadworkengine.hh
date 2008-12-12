@@ -7,7 +7,7 @@
 
 #if THREAD_DEBUG >= 1
 #include <cstdio>
-    static volatile unsigned ThreadDebugCounter=0; 
+    static volatile unsigned ThreadDebugCounter=0;
     #define ThreadDebug(p...) do { \
         char Buf[8192]; size_t n=0;\
         n+=std::sprintf(Buf+n,"%5u|", \
@@ -26,7 +26,7 @@ public:
     {
     }
 #endif
-    
+
     void RunTasks(
         size_t num_threads,
         ssize_t num_workunits,
@@ -38,7 +38,7 @@ public:
 private:
 #ifndef _OPENMP
     std::vector<ThreadType> threads;
-    
+
     struct workerparam
     {
         bool init_ok; // flag: should threads begin work?
@@ -50,15 +50,15 @@ private:
         MutexType       mutex; // mutex for locking access to this data
         ThreadCondition main_cond; // signal from main to threads
         ThreadCondition sub_cond;  // signal from threads to main
-        
+
         // And the actual work-related information goes here.
         size_t work_index;
         size_t num_totalworks;
         bool cancelled;
-        
+
         bool (*DoWork)(size_t index, WorkType& );
         WorkType* work;
-    
+
     public:
         workerparam() :
             init_ok(false), done_ok(false),
@@ -67,7 +67,7 @@ private:
             work_index(0), num_totalworks(0), cancelled(0),
             DoWork(0), work(0) { }
     } params;
-    
+
     static void* WorkRunner(workerparam& params);
 #endif
 };

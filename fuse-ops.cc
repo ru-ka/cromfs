@@ -88,9 +88,9 @@ extern "C" {
     {
         if(trace_ops) fprintf(stderr, "statfs\n");
         CROMFS_CTX(fs)
-        
+
         const cromfs_superblock_internal& sblock = fs.get_superblock();
-        
+
         struct statvfs stbuf;
         stbuf.f_bsize  = sblock.bsize;
         stbuf.f_frsize = sblock.bsize;
@@ -103,16 +103,16 @@ extern "C" {
         stbuf.f_flag   = ST_RDONLY;
         stbuf.f_namemax= (unsigned long int)(~0UL);
         fuse_reply_statfs(req, &stbuf);
-        
+
         CROMFS_CTX_END()
     }
-    
+
     static void stat_inode(struct stat& attr, fuse_ino_t ino, const cromfs_inode_internal& i)
     {
         using namespace std;
         // ^Because gcc gives me a "error: 'memset' is not a member of 'std'"
         // Yet, cstring is included
-        
+
         memset(&attr, 0, sizeof(attr));
         attr.st_dev     = 0;
         attr.st_ino     = ino;
@@ -122,11 +122,11 @@ extern "C" {
         attr.st_gid     = i.gid ? i.gid : getgid();
         attr.st_size    = i.bytesize;
         attr.st_blksize = 4096;
-        
+
         const unsigned unit = 512; // attr.st_blksize;
         // For some reason, 512 seems to be the right
         // value that has "du" work right, not 4096.
-        
+
         attr.st_blocks  = (i.bytesize + unit - 1) / (unit);
         attr.st_atime   = i.time;
         attr.st_mtime   = i.time;
@@ -137,51 +137,51 @@ extern "C" {
     void cromfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     {
         if(trace_ops) fprintf(stderr, "lookup(%d,%s)\n", (int)parent, name);
-        
+
         CROMFS_CTX(fs)
-        
+
         cromfs_inodenum_t inonum = fs.dir_lookup(parent, name);
         fuse_entry_param pa;
         pa.ino        = inonum;
         pa.generation = inonum;
         pa.attr_timeout  = TIMEOUT_CONSTANT;
         pa.entry_timeout = TIMEOUT_CONSTANT;
-        
+
         if(inonum != 0)
         {
             cromfs_inode_internal ino = fs.read_inode(inonum);
             if(trace_ops) fprintf(stderr, "lookup: using inode: %s\n", DumpInode(ino).c_str());
             stat_inode(pa.attr, inonum, ino);
         }
-        
+
         fuse_reply_entry(req, &pa);
-        
+
         CROMFS_CTX_END()
     }
 
     void cromfs_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *)
     {
         if(trace_ops) fprintf(stderr, "getattr(%d)\n", (int)ino);
-        
+
         CROMFS_CTX(fs)
 
         const cromfs_inode_internal i = fs.read_inode(ino);
         struct stat attr;
-        
+
         stat_inode(attr, ino, i);
         fuse_reply_attr(req, &attr, TIMEOUT_CONSTANT);
-        
+
         CROMFS_CTX_END()
     }
 
     void cromfs_access(fuse_req_t req, fuse_ino_t ino, int mask)
     {
         if(trace_ops) fprintf(stderr, "access(%d,%d)\n", (int)ino, mask);
-        
+
         /*CROMFS_CTX(fs)*/
 
         REPLY_ERR(0);
-        
+
         /*CROMFS_CTX_END()*/
     }
 
@@ -198,14 +198,14 @@ extern "C" {
         }
         Buf[nread] = 0;
         fuse_reply_readlink(req, Buf);
-        
+
         CROMFS_CTX_END()
     }
 
     void cromfs_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
     {
         if(trace_ops) fprintf(stderr, "open(%d)\n", (int)ino);
-        
+
         CROMFS_CTX(fs)
 
         fi->keep_cache = 1;
@@ -216,7 +216,7 @@ extern "C" {
             REPLY_ERR(EACCES);
         else
             fuse_reply_open(req, fi);
-        
+
         CROMFS_CTX_END()
     }
 
@@ -224,21 +224,21 @@ extern "C" {
                      struct fuse_file_info */*fi*/)
     {
         if(trace_ops) fprintf(stderr, "read(%d, %ld, %u)\n", (int)ino, (long)size, (unsigned)off);
-        
+
         CROMFS_CTX(fs)
-        
+
         std::vector<unsigned char> Buf(size);
-        
+
         int_fast64_t result = fs.read_file_data(ino, off, &Buf[0], size, "fileread");
         fuse_reply_buf(req, (const char*)&Buf[0], result);
-        
+
         CROMFS_CTX_END()
     }
 
     void cromfs_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
     {
         if(trace_ops) fprintf(stderr, "opendir(%d)\n", (int)ino);
-        
+
         CROMFS_CTX(fs)
         fi->keep_cache = 1;
         const cromfs_inode_internal i = fs.read_inode(ino);
@@ -246,7 +246,7 @@ extern "C" {
             REPLY_ERR(ENOTDIR);
         else
             fuse_reply_open(req, fi);
-        
+
         CROMFS_CTX_END()
     }
 
@@ -254,7 +254,7 @@ extern "C" {
                         struct fuse_file_info */*fi*/)
     {
         if(trace_ops) fprintf(stderr, "readdir(%d)\n", (int)ino);
-        
+
         CROMFS_CTX(fs)
         if(size <= 0)
         {
@@ -267,22 +267,22 @@ extern "C" {
 #else
         std::vector<char> dirbuf(size + 4096);
 #endif
-        
+
         /* Estimate that each dir entry is about 64 bytes in size by average */
         unsigned size_per_elem = 64;
-        
+
         unsigned dirbuf_head = 0;
-        
+
         /* Just in case, read the entire directory. There is very
          * rarely a need to readdir() only a portion of it.
          * This way, we will have it in cache.
          */
         fs.read_dir(ino, 0, (uint_fast32_t)~0U);
-        
+
         while(size > 0)
         {
             unsigned dir_count = (size + size_per_elem - 1) / size_per_elem;
-            
+
 #if READDIR_DEBUG
             fprintf(stderr, "querying read_dir(%d,%u,%u)\n", (int)ino,off,dir_count);
 #endif
@@ -297,7 +297,7 @@ extern "C" {
                     (long)off, i->first.c_str(),
                     (long) i->second);
 #endif
-                    
+
                 struct stat attr;
             #if LIGHTWEIGHT_READDIR
                 attr.st_ino  = i->second;
@@ -308,9 +308,9 @@ extern "C" {
                 const cromfs_inode_internal in = fs.read_inode(i->second);
                 stat_inode(attr, i->second, in);
             #endif
-                
+
                 ++off;
-                
+
 #if FUSE_VERSION >= 26
                 size_t ent_size = fuse_add_direntry(
                     req,
@@ -325,7 +325,7 @@ extern "C" {
                     &attr,
                     off) - &dirbuf[dirbuf_head];
 #endif
-                
+
                 if(ent_size > size)
                 {
                     size=0;
@@ -337,7 +337,7 @@ extern "C" {
             if(dirinfo.empty()) break;
         }
         fuse_reply_buf(req, &dirbuf[0], dirbuf_head);
-        
+
         CROMFS_CTX_END()
     }
 }

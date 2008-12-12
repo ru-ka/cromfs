@@ -33,7 +33,7 @@ private:
     /*****************************************************/
     /* The different types of plan for storing the data. */
     /*****************************************************/
-    
+
     //
     // Plan for reusing already stored block data
     //
@@ -47,13 +47,13 @@ private:
         BlockIndexHashType crc;
     public:
         ReusingPlan(bool) : success(false),blocknum(NO_BLOCK),block(),crc(0) { }
-        
+
         ReusingPlan(BlockIndexHashType c, cromfs_blocknum_t bn)
             : success(true),blocknum(bn),block(),crc(c) { }
-        
+
         ReusingPlan(BlockIndexHashType c, const cromfs_block_internal& b)
             : success(true),blocknum(NO_BLOCK),block(b),crc(c) { }
-        
+
         operator bool() const { return success; }
     };
 
@@ -71,31 +71,31 @@ private:
     //
     // Plan for writing new data
     //
-    
-    struct WritePlan 
+
+    struct WritePlan
     {
         cromfs_fblocknum_t fblocknum;
         AppendInfo         appended;
         const BoyerMooreNeedleWithAppend& data;
         BlockIndexHashType            crc;
-        
+
         WritePlan(cromfs_fblocknum_t f, const AppendInfo& a,
                   const BoyerMooreNeedleWithAppend& d, BlockIndexHashType c)
             : fblocknum(f), appended(a), data(d), crc(c) { }
     };
-    
+
     /* Create a plan on appending to a fblock. It will always work. */
     /* But which fblock to append to? */
     const WritePlan CreateWritePlan(const BoyerMooreNeedleWithAppend& data, BlockIndexHashType crc,
         overlaptest_history_t& history) const;
-    
+
     /* Execute an appension plan */
     cromfs_blocknum_t Execute(const WritePlan& plan, bool DoUpdateBlockIndex = true);
-    
+
     /*********************************************************************/
     /* Generic methods for complementing fblocks, blocks and block_index */
     /*********************************************************************/
-    
+
     /* Autoindex new data in this fblock */
     void AutoIndex(const cromfs_fblocknum_t fblocknum,
         uint_fast32_t old_raw_size,
@@ -164,17 +164,17 @@ private:
         const std::vector<unsigned char> data;
         // hash calculated from the data
         const BlockIndexHashType crc;
-        
+
         // Where to write the blocknum once it's decided
         unsigned char* const target;
-        
+
         /* needle is behind an autoptr, so that it doesn't always
          * need to be initialized. */
         autoptr<BoyerMooreNeedleWithAppend> needle;
-        
+
         // A sorting key, decided by EvaluateBlockifyOrders()
         float badness;
-        
+
         overlaptest_history_t minimum_tested_positions;
     public:
         individual_order(const std::vector<unsigned char>& d,
@@ -187,27 +187,27 @@ private:
               minimum_tested_positions()
         {
         }
-        
+
         void MakeNeedle()
         {
             needle = new BoyerMooreNeedleWithAppend(data);
         }
-        
+
         void Write(cromfs_blocknum_t num)
         {
             Wn(target, num, BLOCKNUM_SIZE_BYTES());
         }
-        
+
         bool CompareOrder(const individual_order& b) const
         {
             // primary sort key: badness.
             if(badness != b.badness) return badness < b.badness;
-            
+
             // When they are equal, try to maintain old order.
             // This usually correlates with file position & file index:
             return target < b.target;
             //return offset < b.offset;
-            
+
             return false;
         }
 
@@ -228,10 +228,10 @@ private:
         const std::vector<unsigned char>& data,
         uint_fast64_t offset,
         unsigned char* target);
-    
+
     // handle pending orders
     void HandleOrders(orderlist_t& blockify_orders, ssize_t max_remaining_orders);
-    
+
     // assign "badness" for each order to assist in sorting them
     void EvaluateBlockifyOrders(orderlist_t& blockify_orders);
 
@@ -243,7 +243,7 @@ public:
         SchedulerDataClass dataclass,
         unsigned char* blocknum_target,
         long BlockSize);
-    
+
     /* Flushes all blockifying requests so far. */
     void FlushBlockifyRequests();
 
@@ -252,7 +252,7 @@ public:
 
     /* Switches on some options based on data. */
     void EnablePackedBlocksIfPossible();
-    
+
 private:
     struct schedule_item
     {
@@ -266,11 +266,11 @@ private:
             : source(src), target(tgt), dataclass(dc), blocksize(bsize)
         {
         }
-        
+
         inline datasource_t* GetDataSource() const { return source; }
         const std::string GetName() const { return source->getname(); }
         long GetBlockSize() const { return blocksize; }
-        
+
         inline unsigned char* GetBlockTarget() const { return target; }
 
         bool CompareSchedulingOrder(const schedule_item& b) const
@@ -298,24 +298,24 @@ private:
 
     private:
         autoptr<datasource_t> source;
-        
+
         unsigned char*     target;
         SchedulerDataClass dataclass;
         long               blocksize;
     };
 
     std::deque<schedule_item> schedule;
-    
+
 public:
     // Data locators written into filesystem. Indexed by block number.
     std::vector<cromfs_block_internal> blocks;
-    
+
     // The fblocks written into filesystem. Indexed by data locators.
     mkcromfs_fblockset fblocks;
-    
+
     /* For each bsize differently. */
     std::vector< std::map<long,size_t> > last_autoindex_length;
-    
+
     // This is the index used for two purposes:
     //   Discovering identical blocks (reuse of the data locator)
     //     Reuses the old block number

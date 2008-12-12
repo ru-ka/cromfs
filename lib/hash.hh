@@ -34,7 +34,7 @@ namespace BisqHash {
   {
     size_t operator() (const T& t) const { return t; }
   };
-  
+
   template<typename T>
   struct hash<basic_string<T> >
   {
@@ -90,7 +90,7 @@ namespace BisqHash {
         return (n * 33818641UL);
     }
   };
-  
+
   template<typename A,typename B> struct hash<std::pair<A,B> >
   {
      size_t operator() (const std::pair<A,B>& p) const

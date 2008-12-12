@@ -92,7 +92,7 @@ namespace assertprivate
                 assertion &a = asserttab[i];
                 tab[a.vars].push_back(a.data);
             }
-            
+
             for(tabtype::const_iterator i=tab.begin(); i!=tab.end(); ++i)
             {
                 typedef std::set<std::string> varset;
@@ -103,7 +103,7 @@ namespace assertprivate
                     const std::string &condition = a.condition;
                     std::cerr << a.file << '[' << a.func << "]:" << a.line
                               << ": " << condition << std::endl;
-                    
+
                     parec state;
                     state.var = "";
                     std::list<parec> stack;
@@ -222,13 +222,13 @@ namespace assertprivate
                 for(varmapbase::const_iterator j=mappi->begin(); j!=mappi->end(); ++j)
                 {
                     const std::string &s = j->first;
-                    
+
                     /* Don't display the variable if it isn't
                      * used in any of the expressions
                      */
                     varset::const_iterator k = vars.find(s);
                     if(k == vars.end())continue;
-                    
+
                     if(first) { first=false;
                          std::cerr <<    "\t\t(With ";}
                     else std::cerr << ", ";
