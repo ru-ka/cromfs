@@ -9,6 +9,9 @@
 #include <map>
 #include <set>
 #include <algorithm>
+#ifdef HAS_GCC_PARALLEL_ALGORITHMS
+# include <parallel/algorithm>
+#endif
 #include <functional>
 
 #include <unistd.h>
@@ -277,11 +280,12 @@ namespace cromfs_creator
         
         // Step 2: Sort the contents of the directory according
         //         to the filename.
-        
-        std::stable_sort(&collection[collection_begin_pos],
-                  &collection[collection_end_pos],
-                  std::mem_fun_ref(&direntry::CompareName));
-        
+
+        MAYBE_PARALLEL_NS::stable_sort(
+            &collection[collection_begin_pos],
+            &collection[collection_end_pos],
+            std::mem_fun_ref(&direntry::CompareName));
+
         // Step 3: Read subdirectories and calculate the number of
         //         blocks. Also assign the target for the inode number.
         //         (The target is in the cromfs_dirinfo of parent directory.)
@@ -425,8 +429,8 @@ namespace cromfs_creator
          * sort the entry list in the order in which we want to
          * blockify it.
          */
-        
-        std::stable_sort(
+
+        MAYBE_PARALLEL_NS::stable_sort(
             collection.begin(),
             collection.end(),
             std::mem_fun_ref(&direntry::CompareSortKey)); // Step 3.

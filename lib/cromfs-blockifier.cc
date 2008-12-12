@@ -10,6 +10,9 @@
 #include "append.hh"
 
 #include <algorithm>
+#ifdef HAS_GCC_PARALLEL_ALGORITHMS
+# include <parallel/algorithm>
+#endif
 #include <functional>
 #include <stdexcept>
 #include <set>
@@ -267,7 +270,8 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         }
 
         /* Randomly shuffle the non-priority candidates */
-        std::random_shuffle(candidates.begin()+priority_candidates, candidates.end());
+        MAYBE_PARALLEL_NS::
+            random_shuffle(candidates.begin()+priority_candidates, candidates.end());
 #endif
 
         /* Task description:
@@ -814,7 +818,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
     orderlist_t blockify_orders;
 
-    std::stable_sort(schedule.begin(), schedule.end(),
+    MAYBE_PARALLEL_NS::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
 
     uint_fast64_t total_size = 0, blocks_total = 0;

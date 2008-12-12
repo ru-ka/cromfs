@@ -8,8 +8,8 @@ extern "C" {
 #include "lzma.hh"
 #include "threadfun.hh" // for ForceSwitchThread
 
+#include <algorithm> // min,max,swap
 #include <vector>
-#include <algorithm>
 #include <string>
 #include <cstring> // std::memcpy
 
