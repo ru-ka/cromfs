@@ -266,7 +266,7 @@ static inline size_t backwards_match_len(
     return backwards_match_len_common_alignment<false,uint_least32_t,uint_least8_t,uint_least8_t,uint_least8_t>
         (ptr1,ptr2,strlen,maxlen,minlen);
     #endif
-  #elif defined(__i386)
+  #elif 0 && (defined(__i386) || defined(__x86_64))
     return backwards_match_len_common_alignment<false,uint_least32_t,uint_least8_t,uint_least8_t,uint_least8_t>
         (ptr1,ptr2,strlen,maxlen,minlen);
   #else
