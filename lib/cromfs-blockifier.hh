@@ -277,7 +277,25 @@ private:
         {
             return ((int)dataclass < (int)(b.dataclass));
         }
-        
+
+        schedule_item(const schedule_item& b)
+            : source(b.source), target(b.target),
+              dataclass(b.dataclass), blocksize(b.blocksize) // -Weffc++
+        {
+        }
+
+        schedule_item& operator= (const schedule_item& b)
+        {
+            if(&b != this)
+            {
+                source = b.source;
+                target = b.target;
+                dataclass = b.dataclass;
+                blocksize = b.blocksize;
+            }
+            return *this;
+        }
+
     private:
         autoptr<datasource_t> source;
         
