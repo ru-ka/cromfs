@@ -12,6 +12,12 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
   This speeds up the cases where a multiple block long full overlap
   is found.
 
+1.5.5.4 2008-12-14 Joel Yliluom< bisqwit@iki.fi>
+- ./configure now detects systems where cromfs-driver-static cannot
+  be built, such as Fedora 10. In those cases, the staticly linked
+  program is silently dropped from the compilation chain.
+- Minor changes to fix compilation using ICC.
+
 1.5.5.3 2008-12-13 Joel Yliluom< bisqwit@iki.fi>
 - Compilation fixes on IA32 platform
 - Unified the output of "overlap fully" with and without autoindex

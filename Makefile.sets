@@ -24,18 +24,19 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Sat Dec 13 15:18:22 EET 2008
-# for Linux hikaru 2.6.25-gentoo-r7 #1 PREEMPT Mon Sep 1 16:51:51 EEST 2008 i686 AMD Athlon(tm) XP Processor 2800+ AuthenticAMD GNU/Linux
+# at Sun Dec 14 00:58:49 EET 2008
+# for Linux chii 2.6.27.5 #1 SMP Sun Nov 9 13:00:41 EET 2008 x86_64 GNU/Linux
 # To change, run ./configure again.
 #
-CC=gcc-4.1.2
-CPP=cpp-4.1.2
-CXX=g++-4.1.2
-OPTIM +=  -ftree-vectorize -ffast-math -mmmx -m3dnow -msse -msse2
-CPPFLAGS +=  -DUSE_PTHREADS=1 -pthread -DHASH_MAP=1
-LDFLAGS +=  -pthread
-WARNINGS +=  -Wall -Wundef -Wcast-qual -Wpointer-arith -Wconversion -Wwrite-strings -Wsign-compare -Wredundant-decls -Winit-self -Wextra -Wcast-align -Wformat -Wno-conversion
-CWARNINGS +=  -Waggregate-return -Wshadow -Winline -Wstrict-prototypes -Wmissing-prototypes
-CXXWARNINGS +=  -Woverloaded-virtual -Weffc++ -Wno-non-virtual-dtor
+CC=icc
+CPP=icc
+CXX=icc
+OPTIM +=  -ipo -mmmx -msse -msse2
+CPPFLAGS +=  -w1 -inline-level=2 -openmp -DUSE_PTHREADS=0 -DHASH_MAP=0
+LDFLAGS +=  -L/opt/intel/cce/10.1.008/bin/lib -lirc -lguide -lpthread -lstdc++ -openmp
+WARNINGS += 
+CWARNINGS += 
+CXXWARNINGS += 
 
 
+FUSE_STATIC=1

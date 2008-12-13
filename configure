@@ -152,15 +152,25 @@ else
   CPPFLAGS="$CPPFLAGS -DHASH_MAP=0"
 fi
 
-do_echo -n "Checking for fuse... "
+do_echo -n "Checking for fuse (dynamic)... "
 fusetry="`pkg-config --cflags --libs fuse`"
 if cc_check '<fuse_lowlevel.h>' "-DFUSE_USE_VERSION=25 $fusetry" ''; then
   do_echo Yes
 else
   do_echo No
   do_echo "Error: Cromfs requires the Fuse userspace libraries."
-  do_echo "Please try installing libfuse-dev."
+  do_echo "Please try installing libfuse-dev or fuse-devel."
   exit 1
+fi
+
+do_echo -n "Checking for fuse (static)... "
+fusetry="`pkg-config --cflags --libs fuse`"
+if cc_check '<fuse_lowlevel.h>' "-static -DFUSE_USE_VERSION=25 $fusetry" ''; then
+  do_echo Yes
+  FUSE_STATIC=1
+else
+  do_echo No
+  FUSE_STATIC=0
 fi
 
 WARNINGS=""
@@ -253,6 +263,8 @@ for s in CC CPP CXX OPTIM CPPFLAGS LDFLAGS FUSELIBS DATE UNAME WARNINGS CWARNING
 done
 
 sed "$sed_cmd" < Makefile.sets.in > Makefile.sets
+echo "FUSE_STATIC=$FUSE_STATIC"  >> Makefile.sets
+
 cp -p Makefile.sets util/
 cp -p Makefile.sets  lib/
 
