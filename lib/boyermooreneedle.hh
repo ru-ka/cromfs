@@ -24,7 +24,7 @@ public:
     typedef BoyerMooreSearch::skiptable_type skiptable_type;
 public:
     explicit BoyerMooreNeedle(const std::vector<unsigned char>& n)
-        : needle(&n[0]), nlen(n.size()), skip(nlen, nlen)
+        : needle(&n[0]), nlen(n.size()), occ(), skip(nlen, nlen)
     {
         /* Preprocess the needle */
         InitOcc();
@@ -32,7 +32,7 @@ public:
     }
     
     explicit BoyerMooreNeedle(const std::string& n)
-        : needle( (const unsigned char*) n.data()), nlen(n.size()), skip(nlen, nlen)
+        : needle( (const unsigned char*) n.data()), nlen(n.size()), occ(), skip(nlen, nlen)
     {
         /* Preprocess the needle */
         InitOcc();
@@ -40,7 +40,7 @@ public:
     }
     
     explicit BoyerMooreNeedle(const unsigned char* n, size_t nl)
-        : needle(n), nlen(nl), skip(nlen, nlen)
+        : needle(n), nlen(nl), occ(), skip(nlen, nlen)
     {
         /* Preprocess the needle */
         InitOcc();
@@ -191,7 +191,12 @@ private:
     {
         BoyerMooreSearch::InitSkip(skip, needle, nlen);
     }
-    
+
+private:
+    BoyerMooreNeedle(const BoyerMooreNeedle&);
+    BoyerMooreNeedle& operator= (const BoyerMooreNeedle&);
+
+
 protected:
     const unsigned char* needle;
     const size_t nlen;

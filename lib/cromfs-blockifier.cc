@@ -10,6 +10,9 @@
 #include "append.hh"
 
 #include <algorithm>
+#ifdef HAS_GCC_PARALLEL_ALGORITHMS
+# include <parallel/algorithm>
+#endif
 #include <functional>
 #include <stdexcept>
 #include <set>
@@ -77,6 +80,13 @@ struct SmallestInfo
     cromfs_fblocknum_t fblocknum;
     uint_fast32_t      adds;
     AppendInfo         appended;
+    mutable MutexType    mutex;
+
+    SmallestInfo():
+        found(0), fblocknum(0), adds(0),
+        appended(), mutex()
+    {
+    }
 
     int get_found() const
     {
@@ -88,8 +98,6 @@ struct SmallestInfo
         ScopedLock lck(mutex);
         found=0; fblocknum=0; adds=0; appended=AppendInfo();
     }
-
-    mutable MutexType    mutex;
 };
 
 static void FindOverlap(
@@ -181,6 +189,19 @@ struct OverlapFinderParameter
      * cannot use a constructor, otherwise the {} initialization
      * will be invalid syntax later on.
      */
+
+    OverlapFinderParameter(
+        const mkcromfs_fblockset& f,
+        const BoyerMooreNeedleWithAppend& d,
+        cromfs_blockifier::overlaptest_history_t& m)
+            : fblocks(f),
+              data(d),
+              minimum_tested_positions(m),
+              smallest(),
+              candidates(),
+              mutex()
+    {
+    }
 };
 
 static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
@@ -218,13 +239,7 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
     /* First check if we can write into an existing fblock. */
     if(true)
     {
-        OverlapFinderParameter params =
-        {
-            fblocks, data, minimum_tested_positions,
-            { 0, 0, 0, AppendInfo(), MutexType() },
-            std::vector<cromfs_fblocknum_t>(),
-            MutexType()
-        };
+        OverlapFinderParameter params(fblocks, data, minimum_tested_positions);
 
         std::vector<cromfs_fblocknum_t>& candidates = params.candidates;
         candidates.reserve(fblocks.size());
@@ -267,7 +282,8 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         }
 
         /* Randomly shuffle the non-priority candidates */
-        std::random_shuffle(candidates.begin()+priority_candidates, candidates.end());
+        MAYBE_PARALLEL_NS::
+            random_shuffle(candidates.begin()+priority_candidates, candidates.end());
 #endif
 
         /* Task description:
@@ -755,6 +771,8 @@ void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
         {
             size_t n_blocks;
             mkcromfs_fblockset::undo_t fblock_state;
+
+            SituationBackup(): n_blocks(),fblock_state() { }
         };
 
         for(orderlist_t::iterator
@@ -814,7 +832,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
     orderlist_t blockify_orders;
 
-    std::stable_sort(schedule.begin(), schedule.end(),
+    MAYBE_PARALLEL_NS::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
 
     uint_fast64_t total_size = 0, blocks_total = 0;

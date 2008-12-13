@@ -57,6 +57,10 @@ struct cromfs_inode_internal
     uint_fast64_t bytesize;
     uint_fast32_t blocksize;
     std::vector<cromfs_blocknum_t> blocklist;
+
+    cromfs_inode_internal() // -Weffc++
+        : mode(),time(),links(),rdev(),uid(),gid(),
+          bytesize(),blocksize(),blocklist() {}
 };
 struct cromfs_fblock_internal
 {
@@ -206,6 +210,16 @@ typedef std::map<std::string, cromfs_inodenum_t> cromfs_dirinfo;
 #else
 # define likely(x)   (x)
 # define unlikely(x) (x)
+#endif
+
+#if defined(__GNUC__) && defined(_OPENMP) && \
+      ((__GNUC__ == 4 && (__GNUC_MINOR__ >= 3)) \
+    || (__GNUC__ > 4))
+ #define HAS_GCC_PARALLEL_ALGORITHMS
+ #define MAYBE_PARALLEL_NS __gnu_parallel
+#else
+ #undef HAS_GCC_PARALLEL_ALGORITHMS
+ #define MAYBE_PARALLEL_NS std
 #endif
 
 #endif

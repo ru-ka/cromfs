@@ -11,8 +11,9 @@ template<
 class DataCache
 {
 public:
-    DataCache() : max_size(5), max_age(0) { }
-    DataCache(size_t ms, unsigned ma): max_size(ms), max_age(ma) { }
+    DataCache() : writelock(),data(), max_size(5), max_age(0) { }
+    DataCache(size_t ms, unsigned ma)
+        : writelock(),data(), max_size(ms), max_age(ma) { }
     ~DataCache() { }
     
 private:

@@ -1192,8 +1192,10 @@ void cromfs::DumpRAMusage() const
 cromfs::cromfs(int fild)
     throw (cromfs_exception, std::bad_alloc)
      : fd(fild),
+       rootdir(),inotab(),sblock(),fblktab(),blktab(), // -Weffc++
        readdir_cache(READDIR_CACHE_MAX_SIZE, 0),
-       fblock_cache(FBLOCK_CACHE_MAX_SIZE, 0)
+       fblock_cache(FBLOCK_CACHE_MAX_SIZE, 0),
+       storage_opts()
 {
 }
 

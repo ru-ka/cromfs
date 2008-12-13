@@ -13,7 +13,7 @@
 #endif
 
 LongFileWrite::LongFileWrite(int fild, uint_fast64_t esize)
-    : fd(fild), bufpos(0), expected_size(esize)
+    : fd(fild), bufpos(0), expected_size(esize), Buffer()
 {
     if(expected_size > 0) FadviseRandom(fd, 0, expected_size);
 }
@@ -22,7 +22,7 @@ LongFileWrite::LongFileWrite(int fild, uint_fast64_t offset,
                            uint_fast64_t size,
                            const unsigned char* buf,
                            bool use_sparse)
-    : fd(fild), bufpos(offset), expected_size(offset+size)
+    : fd(fild), bufpos(offset), expected_size(offset+size), Buffer()
 {
     write(buf, size, offset, use_sparse);
 }

@@ -19,7 +19,7 @@ public:
         UserDataType userdata;
         
     public:
-        DataInfo() : data(0), substring_of(0)
+        DataInfo() : data(0), substring_of(0), userdata()
             { }
         
         bool contains(const DataInfo& b) const

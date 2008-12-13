@@ -34,9 +34,9 @@ const std::string fblock_storage::getfn() const
 void fblock_storage::Check_Existing_File()
 {
     Unmap();
-    
-    const autoclosefd fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
-    
+
+    const autoclosefd fd(open(getfn().c_str(), O_RDONLY | O_LARGEFILE));
+
     if(fd < 0)
     {
         filesize = 0;
@@ -75,7 +75,7 @@ void fblock_storage::put_raw(const std::vector<unsigned char>& raw)
     is_compressed = false;
     
     size_t res=0;
-    {autoclosefp fp = std::fopen(getfn().c_str(), "wb");
+    {autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
      res = std::fwrite(&raw[0], 1, filesize=raw.size(), fp);
     }
     
@@ -96,8 +96,8 @@ void fblock_storage::put_compressed(const std::vector<unsigned char>& compressed
     
     //fprintf(stderr, "[1;mstoring compressed[m\n");
     is_compressed = true;
-    
-    autoclosefp fp = std::fopen(getfn().c_str(), "wb");
+
+    autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
     std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
 
     last_access = std::time(NULL);
@@ -135,7 +135,7 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
     }
     
     /* The data could not be mmapped. So we have to read a copy from the file. */
-    const autoclosefd fd = open(getfn().c_str(), O_RDONLY | O_LARGEFILE);
+    const autoclosefd fd(open(getfn().c_str(), O_RDONLY | O_LARGEFILE));
 
     if(fd < 0)
     {
@@ -226,7 +226,7 @@ void fblock_storage::put_appended_raw(
         
         std::vector<unsigned char> buf = get_raw();
         int open_flags = O_RDWR /*| O_CREAT*/ | O_LARGEFILE;
-        autoclosefd fd = open(getfn().c_str(), open_flags, 0644);
+        autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
         if(fd < 0) { std::perror(getfn().c_str()); return; }
 
         is_compressed = false;
@@ -259,7 +259,7 @@ void fblock_storage::put_appended_raw(
     
     int open_flags = O_RDWR | O_LARGEFILE;
     if(append.OldSize == 0) open_flags |= O_CREAT;
-    autoclosefd fd = open(getfn().c_str(), open_flags, 0644);
+    autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
     if(fd < 0) { std::perror(getfn().c_str()); return; }
     
     try
@@ -334,8 +334,8 @@ void fblock_storage::InitDataReadBuffer(
         else
         {
             //fprintf(stderr, "Has to read\n"); fflush(stderr);
-            
-            const autoclosefd fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
+
+            const autoclosefd fd(open(getfn().c_str(), O_RDWR | O_LARGEFILE));
             if(fd < 0)
             {
                 /* File not found. Prevent null pointer, load a dummy buffer. */
@@ -353,6 +353,7 @@ void fblock_storage::InitDataReadBuffer(
         }
     }
     last_access = std::time(NULL);
+#pragma omp flush(is_compressed, mmapped, last_access, size)
 }
 
 mkcromfs_fblockset::~mkcromfs_fblockset()

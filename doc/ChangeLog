@@ -4,8 +4,23 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-1.5.5.2        <under development>
+1.5.6        <under development>
 - Added parallelization to block index search
+- Added parallelization to the directory scanning phase
+- Added predictive autoindex: now automatically indexes a block
+  that immediately follows the point where a full overlap was found.
+  This speeds up the cases where a multiple block long full overlap
+  is found.
+
+1.5.5.2 2008-12-13 Joel Yliluom< bisqwit@iki.fi>
+- Addressed some (stupid) compiler complaints.
+  GCC's illadvised misinterpretation of Scott Meyer's Effective C++
+  rule 12 be damned. In the same breath, it appears that GCC does not
+  honor -Wno-non-virtual-dtor. So we still get lots
+  of warnings about non-virtual destructors.
+- Fixed a serious false positive bug in backwards_match_len
+  -- this caused file system corruptions in mkcromfs since version 1.5.4.2.
+  All users of versions 1.5.4.2, 1.5.5 or 1.5.5.1 are urged upgrade.
 
 1.5.5.1 2008-12-09 Joel Yliluoma <bisqwit@iki.fi>
 - Minor fixes

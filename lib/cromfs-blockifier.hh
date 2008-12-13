@@ -15,7 +15,9 @@
 class cromfs_blockifier
 {
 public:
-    cromfs_blockifier() : schedule(), blocks(), fblocks(), block_index()
+    cromfs_blockifier()
+        : schedule(), blocks(), fblocks(),
+          last_autoindex_length(), block_index()
     {
     }
     ~cromfs_blockifier()
@@ -208,6 +210,14 @@ private:
             
             return false;
         }
+
+        individual_order(const individual_order& b)
+            : data(b.data), crc(b.crc), target(b.target),
+              needle(b.needle), badness(b.badness),
+              minimum_tested_positions(b.minimum_tested_positions) // -Weffc++
+        { }
+    private:
+        individual_order& operator= (const individual_order&);
     };
     typedef std::list<individual_order> orderlist_t;
 

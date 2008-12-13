@@ -49,8 +49,8 @@ public:
     void DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
 
 public:
-    block_index_type() { }
-    
+    block_index_type() : realindex_fds(), autoindex_fds() { }
+
     block_index_type(const block_index_type& b)
         : realindex_fds(b.realindex_fds),
           autoindex_fds(b.autoindex_fds)

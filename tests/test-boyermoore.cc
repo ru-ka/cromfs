@@ -180,9 +180,9 @@ static void TestWithAppend()
 int main(void)
 {
 #if 1
-    for(unsigned a=0; a<50000; ++a)
+    for(unsigned a=0; a<500; ++a)
     {
-        std::printf("\rtest %u/50000...%50s\r", a, ""); std::fflush(stdout);
+        std::printf("\rtest %u/500...%50s\r", a, ""); std::fflush(stdout);
         TestWithAppend();
     }
     if(!fails)
@@ -204,9 +204,9 @@ int main(void)
     fails=0;
 #endif
 #if 1
-    for(unsigned a=0; a<125000; ++a)
+    for(unsigned a=0; a<1250; ++a)
     {
-        std::printf("\rtest %u/1250000...%50s\r", a, ""); std::fflush(stdout);
+        std::printf("\rtest %u/12500...%50s\r", a, ""); std::fflush(stdout);
         Test(Full);
     }
     if(!fails)
@@ -216,9 +216,9 @@ int main(void)
     fails=0;
 #endif
 #if 1
-    for(unsigned a=0; a<125000; ++a)
+    for(unsigned a=0; a<1250; ++a)
     {
-        std::printf("\rtest %u/125000...%50s\r", a, ""); std::fflush(stdout);
+        std::printf("\rtest %u/1250...%50s\r", a, ""); std::fflush(stdout);
         Test(Turbo);
     }
     if(!fails)

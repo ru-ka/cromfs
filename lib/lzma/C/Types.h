@@ -106,11 +106,14 @@ typedef int Bool;
 
 /* The following interfaces use first parameter as pointer to structure */
 
-typedef struct
+typedef struct ISeqInStream
 {
   SRes (*Read)(void *p, void *buf, size_t *size);
     /* if (input(*size) != 0 && output(*size) == 0) means end_of_stream.
        (output(*size) < input(*size)) is allowed */
+#ifdef __cplusplus
+  ISeqInStream(): Read() { } // -Weffc++
+#endif
 } ISeqInStream;
 
 /* it can return SZ_ERROR_INPUT_EOF */
@@ -118,11 +121,14 @@ SRes SeqInStream_Read(ISeqInStream *stream, void *buf, size_t size);
 SRes SeqInStream_Read2(ISeqInStream *stream, void *buf, size_t size, SRes errorType);
 SRes SeqInStream_ReadByte(ISeqInStream *stream, Byte *buf);
 
-typedef struct
+typedef struct ISeqOutStream
 {
   size_t (*Write)(void *p, const void *buf, size_t size);
     /* Returns: result - the number of actually written bytes.
        (result < size) means error */
+#ifdef __cplusplus
+  ISeqOutStream(): Write() { } // -Weffc++
+#endif
 } ISeqOutStream;
 
 typedef enum

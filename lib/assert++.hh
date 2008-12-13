@@ -36,11 +36,26 @@ namespace assertprivate
         const char *file;
         unsigned line;
         const char *func;
+
+        /* These lines are here to make -Weffc++ shut up */
+        assertiondata() : condition(),file(),line(),func() { }
+        assertiondata(const assertiondata& b)
+            : condition(b.condition), file(b.file),line(b.line),func(b.func) { }
+        assertiondata& operator=(const assertiondata& b)
+        {
+            condition=b.condition;
+            file     =b.file;
+            line     =b.line;
+            func     =b.func;
+            return *this;
+        }
     };
     struct assertion
     {
         assertiondata data;
         autoptr<varmap> vars;
+
+        assertion(): data(),vars() { }
     };
     extern autoptr<varmap> vars;
     extern bool vars_used;

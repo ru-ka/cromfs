@@ -34,8 +34,9 @@ public:
         const const_iterator* operator-> () const { return this; }
         typename Cont::const_iterator i;
     public:
-        const_iterator(const Cont& c): data(c) { }
-        
+        const_iterator(const Cont& c): i(), data(c) { }
+        const_iterator(const const_iterator& b) : i(b.i), data(b.data) { }
+
         bool operator==(const const_iterator& b) const { return i == b.i; }
         bool operator!=(const const_iterator& b) const { return !operator==(b); }
         const_iterator& operator++ ();

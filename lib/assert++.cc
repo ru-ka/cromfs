@@ -20,6 +20,8 @@ struct parec
     std::string var;
     std::string::size_type pos;
     char begin, end;
+
+    parec(): var(),pos(),begin(),end() { }
 };
 
 namespace assertprivate

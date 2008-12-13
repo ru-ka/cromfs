@@ -30,20 +30,23 @@ namespace fblock_private
         MemMappingType<false> mmapped;
     public:
         fblock_storage()
+            : fblock_disk_id(),
+              is_compressed(false),
+              filesize(0),
+              last_access(0),
+              mmapped()
         {
             static int disk_id = 0;
             fblock_disk_id = disk_id++;
-            filesize = 0;
-            is_compressed = false;
-            last_access = 0;
             mmapped.Unmap();
         }
         fblock_storage(int disk_id)
+            : fblock_disk_id(disk_id),
+              is_compressed(false),
+              filesize(0),
+              last_access(0),
+              mmapped()
         {
-            fblock_disk_id = disk_id;
-            filesize = 0;
-            is_compressed = false;
-            last_access = 0;
             mmapped.Unmap();
             
             Check_Existing_File();
@@ -140,8 +143,8 @@ namespace fblock_private
         {
             Unmap();
             if(is_compressed) return;
-            
-            const autoclosefd fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
+
+            const autoclosefd fd(open(getfn().c_str(), O_RDWR | O_LARGEFILE));
             if(fd >= 0) RemapFd(fd);
             // fd will be automcally closed.
         }
@@ -257,6 +260,8 @@ private:
 
         int FindAtleastNbytesSpace(size_t howmuch) const;
         void Update(cromfs_fblocknum_t index, size_t howmuch);
+
+        index_type(): room_index(), block_index() { }
     } index;
 
 public:
@@ -265,6 +270,8 @@ public:
         size_t n_fblocks;
         std::vector<mkcromfs_fblock::undo_t> fblock_state;
         index_type fblock_index;
+
+        undo_t() : n_fblocks(),fblock_state(),fblock_index() { } // -Weffc++
     };
     
     undo_t create_backup() const;

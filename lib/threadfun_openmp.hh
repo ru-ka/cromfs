@@ -9,12 +9,13 @@
 
 struct MutexType
 {
-    MutexType() { omp_init_lock(&lock); }
+    MutexType() : lock() { omp_init_lock(&lock); }
     ~MutexType() { omp_destroy_lock(&lock); }
     void Lock() { omp_set_lock(&lock); }
     void Unlock() { omp_unset_lock(&lock); }
-   
-    MutexType(const MutexType& ) { omp_init_lock(&lock); }
+    bool TryLock() { return omp_test_lock(&lock); }
+
+    MutexType(const MutexType& ) : lock() { omp_init_lock(&lock); }
     MutexType& operator= (const MutexType& ) { return *this; }
 public:
     omp_lock_t lock;
