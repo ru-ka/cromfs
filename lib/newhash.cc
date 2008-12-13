@@ -117,7 +117,7 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
         buf += 24; len -= 24;
     }
     /*------------------------------------- handle the last 23 bytes */
-    c = c+size;
+    c = c + uint64_t(size);
     if(len >16)      { c += (c64)Rn(buf+15, len-15) & ~UINT64_C(0xFF);
                        b += (c64)R64(buf+8); 
                        a += (c64)R64(buf); }

@@ -66,8 +66,8 @@ private:
         const BlockIndexHashType crc);
 
     /* Execute a reusing plan */
-    cromfs_blocknum_t Execute(const ReusingPlan& plan);
-    
+    cromfs_blocknum_t Execute(const ReusingPlan& plan, uint_fast32_t blocksize);
+
     //
     // Plan for writing new data
     //
@@ -277,7 +277,25 @@ private:
         {
             return ((int)dataclass < (int)(b.dataclass));
         }
-        
+
+        schedule_item(const schedule_item& b)
+            : source(b.source), target(b.target),
+              dataclass(b.dataclass), blocksize(b.blocksize) // -Weffc++
+        {
+        }
+
+        schedule_item& operator= (const schedule_item& b)
+        {
+            if(&b != this)
+            {
+                source = b.source;
+                target = b.target;
+                dataclass = b.dataclass;
+                blocksize = b.blocksize;
+            }
+            return *this;
+        }
+
     private:
         autoptr<datasource_t> source;
         

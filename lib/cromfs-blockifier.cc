@@ -113,6 +113,8 @@ static void FindOverlap(
 
     DataReadBuffer Buffer; long FblockSize; { uint_fast32_t tmpsize;
     fblock.InitDataReadBuffer(Buffer, tmpsize); FblockSize = tmpsize; }
+    // Doesn't need to lock the fblock mutex here; the fblock
+    // at hand here is only processed by one thread at a time.
 
     long max_may_add = smallest.found ? smallest_adds : data.size();
     if(FblockSize + max_may_add > FSIZE) max_may_add = FSIZE - FblockSize;
@@ -222,6 +224,8 @@ static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
     lck.Unlock();
 
     const mkcromfs_fblock& fblock = params.fblocks[fblocknum];
+    // Doesn't need to lock the fblock mutex here; the fblock
+    // at hand here is only processed by one thread at a time.
 
     FindOverlap(params.data,
                 fblocknum,
@@ -241,8 +245,8 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
     {
         OverlapFinderParameter params(fblocks, data, minimum_tested_positions);
 
-        std::vector<cromfs_fblocknum_t>& candidates = params.candidates;
-        candidates.reserve(fblocks.size());
+        std::vector<cromfs_fblocknum_t>& candidates = params.candidates; // write here
+        candidates.reserve(fblocks.size()); // prepare to consider _all_ fblocks as candidates
 
         /* First candidate: The fblock that we would get without brute force. */
         /* I.e. the fblock with smallest fitting hole. */
@@ -291,6 +295,8 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
          * for the fit which reuses the maximum amount of data.
          */
 
+        // First ensure that all the candidates are mmapped,
+        // because doing a search otherwise is stupidly unoptimal.
         for(size_t a=0; a<candidates.size(); ++a)
             fblocks[candidates[a]].EnsureMMapped();
 
@@ -322,7 +328,7 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
 }
 
 /* Execute a reusing plan */
-cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan)
+cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast32_t blocksize)
 {
     cromfs_blocknum_t blocknum = plan.blocknum;
     if(blocknum != NO_BLOCK)
@@ -334,8 +340,9 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan)
             const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
             const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
 
-            std::printf("block %u == [%u @ %u] (reused block)\n",
+            std::printf("block %u == (%u) [%u @ %u] (reused block)\n",
                 (unsigned)blocknum,
+                (unsigned)blocksize,
                 (unsigned)fblocknum,
                 (unsigned)startoffs);
         }
@@ -351,8 +358,9 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan)
     blocknum = CreateNewBlock(block);
     if(DisplayBlockSelections)
     {
-        std::printf("block %u => [%u @ %u] (autoindex hit) (overlap fully)\n",
+        std::printf("block %u => (%u) [%u @ %u] (autoindex hit) (overlap fully)\n",
             (unsigned)blocknum,
+            (unsigned)blocksize,
             (unsigned)fblocknum,
             (unsigned)startoffs);
     }
@@ -601,7 +609,7 @@ void cromfs_blockifier::AddOrder(
     const ReusingPlan plan1 = CreateReusingPlan(order.data, order.crc);
     if(plan1)
     {
-        order.Write(Execute(plan1));
+        order.Write(Execute(plan1, data.size()));
         return; // Finished, don't need to postpone it.
     }
 
@@ -661,7 +669,7 @@ ReEvaluate:
                 order.crc,
                 order.badness);
             */
-            order.Write(Execute(plan1));
+            order.Write(Execute(plan1, order.data.size()));
         }
         else
         {
@@ -717,7 +725,7 @@ void cromfs_blockifier::EvaluateBlockifyOrders(orderlist_t& blockify_orders)
         if(plan1)
         {
             /* Surprise, it matched. Handle it immediately. */
-            order.Write(Execute(plan1));
+            order.Write(Execute(plan1, order.data.size()));
             blockify_orders.erase(i);
             continue;
         }

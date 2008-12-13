@@ -8,7 +8,7 @@
 //#define BUCKET_USE_HASHMAP
 
 #ifdef BUCKET_USE_HASHMAP
-# include <ext/hash_map>
+# include <tr1/unordered_map>
 # include "hash.hh"
 #endif
 
@@ -36,7 +36,7 @@ private:
 private:
     typedef std::vector<BucketData> bucketlist_t;
 #ifdef BUCKET_USE_HASHMAP
-    typedef __gnu_cxx::hash_map<uint_least16_t, bucketlist_t> buckets_t;
+    typedef std::tr1::unordered_map<uint_least16_t, bucketlist_t> buckets_t;
 #else
     typedef std::map<uint_least16_t, bucketlist_t> buckets_t;
 #endif
