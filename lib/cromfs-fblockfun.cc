@@ -353,7 +353,6 @@ void fblock_storage::InitDataReadBuffer(
         }
     }
     last_access = std::time(NULL);
-#pragma omp flush(is_compressed, mmapped, last_access, size)
 }
 
 mkcromfs_fblockset::~mkcromfs_fblockset()
