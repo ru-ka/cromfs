@@ -77,4 +77,4 @@ include .libdepend
 
 clean:
 	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV)
-	rm -f mkcromfs unmkcromfs
+	rm -f mkcromfs unmkcromfs cvcromfs
