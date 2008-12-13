@@ -6,7 +6,6 @@
 #include "lib/util.hh"
 
 #if HASH_MAP
-# include <tr1/unordered_set>
 # include "hash.hh"
 #endif
 #ifdef _OPENMP
@@ -193,7 +192,7 @@ public:
 
 
 #if HASH_MAP
-        typedef std::tr1::unordered_set<cromfs_inodenum_t> handled_inodes_t;
+        typedef hash_set<cromfs_inodenum_t> handled_inodes_t;
 #else
         typedef std::set<cromfs_inodenum_t> handled_inodes_t;
 #endif
