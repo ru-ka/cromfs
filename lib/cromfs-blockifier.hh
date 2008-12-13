@@ -66,8 +66,8 @@ private:
         const BlockIndexHashType crc);
 
     /* Execute a reusing plan */
-    cromfs_blocknum_t Execute(const ReusingPlan& plan);
-    
+    cromfs_blocknum_t Execute(const ReusingPlan& plan, uint_fast32_t blocksize);
+
     //
     // Plan for writing new data
     //
