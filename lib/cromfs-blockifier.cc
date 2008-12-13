@@ -44,6 +44,21 @@ static void DisplayProgress(
 
 ///////////////////////////////////////////////
 
+/*static const std::string DataDump(const unsigned char* data, uint_fast32_t size)
+{
+    std::string result;
+    for(uint_fast32_t a=0; a<size; ++a)
+    {
+        char Buf[32];
+        std::sprintf(Buf, "%s%02X", a?" ":"", data[a]);
+        result += Buf;
+    }
+    char Buf[32];
+    std::sprintf(Buf, " - %08X", BlockIndexHashCalc(data, size));
+    result += Buf;
+    return result;
+}*/
+
 const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
     const std::vector<unsigned char>& data,
     const BlockIndexHashType crc)
@@ -129,7 +144,7 @@ static void FindOverlap(
         return;
     }
 
-    if(AutoIndexPeriod == 1)
+    if(AutoIndexPeriod == 1 && BSIZE == data.size())
     {
         // If autoindexperiod covers all possible full overlaps,
         // then we need to only search for appends.
@@ -474,7 +489,11 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     const cromfs_blocknum_t blocknum = CreateNewBlock(block);
     if(DoUpdateBlockIndex)
     {
-        block_index.AddRealIndex(plan.crc, blocknum);
+        if(!CreateReusingPlan(&plan.data[0], plan.data.size(), plan.crc, false))
+        {
+            // Only add to index if we don't have any existing reusing method for this one
+            block_index.AddRealIndex(plan.crc, blocknum);
+        }
     }
     return blocknum;
 }
@@ -516,12 +535,17 @@ void cromfs_blockifier::TryAutoIndex(
 {
     const BlockIndexHashType crc = BlockIndexHashCalc(ptr, bsize);
 
-    /* Check if this checksum has already been indexed */
-    cromfs_block_internal match;
-    for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
+    /* Check whether the block has already been indexed
+     * (don't care whether we get a RealIndex or AutoIndex result,
+     *  just see if it's indexed at all)
+     */
+    if(CreateReusingPlan(ptr, bsize, crc, false))
     {
-        if(block_is(match, ptr, bsize)) return;
+        /* Already indexed */
+        return;
     }
+    /* Add it to the index */
+    cromfs_block_internal match;
     match.define(fblocknum, startoffs);
     block_index.AddAutoIndex(crc, match);
 }
