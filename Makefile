@@ -116,19 +116,22 @@ LDLIBS += $(FUSELIBS)
 
 DEPFUN_INSTALL=ignore
 
-PROGS = cromfs-driver cromfs-driver-static util/mkcromfs util/unmkcromfs util/cvcromfs
+PROGS = cromfs-driver cromfs-driver-static-$(FUSE_STATIC) util/mkcromfs util/unmkcromfs util/cvcromfs
 DOCS  = doc/FORMAT README.html doc/ChangeLog doc/*.txt
 
 all-strip: all FORCE
 	- strip cromfs-driver util/mkcromfs util/unmkcromfs util/cvcromfs
 	@echo
 	@echo Finished compiling. These were created:
-	@ls -al $(PROGS)
+	@- ls -al cromfs-driver cromfs-driver-static util/mkcromfs util/unmkcromfs util/cvcromfs
 
 all: $(PROGS)
 
 cromfs-driver: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
+
+cromfs-driver-static-1: cromfs-driver-static
+cromfs-driver-static-0: ;
 
 cromfs-driver-static: $(OBJS)
 	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
