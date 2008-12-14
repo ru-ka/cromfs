@@ -16,6 +16,7 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 - ./configure now detects systems where cromfs-driver-static cannot
   be built, such as Fedora 10. In those cases, the staticly linked
   program is silently dropped from the compilation chain.
+  (Thanks to Josh Rabinowitz for making me aware of this problem.)
 - Minor changes to fix compilation using ICC.
 
 1.5.5.3 2008-12-13 Joel Yliluom< bisqwit@iki.fi>

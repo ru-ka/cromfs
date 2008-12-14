@@ -882,6 +882,9 @@ author
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
 use it and what you think of it.
+ <p/>
+You can discuss CROMFS at <a href=\"http://freenode.net/\">Freenode</a>,
+on <a href=\"irc://freenode.net/cromfs\">#cromfs</a>.
 
 ", 'wishlist:1.1. Contribution wishes' => "
 
