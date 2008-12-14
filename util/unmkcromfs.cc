@@ -4,6 +4,7 @@
 #include "../cromfs.hh"
 #include "lib/fadvise.hh"
 #include "lib/util.hh"
+#include "lib/threadfun.hh"
 
 #if HASH_MAP
 # include "hash.hh"
@@ -18,6 +19,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <utime.h>
+#include <stdarg.h>
 
 #include <getopt.h>
 
@@ -93,6 +95,195 @@ public:
     cromfs_block_index
         operator- (cromfs_block_index v) const { return value - v; }
 };
+
+static struct ThreadSafeConsole
+{
+    void beginthread()
+    {
+    #ifdef _OPENMP
+        ScopedLock lck(lock);
+        beginline();
+    #endif
+    }
+    void endthread(int threadno = omp_get_thread_num())
+    {
+    #ifdef _OPENMP
+        lines.erase(threadno);
+    #endif
+    }
+    void printf(const char* fmt, ...)
+    {
+        va_list ap;
+        va_start(ap, fmt);
+        DoPrint(false, stdout, ap, fmt);
+        va_end(ap);
+    }
+    void oneliner(const char* fmt, ...)
+    {
+        va_list ap;
+        va_start(ap, fmt);
+        DoPrint(true, stdout, ap, fmt);
+        va_end(ap);
+    }
+    void erroroneliner(const char* fmt, ...)
+    {
+        va_list ap;
+        va_start(ap, fmt);
+        DoPrint(true, stderr, ap, fmt);
+        va_end(ap);
+    }
+    ThreadSafeConsole()
+    #ifdef _OPENMP
+        : curline(0), curx(0),
+          freeline(0), n_oneliners(0),
+          lines(), lock()
+    #else
+        : GoingLine(false), DidOneliners(false)
+    #endif
+    {
+    }
+private:
+    void DoPrint(bool OneLiner, std::FILE* target, va_list ap, const char* fmt)
+    {
+    #ifdef _OPENMP
+        char Buf[4096];
+        using namespace std; // vsnprintf may or may not be defined in std::
+      #ifdef HAS_VSNPRINTF
+        int size = vsnprintf(Buf, sizeof Buf, fmt, ap);
+      #else
+        int size = std::vsprintf(Buf, fmt, ap);
+      #endif
+        ScopedLock lck(lock);
+        int threadno = omp_get_thread_num();
+        if(OneLiner)
+        {
+            threadno += 10000;
+
+            // Try to scroll the screen down to make room for another
+            // oneliner, but don't scroll if it causes the upmost
+            // non-oneliners to disappear
+
+            int dest_line = freeline + std::min(24 - required_size(), n_oneliners);
+            if(dest_line > freeline)
+                put_cursor_to(dest_line);
+
+            beginline(threadno);
+        }
+        doprint(target, threadno, Buf, size);
+        if(OneLiner)
+        {
+            endthread(threadno);
+            --freeline;
+            ++n_oneliners;
+        }
+    #else
+        // No OpenMP
+
+        if(OneLiner)
+        {
+            if(GoingLine && !DidOneliners)
+            {
+                std::fputc('\n', target);
+            }
+            DidOneliners = true;
+        }
+        else
+        {
+            if(GoingLine && DidOneliners)
+                std::fprintf(target, "... ");
+            const char* nlpos = strrchr(fmt, '\n');
+            GoingLine = nlpos ? nlpos[1] != '\0' : *fmt != '\0';
+            DidOneliners = false;
+        }
+
+        std::vfprintf(target, fmt, ap);
+    #endif
+        std::fflush(target);
+    }
+    #ifdef _OPENMP
+    void put_cursor_to(int y, int x=-1)
+    {
+        std::fflush(stdout); std::fflush(stderr);
+
+        std::FILE* target = stdout;
+        if(curline < y)
+        {
+            while(curline < y)
+                { std::fputc('\n', target); ++curline; }
+            curx=0;
+        }
+        else if(curline > y)
+        {
+            std::fprintf(target, "\33[%dA", curline-y); // go up
+            curline = y;
+        }
+        if(x != -1)
+        {
+            if(curx < x)
+                { std::fprintf(target, "\33[%dC", x-curx); curx = x; } // go right
+            else if(x == 0 && curx > 0)
+                { std::fputc('\r', target); curx = 0; } // go left
+            else if(curx > x)
+                { std::fprintf(target, "\33[%dD", curx-x); curx = x; } // go left
+        }
+        std::fflush(stdout); std::fflush(stderr);
+    }
+    void beginline(int threadno = omp_get_thread_num())
+    {
+        put_cursor_to(freeline);
+
+        lines[threadno] = std::pair<int,int> (freeline++, 0);
+        std::printf("\33[1L"); std::fflush(stdout);
+    }
+    void doprint(std::FILE* target, int threadno, const char* Buf, int size)
+    {
+    refind_cursor:
+        if(!size) return;
+
+        std::pair<int,int>& cursor = lines[threadno];
+        int& lineno = cursor.first;
+        int& xcoord = cursor.second;
+        put_cursor_to(lineno, (*Buf != '\r' && *Buf != '\n') ? xcoord : -1);
+        while(size > 0)
+        {
+            const char c = *Buf++; --size;
+            std::fputc(c, target);
+            if(c == '\n')
+            {
+                ++curline; curx = xcoord = 0;
+                if(size > 0) beginline(threadno);
+                goto refind_cursor;
+            }
+            if(c == '\r') { curx=0; continue; }
+            if(c == '\t') { curx=(curx+8)&~7; continue; }
+            ++curx;
+            //if(curx >= 78) { std::putc('\b', target); --curx; }
+        }
+        xcoord = curx;
+    }
+    // Returns the number of lines that must currently be viewable
+    int required_size() const
+    {
+        int res = 0;
+        for(std::map<int/*threadno*/, std::pair<int,int> >::const_iterator
+            i = lines.begin(); i != lines.end(); ++i)
+        {
+            int diff = freeline - i->second.first;
+            if(diff > res) res = diff;
+        }
+        return res;
+    }
+    #endif
+private:
+    #ifdef _OPENMP
+    int curline, curx;
+    int freeline, n_oneliners;
+    std::map<int/*threadno*/, std::pair<int,int> > lines;
+    MutexType lock;
+    #else
+    bool GoingLine, DidOneliners;
+    #endif
+} ThreadSafeConsole;
 
 class cromfs_decoder: public cromfs
 {
@@ -465,16 +656,14 @@ public:
 
             const cromfs_inode_internal ino = read_inode(inonum);
 
+            if(verbose >= 2) ThreadSafeConsole.oneliner("\t%s\n", target.c_str());
             int r = 0;
             if(S_ISDIR(ino.mode))
             {
-                if(verbose >= 2) printf("\t%s\n", target.c_str());
                 r = mkdir( target.c_str(), ino.mode | 0700);
             }
             else if(S_ISLNK(ino.mode))
             {
-                if(verbose >= 2) printf("\t%s\n", target.c_str());
-
                 // Create symlinks as regular files first.
                 // This allows to construct them in pieces.
                 // When symlink() is called, the entire name must be known.
@@ -487,7 +676,6 @@ public:
             }
             else
             {
-                if(verbose >= 2) printf("\t%s\n", target.c_str());
                 r = mknod( target.c_str(), ino.mode | 0600, ino.rdev);
                 if(r < 0 && errno == EEXIST)
                 {
@@ -573,6 +761,8 @@ public:
                     uint_fast64_t& expect_size,
                     uint_fast64_t& total_written) const
     {
+        ThreadSafeConsole.beginthread();
+
         /* Count the number of files/symlinks that require data
          * from this particular fblock.
          */
@@ -591,24 +781,23 @@ public:
              */
             if(verbose >= 1)
             {
-                std::printf("fblock %u / %u: skipping\n",
+                ThreadSafeConsole.oneliner("fblock %u / %u: skipping\n",
                     (unsigned)fblocknum, (unsigned)fblktab.size());
-                std::fflush(stdout);
             }
 
             FadviseDontNeed(fd, fblktab[fblocknum].filepos,
                                 fblktab[fblocknum].length);
 
+            ThreadSafeConsole.endthread();
             return;
         }
 
         if(verbose >= 1)
         {
-            std::printf("fblock %u / %u: %s->",
+            ThreadSafeConsole.printf("fblock %u / %u: %s->",
                 (unsigned)fblocknum, (unsigned)fblktab.size(),
                 ReportSize(fblktab[fblocknum].length).c_str()
                  );
-            std::fflush(stdout);
         }
 
         // Copy the fblock (don't create reference), because
@@ -630,8 +819,7 @@ public:
 
         if(verbose >= 1)
         {
-            std::printf("%s; -> %u targets... ", ReportSize(fblock.size()).c_str(), nfiles);
-            std::fflush(stdout);
+            ThreadSafeConsole.printf("%s; -> %u targets... ", ReportSize(fblock.size()).c_str(), nfiles);
         }
 
         uint_fast64_t wrote_size = 0;
@@ -658,7 +846,8 @@ public:
 
             if(verbose >= 2)
             {
-                std::printf("\n\t%s",
+                ThreadSafeConsole.oneliner("\t[%u] %s\n",
+                    (unsigned) fblocknum,
                     target.c_str()/*, (unsigned)fblocknum*/);
             }
 
@@ -673,7 +862,7 @@ public:
                 {
                     if(ino.blocklist[a] >= blktab.size())
                     {
-                        std::fprintf(stderr, "inode %u (used by %s) is corrupt (block #%u indicates block %llu, but block table has only %llu)\n",
+                        ThreadSafeConsole.erroroneliner("inode %u (used by %s) is corrupt (block #%u indicates block %llu, but block table has only %llu)\n",
                             (unsigned)inonum, filename.c_str(),
                             a,
                             (unsigned long long)ino.blocklist[a],
@@ -703,12 +892,15 @@ public:
 
                     if(block_startoffs + read_size > fblock.size())
                     {
-                        std::fprintf(stderr, "block %u (block #%u of inode %u) is corrupt (points to bytes %llu-%llu, fblock size is %llu)\n",
+                        ThreadSafeConsole.erroroneliner("block %u (block #%u/%u of inode %u, %llu/%llu bytes) is corrupt (points to bytes %llu-%llu, fblock %u size is %llu)\n",
                             (unsigned)ino.blocklist[a],
-                            a,
+                            a, (unsigned)ino.blocklist.size(),
                             (unsigned)inonum,
+                            (unsigned long long)read_size,
+                            (unsigned long long)ino.bytesize,
                             (unsigned long long)(block_startoffs),
                             (unsigned long long)(block_startoffs + read_size-1),
+                            (unsigned)fblocknum,
                             (unsigned long long)fblock.size()
                                 );
                         continue;
@@ -728,7 +920,7 @@ public:
 
         if(expect_size < wrote_size)
         {
-            std::fprintf(stderr, "corrupt data: got more data than expected\n");
+            ThreadSafeConsole.erroroneliner("corrupt data: got more data than expected from fblock %u\n", (unsigned)fblocknum);
         }
 
       #pragma omp atomic
@@ -736,9 +928,8 @@ public:
 
         if(verbose >= 1)
         {
-            if(verbose >= 2) std::printf("\n... "); // newline because files were listed
-
-            std::printf("%s extracted, %s of work remains.\n",
+            //if(verbose >= 2) ThreadSafeConsole.printf("\n... "); // newline because files were listed
+            ThreadSafeConsole.printf("remain-%s=%s.\n",
                 ReportSize(wrote_size).c_str(),
                 ReportSize(expect_size).c_str());
         }
@@ -747,6 +938,8 @@ public:
         total_written += wrote_size;
 
         FileOutputFlushAll();
+
+        ThreadSafeConsole.endthread();
     }
 
 private:

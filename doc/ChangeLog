@@ -11,6 +11,7 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
   that immediately follows the point where a full overlap was found.
   This speeds up the cases where a multiple block long full overlap
   is found.
+- Changed unmkcromfs's output to be thread-safe with faux termcap control.
 
 1.5.5.4 2008-12-14 Joel Yliluom< bisqwit@iki.fi>
 - ./configure now detects systems where cromfs-driver-static cannot
