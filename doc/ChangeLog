@@ -12,6 +12,9 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
   This speeds up the cases where a multiple block long full overlap
   is found.
 - Changed unmkcromfs's output to be thread-safe with faux termcap control.
+- Fixed a bug that caused lots of almost empty fblocks to be created
+  when --bruteforcelimit (-c) is set to 1 and --minfreespace (-s)
+  is greater than 0 (default is 16).
 
 1.5.5.4 2008-12-14 Joel Yliluom< bisqwit@iki.fi>
 - ./configure now detects systems where cromfs-driver-static cannot

@@ -146,6 +146,10 @@ const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
     {
         for(;;) // RealIndex tests
         {
+            // RealIndex testing end conditions:
+            //  - No more RealIndex slots to test
+            //  - Found RealIndex solution
+            //  - Found AutoIndex solution (only if PreferRealIndex == false)
             #pragma omp flush(real_done,real_found,auto_found)
             if(real_done || real_found) break;
             if(auto_found && !PreferRealIndex) break;
@@ -183,6 +187,10 @@ const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
 
         for(;;) // AutoIndex tests
         {
+            // AutoIndex testing end conditions:
+            //  - No more AutoIndex slots to test
+            //  - Found RealIndex solution
+            //  - Found AutoIndex solution
             #pragma omp flush(auto_done,real_found,auto_found)
             if(real_found || auto_found || auto_done) break;
 
@@ -298,10 +306,21 @@ static void FindOverlap(
 
     bool this_is_good =
         overlap_size
-        ? (appended.AppendedSize < (uint_fast32_t)FSIZE)
-        : (appended.AppendedSize < (uint_fast32_t)(FSIZE - MinimumFreeSpace));
+        ? (appended.AppendedSize <= (uint_fast32_t)FSIZE)
+        : (appended.AppendedSize <= (uint_fast32_t)(FSIZE - MinimumFreeSpace));
 
     lck.LockAgain();
+
+    /*printf("For fblock %u(%u/(%u-%u)), minimum=%u, appendpos=%u, adds=%u, overlaps=%u, becomes=%u, good=%s\n",
+        (unsigned)fblocknum,
+        (unsigned)FblockSize,
+        (unsigned)FSIZE, (unsigned)MinimumFreeSpace,
+        (unsigned)minimum_pos,
+        (unsigned)appended.AppendBaseOffset,
+        (unsigned)this_adds,
+        (unsigned)overlap_size,
+        (unsigned)appended.AppendedSize,
+        this_is_good ? "true":"false");*/
 
     if(!smallest.found)
         {} // ok
@@ -401,21 +420,29 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
 
         /* First candidate: The fblock that we would get without brute force. */
         /* I.e. the fblock with smallest fitting hole. */
-        { int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
+        { int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size() + MinimumFreeSpace);
           if(i >= 0)
           {
+            //std::printf("Considering fblock %d for appending %u\n", i, (unsigned)data.size());
             candidates.push_back(i);
-        } }
+          }
+          else
+          {
+            //std::printf("No block with %u bytes of room\n", (unsigned)data.size());
+          }
+          int j = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
+          if(i != j)
+            candidates.push_back(j);
+        }
 
         /* Next candidates: last N (up to MaxFblockCountForBruteForce) */
         cromfs_fblocknum_t j = fblocks.size();
         while(j > 0 && candidates.size() < MaxFblockCountForBruteForce)
         {
             --j;
-            if(!candidates.empty() && j != candidates[0])
-            {
+            if((candidates.size() < 1 || j != candidates[0])
+            && (candidates.size() < 2 || j != candidates[1]))
                 candidates.push_back(j);
-            }
         }
 
 #if 0
@@ -470,6 +497,7 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         }
 
         /* Oh, so it didn't fit anywhere! */
+        //std::printf("No fit? Creating fblock %u\n", (unsigned)fblocks.size());
     }
 
     /* Our plan is then, create a new fblock just for this block! */
