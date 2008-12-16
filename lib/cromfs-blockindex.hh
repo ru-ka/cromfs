@@ -51,11 +51,11 @@ public:
     bool EmergencyFreeSpace(bool Auto=true, bool Real=true);
 
 public:
-    block_index_type() : realindex_fds(), autoindex_fds() { }
+    block_index_type() : realindex(), autoindex() { }
 
     block_index_type(const block_index_type& b)
-        : realindex_fds(b.realindex_fds),
-          autoindex_fds(b.autoindex_fds)
+        : realindex(b.realindex),
+          autoindex(b.autoindex)
     {
         Clone();
     }
@@ -64,8 +64,8 @@ public:
         if(&b != this)
         {
             Close();
-            realindex_fds = b.realindex_fds;
-            autoindex_fds = b.autoindex_fds;
+            realindex = b.realindex;
+            autoindex = b.autoindex;
             Clone();
         }
         return *this;
@@ -79,47 +79,36 @@ public:
     void clear()
     {
         Close();
-        realindex_fds.clear();
-        autoindex_fds.clear();
+        realindex.clear();
+        autoindex.clear();
     }
 
 private:
-    void Clone()
-    {
-        for(size_t a=0; a<realindex_fds.size(); ++a)
-            realindex_fds[a] = dup(realindex_fds[a]);
-        for(size_t a=0; a<autoindex_fds.size(); ++a)
-            autoindex_fds[a] = dup(autoindex_fds[a]);
-    }
-    void Close()
-    {
-        for(size_t a=0; a<realindex_fds.size(); ++a)
-        {
-            close(realindex_fds[a]);
-        }
-        for(size_t a=0; a<autoindex_fds.size(); ++a)
-        {
-            close(autoindex_fds[a]);
-        }
-    }
+    void Clone();
+    void Close();
     size_t new_real();
     size_t new_auto();
 
-    inline uint_fast64_t RealPos(BlockIndexHashType crc) const
-    {
-        uint_fast64_t res = crc; res *= 4; return res;
-    }
-    inline uint_fast64_t AutoPos(BlockIndexHashType crc) const
-    {
-        uint_fast64_t res = crc; res *= 8; return res;
-    }
-
-    const std::string GetRealFn(size_t index) const;
-    const std::string GetAutoFn(size_t index) const;
-
 private:
-    std::vector<int> realindex_fds;
-    std::vector<int> autoindex_fds;
+    template<unsigned RecSize>
+    class CacheFile
+    {
+    public:
+        explicit CacheFile(const std::string& np);
+        void Clone();
+        void GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos) const;
+        void GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos);
+        void Close();
+        uint_fast64_t GetDiskSize() const;
+    private:
+        enum { n_fds = RecSize*2 };
+        int fds[n_fds];
+        bool LargeFileOk, NoFilesOpen;
+        std::string NamePattern;
+    };
+
+    std::vector<CacheFile<4> > realindex;
+    std::vector<CacheFile<8> > autoindex;
 };
 
 /* This global pointer to block_index is required

@@ -21,9 +21,11 @@ little to no chances for caching. So no mmap() optimizations here.
 
 bool block_index_type::FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const
 {
-    if(find_index >= realindex_fds.size()) return false;
+    if(find_index >= realindex.size()) return false;
     char Packet[4] = {0};
-    if(pread64( realindex_fds[find_index], Packet, 4, RealPos(crc)) <= 0) return false;
+
+    int fd; uint_fast64_t pos; realindex[find_index].GetPos(crc, fd, pos);
+    if(pread64(fd, Packet, 4, pos) <= 0) return false;
     result = R32(Packet);
     if(result == 0)
         return false; // hole in a file apparently
@@ -35,9 +37,11 @@ bool block_index_type::FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& 
 
 bool block_index_type::FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const
 {
-    if(find_index >= autoindex_fds.size()) return false;
+    if(find_index >= autoindex.size()) return false;
     char Packet[4+4] = {0};
-    if(pread64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc)) <= 0) return false;
+
+    int fd; uint_fast64_t pos; autoindex[find_index].GetPos(crc, fd, pos);
+    if(pread64(fd, Packet, 4+4, pos) <= 0) return false;
     result.fblocknum = R32(Packet);
     result.startoffs = R32(Packet+4);
     if(result.fblocknum == 0 && result.startoffs == 0)
@@ -51,17 +55,19 @@ bool block_index_type::FindAutoIndex(BlockIndexHashType crc, cromfs_block_intern
 void block_index_type::AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t value)
 {
     size_t find_index = 0; cromfs_blocknum_t tmp;
-    while(find_index < realindex_fds.size())
+    while(find_index < realindex.size())
     {
         char Packet[4] = {0};
-        if(pread64( realindex_fds[find_index], Packet, 4, RealPos(crc)) <= 0) break;
+        const CacheFile<4>& constindex = realindex[find_index];
+        int fd; uint_fast64_t pos; constindex.GetPos(crc, fd, pos);
+        if(pread64(fd, Packet, 4, pos) <= 0) break;
         tmp = R32(Packet);
         if(tmp == 0) break;
         if(tmp == value) return;
 
         ++find_index;
     }
-    if(find_index >= realindex_fds.size())
+    if(find_index >= realindex.size())
     {
         printf("hash %08X demands a new RealIndex file (number %u)\n", crc, (unsigned)find_index);
         find_index = new_real();
@@ -71,7 +77,8 @@ void block_index_type::AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t va
     W32(Packet, value);
     errno=0;
 TryAgain:;
-    ssize_t res = pwrite64( realindex_fds[find_index], Packet, 4, RealPos(crc));
+    int fd; uint_fast64_t pos; realindex[find_index].GetPos(crc, fd, pos);
+    ssize_t res = pwrite64(fd, Packet, 4, pos);
     if(res != 4)
     {
         fprintf(stderr, "Warning: Could not augment the RealIndex file\n");
@@ -84,17 +91,19 @@ TryAgain:;
 void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
 {
     size_t find_index = 0; cromfs_block_internal tmp;
-    while(find_index < autoindex_fds.size())
+    while(find_index < autoindex.size())
     {
         char Packet[4+4] = {0};
-        if(pread64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc)) <= 0) break;
+        const CacheFile<8>& constindex = autoindex[find_index];
+        int fd; uint_fast64_t pos; constindex.GetPos(crc, fd, pos);
+        if(pread64(fd, Packet, 4+4, pos) <= 0) break;
         tmp.fblocknum = R32(Packet);
         tmp.startoffs = R32(Packet+4);
         if(tmp.fblocknum == 0 && tmp.startoffs == 0) break;
         if(tmp == value) return;
         ++find_index;
     }
-    if(find_index >= autoindex_fds.size())
+    if(find_index >= autoindex.size())
     {
         printf("hash %08X demands a new AutoIndex file (number %u)\n", crc, (unsigned)find_index);
         find_index = new_auto();
@@ -104,7 +113,8 @@ void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_i
     W32(Packet,   value.fblocknum);
     W32(Packet+4, value.startoffs);
     errno=0;
-    ssize_t res = pwrite64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc));
+    int fd; uint_fast64_t pos; autoindex[find_index].GetPos(crc, fd, pos);
+    ssize_t res = pwrite64(fd, Packet, 4+4, pos);
     if(res != 4+4)
     {
         fprintf(stderr, "Warning: Could not augment the AutoIndex file\n");
@@ -116,7 +126,7 @@ void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_i
 void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
 {
     cromfs_block_internal tmp;
-    for(size_t find_index=0; find_index < autoindex_fds.size(); ++find_index)
+    for(size_t find_index=0; find_index < autoindex.size(); ++find_index)
     {
         if(!FindAutoIndex(crc, tmp, find_index)) break;
         if(tmp == value)
@@ -126,7 +136,8 @@ void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_i
              */
             char Packet[4+4] = { 0 };
             errno=0;
-            ssize_t res = pwrite64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc));
+            int fd; uint_fast64_t pos; autoindex[find_index].GetPos(crc, fd, pos);
+            ssize_t res = pwrite64(fd, Packet, 4+4, pos);
             if(res != 4+4)
             {
                 fprintf(stderr, "Warning: Could not augment the AutoIndex file\n");
@@ -138,59 +149,21 @@ void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_i
     }
 }
 
-const std::string block_index_type::GetRealFn(size_t index) const
-{
-    std::stringstream tmp;
-    tmp << GetTempDir() << "/real-" << (void*)(this) << "-" << index << ".dat";
-    return tmp.str();
-}
-
-const std::string block_index_type::GetAutoFn(size_t index) const
-{
-    std::stringstream tmp;
-    tmp << GetTempDir() << "/auto-" << (void*)(this) << "-" << index << ".dat";
-    return tmp.str();
-}
-
 /* Note: Not threadsafe */
 size_t block_index_type::new_real()
 {
-    const size_t result = realindex_fds.size();
-    std::string fn = GetRealFn(result);
-
-    std::printf("Opening new RealIndex file: %s\n", fn.c_str());
-
-    int fd = open(fn.c_str(), O_RDWR | O_TRUNC | O_CREAT | O_NOATIME | O_EXCL, 0600);
-    if(fd < 0)
-    {
-        perror(("new_real:"+fn).c_str());
-        throw std::runtime_error("Cannot create a RealIndex file"); // FATAL ERROR
-    }
-
-    unlink(fn.c_str());
-    realindex_fds.push_back(fd);
-    return result;
+    CacheFile<4> tmp( GetTempDir() + std::string("/real") );
+    realindex.push_back(tmp);
+    return realindex.size()-1;
 }
 
 
 /* Note: Not threadsafe */
 size_t block_index_type::new_auto()
 {
-    const size_t result = autoindex_fds.size();
-    std::string fn = GetAutoFn(result);
-
-    std::printf("Opening new AutoIndex file: %s\n", fn.c_str());
-
-    int fd = open(fn.c_str(), O_RDWR | O_TRUNC | O_CREAT | O_NOATIME | O_EXCL, 0600);
-    if(fd < 0)
-    {
-        perror(("new_auto:"+fn).c_str());
-        throw std::runtime_error("Cannot create an AutoIndex file"); // FATAL ERROR
-    }
-
-    unlink(fn.c_str());
-    autoindex_fds.push_back(fd);
-    return result;
+    CacheFile<8> tmp( GetTempDir() + std::string("/auto") );
+    autoindex.push_back(tmp);
+    return autoindex.size()-1;
 }
 
 bool block_index_type::EmergencyFreeSpace(bool Auto, bool Real)
@@ -198,26 +171,22 @@ bool block_index_type::EmergencyFreeSpace(bool Auto, bool Real)
     fprintf(stderr, "BlockIndex: Emergency disk space release start\n");
 
     bool ok = false;
-    if(!autoindex_fds.empty() && Auto)
+    if(!autoindex.empty() && Auto)
     {
-        struct stat st;
-        fstat(autoindex_fds[0], &st);
-
+        uint_fast64_t DiskSize = autoindex[0].GetDiskSize();
         fprintf(stderr, "BlockIndex: Discarding the earliest AutoIndex file to free %s of disk space -- Note: This may degrade the compression effect!\n",
-            ReportSize(st.st_blocks * 512ULL).c_str());
-        close(autoindex_fds[0]);
-        autoindex_fds.erase(autoindex_fds.begin());
+            ReportSize(DiskSize).c_str());
+        autoindex[0].Close();
+        autoindex.erase(autoindex.begin());
         ok = true;
     }
-    else if(!realindex_fds.empty() && Real)
+    else if(!realindex.empty() && Real)
     {
-        struct stat st;
-        fstat(autoindex_fds[0], &st);
-
+        uint_fast64_t DiskSize = realindex[0].GetDiskSize();
         fprintf(stderr, "BlockIndex: Discarding the earliest RealIndex file to free %s of disk space -- Note: This may degrade the compression effect significantly!\n",
-            ReportSize(st.st_blocks * 512ULL).c_str());
-        close(realindex_fds[0]);
-        realindex_fds.erase(realindex_fds.begin());
+            ReportSize(DiskSize).c_str());
+        realindex[0].Close();
+        realindex.erase(realindex.begin());
         ok = true;
     }
     else
@@ -227,6 +196,19 @@ bool block_index_type::EmergencyFreeSpace(bool Auto, bool Real)
 
     return ok;
 }
+
+void block_index_type::Clone()
+{
+    for(size_t a=0; a<realindex.size(); ++a) { realindex[a].Clone(); }
+    for(size_t a=0; a<autoindex.size(); ++a) { autoindex[a].Clone(); }
+}
+
+void block_index_type::Close()
+{
+    for(size_t a=0; a<realindex.size(); ++a) { realindex[a].Close(); }
+    for(size_t a=0; a<autoindex.size(); ++a) { autoindex[a].Close(); }
+}
+
 
 /*************************************************
   Goals of this hash calculator:
@@ -253,3 +235,123 @@ BlockIndexHashType
 
 
 block_index_type* block_index_global;
+
+
+template<unsigned RecSize>
+block_index_type::CacheFile<RecSize>::CacheFile(const std::string& np)
+    : fds(), LargeFileOk(false), NoFilesOpen(true), NamePattern(np)
+{
+    for(int a=0; a<n_fds; ++a)
+        fds[a] = -1;
+}
+
+template<unsigned RecSize>
+void block_index_type::CacheFile<RecSize>::Clone()
+{
+    if(LargeFileOk)
+        fds[0] = dup(fds[0]);
+    else
+        for(int a=0; a<n_fds; ++a)
+            if(fds[a] >= 0)
+                fds[a] = dup(fds[a]);
+}
+
+template<unsigned RecSize>
+void block_index_type::CacheFile<RecSize>::GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos) const
+{
+    /* Const version */
+    pos = crc;
+    pos *= RecSize;
+    if(LargeFileOk)
+    {
+        fd = fds[0];
+    }
+    else
+    {
+        int fd_index = pos >> 31;
+        fd = fds[fd_index];
+        pos &= (1U << 31)-1;
+    }
+}
+
+template<unsigned RecSize>
+void block_index_type::CacheFile<RecSize>::GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos)
+{
+    /* Nonconst version */
+    pos = crc;
+    pos *= RecSize;
+    if(LargeFileOk)
+    {
+        fd = fds[0];
+    }
+    else
+    {
+        int fd_index = pos >> 31;
+        fd = fds[fd_index];
+
+        if(fds[fd_index] < 0)
+        {
+            // Open the file
+            char Buf[128]; sprintf(Buf, "-%p-%d.dat", this, fd_index);
+            std::string fn(NamePattern); fn += Buf;
+
+            std::printf("Opening new Index file: %s\n", fn.c_str());
+            fd = open(fn.c_str(), O_RDWR | O_TRUNC | O_CREAT | O_NOATIME | O_EXCL | O_LARGEFILE, 0600);
+            if(fd < 0)
+                perror(fn.c_str());
+            else
+            {
+                unlink(fn.c_str()); // Ensure it gets removed once closed
+                
+                // Check if we get a LargeFileOk...
+                if(NoFilesOpen)
+                {
+                    char c = 0;
+                    ssize_t res = pwrite64(fd,
+                        &c, 1, UINT64_C(0xFFFFFFFF) * (uint_fast64_t)RecSize);
+                    if(res == 1)
+                    {
+                        LargeFileOk = true;
+                        for(int a=0; a<n_fds; ++a)
+                        {
+                            if(fds[a] >= 0) close(fds[a]);
+                            fds[a] = fd;
+                        }
+                    }
+                }
+            }
+            fds[fd_index] = fd;
+            NoFilesOpen = false;
+        }
+        if(!LargeFileOk)
+           pos &= (1U << 31)-1;
+    }
+}
+
+template<unsigned RecSize>
+void block_index_type::CacheFile<RecSize>::Close()
+{
+    if(LargeFileOk)
+        close(fds[0]);
+    else
+        for(int a=0; a<n_fds; ++a)
+            if(fds[a] >= 0)
+                close(fds[a]);
+}
+
+template<unsigned RecSize>
+uint_fast64_t block_index_type::CacheFile<RecSize>::GetDiskSize() const
+{
+    uint_fast64_t result = 0;
+
+    for(int a=0; a<n_fds; ++a)
+    {
+        if(fds[a] < 0) continue;
+
+        struct stat st;
+        fstat(fds[a], &st);
+        result += st.st_blocks * UINT64_C(512);
+        if(a==0 && LargeFileOk) break;
+    }
+    return result;
+}
