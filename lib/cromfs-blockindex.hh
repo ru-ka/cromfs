@@ -48,6 +48,8 @@ public:
 
     void DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
 
+    bool EmergencyFreeSpace(bool Auto=true, bool Real=true);
+
 public:
     block_index_type() : realindex_fds(), autoindex_fds() { }
 
@@ -119,3 +121,10 @@ private:
     std::vector<int> realindex_fds;
     std::vector<int> autoindex_fds;
 };
+
+/* This global pointer to block_index is required
+ * so that cromfs-fblockfun.cc can call
+ * the EmergencyFreeSpace() method across module
+ * boundaries when necessary.
+ */
+extern block_index_type* block_index_global;

@@ -3,8 +3,13 @@
 #include <fcntl.h>
 
 #include <sstream>
+#include <stdexcept>
+#include <errno.h>
+#include <unistd.h>
+
 #include "cromfs-blockindex.hh"
 #include "util/mkcromfs_sets.hh"
+#include "util.hh" // For ReportSize
 
 
 /*
@@ -64,7 +69,16 @@ void block_index_type::AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t va
 
     char Packet[4];
     W32(Packet, value);
-    pwrite64( realindex_fds[find_index], Packet, 4, RealPos(crc));
+    errno=0;
+TryAgain:;
+    ssize_t res = pwrite64( realindex_fds[find_index], Packet, 4, RealPos(crc));
+    if(res != 4)
+    {
+        fprintf(stderr, "Warning: Could not augment the RealIndex file\n");
+        if(errno) perror("pwrite64");
+        if(EmergencyFreeSpace(true,false)) goto TryAgain;
+        fprintf(stderr, "Warning: Ignoring the failure and moving on\n");
+    }
 }
 
 void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
@@ -89,7 +103,14 @@ void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_i
     char Packet[4+4];
     W32(Packet,   value.fblocknum);
     W32(Packet+4, value.startoffs);
-    pwrite64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc));
+    errno=0;
+    ssize_t res = pwrite64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc));
+    if(res != 4+4)
+    {
+        fprintf(stderr, "Warning: Could not augment the AutoIndex file\n");
+        if(errno) perror("pwrite64");
+        fprintf(stderr, "Warning: Ignoring the failure and moving on\n");
+    }
 }
 
 void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
@@ -104,7 +125,14 @@ void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_i
              * the next best option
              */
             char Packet[4+4] = { 0 };
-            pwrite64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc));
+            errno=0;
+            ssize_t res = pwrite64( autoindex_fds[find_index], Packet, 4+4, AutoPos(crc));
+            if(res != 4+4)
+            {
+                fprintf(stderr, "Warning: Could not augment the AutoIndex file\n");
+                if(errno) perror("pwrite64");
+                fprintf(stderr, "Warning: Ignoring the failure and moving on\n");
+            }
             return;
         }
     }
@@ -133,7 +161,11 @@ size_t block_index_type::new_real()
     std::printf("Opening new RealIndex file: %s\n", fn.c_str());
 
     int fd = open(fn.c_str(), O_RDWR | O_TRUNC | O_CREAT | O_NOATIME | O_EXCL, 0600);
-    if(fd < 0) perror(("new_real:"+fn).c_str()); // TODO: A better error resolution
+    if(fd < 0)
+    {
+        perror(("new_real:"+fn).c_str());
+        throw std::runtime_error("Cannot create a RealIndex file"); // FATAL ERROR
+    }
 
     unlink(fn.c_str());
     realindex_fds.push_back(fd);
@@ -150,13 +182,51 @@ size_t block_index_type::new_auto()
     std::printf("Opening new AutoIndex file: %s\n", fn.c_str());
 
     int fd = open(fn.c_str(), O_RDWR | O_TRUNC | O_CREAT | O_NOATIME | O_EXCL, 0600);
-    if(fd < 0) perror(("new_auto:"+fn).c_str()); // TODO: A better error resolution
+    if(fd < 0)
+    {
+        perror(("new_auto:"+fn).c_str());
+        throw std::runtime_error("Cannot create an AutoIndex file"); // FATAL ERROR
+    }
 
     unlink(fn.c_str());
     autoindex_fds.push_back(fd);
     return result;
 }
 
+bool block_index_type::EmergencyFreeSpace(bool Auto, bool Real)
+{
+    fprintf(stderr, "BlockIndex: Emergency disk space release start\n");
+
+    bool ok = false;
+    if(!autoindex_fds.empty() && Auto)
+    {
+        struct stat st;
+        fstat(autoindex_fds[0], &st);
+
+        fprintf(stderr, "BlockIndex: Discarding the earliest AutoIndex file to free %s of disk space -- Note: This may degrade the compression effect!\n",
+            ReportSize(st.st_blocks * 512ULL).c_str());
+        close(autoindex_fds[0]);
+        autoindex_fds.erase(autoindex_fds.begin());
+        ok = true;
+    }
+    else if(!realindex_fds.empty() && Real)
+    {
+        struct stat st;
+        fstat(autoindex_fds[0], &st);
+
+        fprintf(stderr, "BlockIndex: Discarding the earliest RealIndex file to free %s of disk space -- Note: This may degrade the compression effect significantly!\n",
+            ReportSize(st.st_blocks * 512ULL).c_str());
+        close(realindex_fds[0]);
+        realindex_fds.erase(realindex_fds.begin());
+        ok = true;
+    }
+    else
+        fprintf(stderr, "BlockIndex: Fatal error: No disk space to free\n");
+
+    fprintf(stderr, "BlockIndex: Emergency disk space release end\n");
+
+    return ok;
+}
 
 /*************************************************
   Goals of this hash calculator:
@@ -180,3 +250,6 @@ BlockIndexHashType
 {
     return newhash_calc(buf, size);
 }
+
+
+block_index_type* block_index_global;
