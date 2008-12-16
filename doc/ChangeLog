@@ -4,7 +4,7 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-1.5.6        <under development>
+1.5.6 2008-12-16 Joel Yliluoma <bisqwit@iki.fi>
 - Added parallelization to block index search
 - Added parallelization to the directory scanning phase
 - Added predictive autoindex: now automatically indexes a block
@@ -16,18 +16,18 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
   when --bruteforcelimit (-c) is set to 1 and --minfreespace (-s)
   is greater than 0 (default is 16).
 
-1.5.5.4 2008-12-14 Joel Yliluom< bisqwit@iki.fi>
+1.5.5.4 2008-12-14 Joel Yliluoma <bisqwit@iki.fi>
 - ./configure now detects systems where cromfs-driver-static cannot
   be built, such as Fedora 10. In those cases, the staticly linked
   program is silently dropped from the compilation chain.
   (Thanks to Josh Rabinowitz for making me aware of this problem.)
 - Minor changes to fix compilation using ICC.
 
-1.5.5.3 2008-12-13 Joel Yliluom< bisqwit@iki.fi>
+1.5.5.3 2008-12-13 Joel Yliluoma <bisqwit@iki.fi>
 - Compilation fixes on IA32 platform
 - Unified the output of "overlap fully" with and without autoindex
 
-1.5.5.2 2008-12-13 Joel Yliluom< bisqwit@iki.fi>
+1.5.5.2 2008-12-13 Joel Yliluoma <bisqwit@iki.fi>
 - Addressed some (stupid) compiler complaints.
   GCC's illadvised misinterpretation of Scott Meyer's Effective C++
   rule 12 be damned. In the same breath, it appears that GCC does not
