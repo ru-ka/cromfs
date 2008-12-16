@@ -170,6 +170,9 @@ if cc_check '<fuse_lowlevel.h>' "-static -DFUSE_USE_VERSION=25 $fusetry" ''; the
   FUSE_STATIC=1
 else
   do_echo No
+  do_echo "Note: cromfs-driver-static will not be built, because"
+  do_echo "your system does not have a statically linked Fuse library."
+  do_echo "You can still use the dynamically linked cromfs-driver."
   FUSE_STATIC=0
 fi
 

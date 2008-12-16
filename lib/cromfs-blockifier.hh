@@ -19,6 +19,11 @@ public:
         : schedule(), blocks(), fblocks(),
           last_autoindex_length(), block_index()
     {
+        /* Set up the global pointer to our block_index
+         * so that cromfs_blockfun.cc can access it in
+         * the case of emergency.
+         */
+        block_index_global = &block_index;
     }
     ~cromfs_blockifier()
     {

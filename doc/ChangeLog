@@ -4,6 +4,10 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.6.1 2008-12-16 Joel Yliluoma <bisqwit@iki.fi>
+- Added error resolution for disk write errors (such as low diskspace)
+  (Thanks Petr Pudlak.)
+
 1.5.6 2008-12-16 Joel Yliluoma <bisqwit@iki.fi>
 - Added parallelization to block index search
 - Added parallelization to the directory scanning phase

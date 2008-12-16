@@ -56,7 +56,7 @@ bool is_zero_block(const unsigned char* data, uint_fast64_t size)
 #endif
 }
 
-void SparseWrite(int fd,
+bool SparseWrite(int fd,
     const unsigned char* Buffer,
     uint_fast64_t BufSize,
     uint_fast64_t WritePos)
@@ -64,16 +64,18 @@ void SparseWrite(int fd,
     /*fprintf(stderr, "Normally, would write %04llX..%04llX from %p\n",
         WritePos, WritePos+BufSize-1, Buffer);*/
 #if 0
-    pwrite64(fd, Buffer, BufSize, WritePos);
+    return pwrite64(fd, Buffer, BufSize, WritePos) == (ssize_t)BufSize;
 #else
     const unsigned BlockSize = 1024;
 
     #define FlushBuf() do { \
         if(BufferedSize) \
-            { \
+        { \
              /*fprintf(stderr, "But writing %04llX..%04llX from %p\n", \
                  BufferedPos, BufferedPos+BufferedSize-1, BufferedBegin); */ \
-             pwrite64(fd, BufferedBegin, BufferedSize, BufferedPos); } \
+            ssize_t res = pwrite64(fd, BufferedBegin, BufferedSize, BufferedPos); \
+            if(res != BufferedSize) return false; \
+        } \
         BufferedSize = 0; BufferedBegin = Buffer; BufferedPos = WritePos; \
     } while(0)
 
@@ -115,4 +117,5 @@ void SparseWrite(int fd,
     #undef FlushBuf
     #undef SkipBuf
 #endif
+    return true;
 }

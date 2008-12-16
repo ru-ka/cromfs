@@ -61,17 +61,22 @@ void LongFileWrite::write
             /* When the block consists entirely of zeroes, it does
              * not need to be written.
              */
-            SparseWrite(fd, buf, size, offset);
+            if(!SparseWrite(fd, buf, size, offset))
+                throw errno;
         }
         else
-            pwrite64(fd, buf, size, offset);
+        {
+            if(pwrite64(fd, buf, size, offset) != size)
+                throw errno;
+        }
     }
 }
 
 void LongFileWrite::FlushBuffer()
 {
     if(Buffer.empty()) return;
-    pwrite64(fd, &Buffer[0], Buffer.size(), bufpos);
+    if(pwrite64(fd, &Buffer[0], Buffer.size(), bufpos) != Buffer.size())
+        throw errno;
     Buffer.clear();
 }
 

@@ -22,6 +22,7 @@ struct autoclosefp
     inline autoclosefp(std::FILE* f) : fp(f) { }
     inline ~autoclosefp() { if(fp) std::fclose(fp); }
     inline operator std::FILE*() const { return fp; }
+    inline bool operator! () const { return fp==0; }
 
 private:
     autoclosefp(const autoclosefp&);

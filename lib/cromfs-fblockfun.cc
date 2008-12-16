@@ -1,4 +1,5 @@
 #include "cromfs-fblockfun.hh"
+#include "cromfs-blockindex.hh" // For EmergencyFreeSpace()
 
 #include "../util/mkcromfs_sets.hh"
 
@@ -12,6 +13,7 @@
 #include <cstdlib>
 #include <sys/time.h>
 #include <ctime>
+#include <stdexcept>
 
 using namespace fblock_private;
 
@@ -76,12 +78,14 @@ void fblock_storage::put_raw(const std::vector<unsigned char>& raw)
 
     size_t res=0;
     {autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
-     res = std::fwrite(&raw[0], 1, filesize=raw.size(), fp);
+     if(!!fp)
+      res = std::fwrite(&raw[0], 1, filesize=raw.size(), fp);
     }
 
     if(res != raw.size())
     {
-        std::fprintf(stderr, "fwrite: res=%d, should be %d\n", (int)res, (int)raw.size());
+        std::fprintf(stderr, "fwrite(%s,decompressed): Possible trouble: res=%d, should be %d -- trying to write compressed version to save space\n",
+            getfn().c_str(), (int)res, (int)raw.size());
         // Possibly, out of disk space? Try to save compressed instead.
         put_compressed(LZMACompress(raw));
     }
@@ -97,9 +101,26 @@ void fblock_storage::put_compressed(const std::vector<unsigned char>& compressed
     //fprintf(stderr, "[1;mstoring compressed[m\n");
     is_compressed = true;
 
-    autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
-    std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
+TryAgain:;
 
+    size_t res=0;
+    {autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
+     if(!!fp)
+      res = std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
+    }
+
+    if(res != filesize)
+    {
+        std::fprintf(stderr, "fwrite(%s,compressed): Trouble: res=%d, should be %d\n",
+            getfn().c_str(), (int)res, (int)filesize);
+        if(block_index_global->EmergencyFreeSpace())
+        {
+            fprintf(stderr, "Trying fwrite again\n");
+            goto TryAgain;
+        }
+        std::fprintf(stderr, "fwrite(%s,compressed): Fatal error\n", getfn().c_str());
+        throw std::runtime_error("Cannot write a fblock"); // FATAL ERROR
+    }
     last_access = std::time(NULL);
 }
 
@@ -227,7 +248,11 @@ void fblock_storage::put_appended_raw(
         std::vector<unsigned char> buf = get_raw();
         int open_flags = O_RDWR /*| O_CREAT*/ | O_LARGEFILE;
         autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
-        if(fd < 0) { std::perror(getfn().c_str()); return; }
+        if(fd < 0)
+        {
+            std::perror(getfn().c_str());
+            throw std::runtime_error("Cannot open a fblock"); // FATAL ERROR
+        }
 
         is_compressed = false;
 
@@ -260,8 +285,14 @@ void fblock_storage::put_appended_raw(
     int open_flags = O_RDWR | O_LARGEFILE;
     if(append.OldSize == 0) open_flags |= O_CREAT;
     autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
-    if(fd < 0) { std::perror(getfn().c_str()); return; }
+    if(fd < 0)
+    {
+        std::perror(getfn().c_str());
+        throw std::runtime_error("Cannot open a fblock"); // FATAL ERROR
+    }
+    errno = 0;
 
+TryAgain:
     try
     {
         ( LongFileWrite(fd, append.OldSize, added_length, &data[datasize - added_length],
@@ -274,7 +305,14 @@ void fblock_storage::put_appended_raw(
             (unsigned)append.OldSize,
             (unsigned)append.AppendedSize
              );
-        perror("pwrite");
+        if(errno) perror("pwrite");
+
+        if(block_index_global->EmergencyFreeSpace())
+        {
+            fprintf(stderr, "Trying pwrite again\n");
+            goto TryAgain;
+        }
+        throw std::runtime_error("Cannot append to a fblock"); // FATAL ERROR
     }
     filesize = append.AppendedSize;
     //ftruncate(fd, filesize); //-- what use is this for?
