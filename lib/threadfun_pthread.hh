@@ -34,13 +34,23 @@ public:
 #endif
     }
     void Unlock() {
-        ONLY_IF_THREAD_DEBUG(int res =) pthread_mutex_unlock(&mut); 
+        ONLY_IF_THREAD_DEBUG(int res =) pthread_mutex_unlock(&mut);
 #if THREAD_DEBUG >= 1
         //{char tmp;fprintf(stderr, "- mutex unlocking by %p\n", &tmp); fflush(stderr);}
         if(res != 0)
             { fprintf(stderr, "- mutex unlocking failed: %d\n", res); fflush(stderr); throw this; }
 #endif
     }
+    bool TryLock() {
+        int res = pthread_mutex_trylock(&mut);
+#if THREAD_DEBUG >= 1
+        //{char tmp;fprintf(stderr, "- mutex locking by %p\n", &tmp); fflush(stderr);}
+        if(res != 0)
+            { fprintf(stderr, "- mutex locking failed: %d\n", res); fflush(stderr); throw this; }
+#endif
+        return res == 0;
+    }
+
     pthread_mutex_t& Get() { return mut; }
 private:
     pthread_mutex_t mut;
@@ -56,10 +66,10 @@ public:
 #endif
     }
     ~ThreadCondition() { pthread_cond_destroy(&cond); }
-    
+
     void Wait() { MutexType mut; BasicScopedLock<MutexType> lck(mut); Wait(mut); }
     void Wait(MutexType& mut)
-        { 
+        {
 #if THREAD_DEBUG >= 2
           fprintf(stderr, "- waiting(%p)\n", &cond); fflush(stderr);
 #endif

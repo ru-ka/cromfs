@@ -173,6 +173,14 @@ else
   FUSE_STATIC=0
 fi
 
+do_echo -n "Checking for vsnprintf... "
+if cc_check '<cstdio>' '' 'char Buf[10];using namespace std; vsnprintf(Buf,sizeof Buf,"gruu");'; then
+  do_echo Yes
+  OPTIM="$OPTIM -DHAS_VSNPRINTF"
+else
+  do_echo No
+fi
+
 WARNINGS=""
 CWARNINGS=""
 CXXWARNINGS=""

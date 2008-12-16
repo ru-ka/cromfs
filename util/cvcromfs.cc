@@ -24,14 +24,14 @@ struct BlockToucher
 {
     virtual bool NeedsData() const { return false; }
     virtual void Got(std::vector<unsigned char>& ) { }
-    
+
     virtual ~BlockToucher() {}
 };
 struct InodeToucher: public BlockToucher
 {
     struct Oper { uint_fast64_t offs; unsigned width; uint_fast64_t value; };
     std::map<uint_fast64_t, Oper> Read, Write;
-    
+
     virtual bool NeedsData() const { return !Read.empty() || !Write.empty(); }
 
     void SetRead(uint_fast64_t offs, unsigned w)
@@ -72,7 +72,7 @@ struct StorageOptToucher: public BlockToucher
     virtual void Got(std::vector<unsigned char>& Buffer)
     {
         if(read_old) old_opts = R32(&Buffer[0]);
-        
+
         if(old_opts &   CROMFS_OPT_24BIT_BLOCKNUMS)
             new_opts |= CROMFS_OPT_24BIT_BLOCKNUMS;
 
@@ -81,7 +81,7 @@ struct StorageOptToucher: public BlockToucher
 
         if(old_opts &   CROMFS_OPT_VARIABLE_BLOCKSIZES)
             new_opts |= CROMFS_OPT_VARIABLE_BLOCKSIZES;
-        
+
         if(write_new) W32(&Buffer[0], new_opts);
     }
 };
@@ -94,17 +94,17 @@ struct BlkTabConverter: public BlockToucher
     BlkTabConverter(): bsize(),fsize(),HadPacked(),WantPacked() { } // -Weffc++
 
     virtual bool NeedsData() const { return HadPacked != WantPacked; }
-    
+
     virtual void Got(std::vector<unsigned char>& Buffer)
     {
         if(HadPacked != WantPacked)
         {
             const unsigned OldBlockSize = (HadPacked ? 4 : 8);
-            
+
             unsigned NumBlocks = Buffer.size() / OldBlockSize;
-            
+
             std::vector<cromfs_block_internal> blktab( NumBlocks);
-            
+
             for(unsigned a=0; a<NumBlocks; ++a)
             {
                 uint_fast32_t fblocknum = 0;
@@ -117,9 +117,9 @@ struct BlkTabConverter: public BlockToucher
                     startoffs = R32(&Buffer[a*8+4]);
                 blktab[a].define(fblocknum, startoffs/*, bsize,fsize*/);
             }
-            
+
             const unsigned NewBlockSize = (WantPacked ? 4 : 8);
-            
+
             Buffer.resize(NumBlocks * NewBlockSize);
             for(unsigned a=0; a<NumBlocks; ++a)
             {
@@ -151,26 +151,26 @@ static uint_fast64_t ConvertBuffer
 {
     LongFileRead reader(infd, in_offs, in_size);
     std::vector<unsigned char> Buffer(reader.GetAddr(), reader.GetAddr()+in_size);
-    
+
     std::printf("read %u, ", (unsigned)in_size);
     std::fflush(stdout);
-    
+
     if(was_compressed && (!want_compressed || recompress || touch_block.NeedsData()))
     {
         Buffer = LZMADeCompress(Buffer);
         was_compressed = false;
     }
-    
+
     touch_block.Got(Buffer);
-    
+
     if(want_compressed && !was_compressed)
     {
         Buffer = DoLZMACompress(LZMA_HeavyCompress, Buffer, "data");
     }
-    
+
     std::printf("written %u", (unsigned)Buffer.size());
     std::fflush(stdout);
-    
+
     LongFileWrite writer(outfd,0);
     writer.write(&Buffer[0], Buffer.size(), out_offs);
     return Buffer.size();
@@ -191,9 +191,9 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     ErrorExit:
         if(infd != -1) close(infd);
         if(outfd != -1) close(outfd);
-        return false; 
+        return false;
     }
-    
+
     if((storage_opts & CROMFS_OPT_SPARSE_FBLOCKS) && Ver < 3)
     {
         std::printf("Warning: Cannot make a sparse filesystem unless version is 3 or greater\n");
@@ -204,19 +204,19 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
         std::printf("Warning: Cannot make packed blocks unless version is 3 or greater\n");
         storage_opts &= ~CROMFS_OPT_PACKED_BLOCKS;
     }
-    
+
     std::printf("Reading header...\n");
-    
+
     cromfs_superblock_internal sblock;
     cromfs_superblock_internal::BufferType Superblock;
     if(pread64(infd, Superblock, sizeof(Superblock), 0) == -1) goto InError;
-    
+
     sblock.ReadFromBuffer(Superblock);
-    
+
     bool HadCompression  = false;
     bool WantCompression = Ver >= 2;
     uint_least32_t old_storage_opts = 0;
-    
+
     int OrigVer, SuperblockSize = 0;
     const uint_fast64_t sig  = sblock.sig;
     switch(sig)
@@ -249,9 +249,9 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
             goto ErrorExit;
         }
     }
-    
+
     std::printf("Version %02d detected.\n", OrigVer);
-    
+
     outfd = open(outfn.c_str(), O_WRONLY | O_LARGEFILE | O_CREAT, 0644);
     if(outfd < 0) { perror(outfn.c_str()); goto ErrorExit; }
     ftruncate64(outfd, 0);
@@ -262,13 +262,13 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
         case 2: sblock.sig = CROMFS_SIGNATURE_02; break;
         case 3: sblock.sig = CROMFS_SIGNATURE_03; break;
     }
-    
+
     uint_fast64_t write_offs = sblock.GetSize(
         RootDirInflateFactor > 1.0 ||
         InotabInflateFactor > 1.0 ||
         BlktabInflateFactor > 1.0
     );
-    
+
     std::printf("Converting the root directory inode...\n- ");
     //fprintf(stderr, "root goes at %llX\n", write_offs);
     sblock.rootdir_size =
@@ -279,19 +279,19 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     sblock.rootdir_offs = write_offs;
     sblock.rootdir_room = sblock.rootdir_size * RootDirInflateFactor;
     write_offs += sblock.rootdir_room;
-    
+
     std::printf("\n");
     std::fflush(stdout);
-    
+
     std::printf("Converting the inotab inode...\n- ");
-    
+
     StorageOptToucher ReadWriteInotabAttrs;
-    
+
     ReadWriteInotabAttrs.old_opts  = 0x000000000;
     ReadWriteInotabAttrs.new_opts  = storage_opts;
     ReadWriteInotabAttrs.read_old  = OrigVer >= 3;
     ReadWriteInotabAttrs.write_new = Ver >= 3;
-    
+
     //fprintf(stderr, "inotab goes at %llX\n", write_offs);
     sblock.inotab_size =
         ConvertBuffer(infd, outfd,
@@ -304,10 +304,10 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     sblock.inotab_offs = write_offs;
     sblock.inotab_room = sblock.inotab_size  * InotabInflateFactor;
     write_offs += sblock.inotab_room;
-    
+
     old_storage_opts = ReadWriteInotabAttrs.old_opts;
     storage_opts     = ReadWriteInotabAttrs.new_opts;
-    
+
     if((storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS)
     && Ver < 3)
     {
@@ -318,17 +318,17 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     {
         std::fprintf(stderr, "Error: CROMFS%02u cannot use 16-bit block numbers\n", Ver);
     }
-    
+
     std::printf("\n");
     std::fflush(stdout);
-    
+
     std::printf("Converting the block table...\n- ");
     BlkTabConverter ConvertBlkTab;
     ConvertBlkTab.HadPacked = old_storage_opts & CROMFS_OPT_PACKED_BLOCKS;
     ConvertBlkTab.WantPacked = storage_opts & CROMFS_OPT_PACKED_BLOCKS;
     ConvertBlkTab.bsize = sblock.bsize;
     ConvertBlkTab.fsize = sblock.fsize;
-    
+
     sblock.blktab_size =
         ConvertBuffer(infd,outfd,
                       sblock.blktab_offs,
@@ -341,47 +341,47 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
 
     std::printf("\n");
     std::fflush(stdout);
-    
+
     int_fast64_t size_diff = write_offs - sblock.fblktab_offs;
 
     std::printf("Converting fblocks... size difference so far: %lld bytes\n",
         (long long)size_diff);
-    
+
     uint_fast64_t read_begin = sblock.fblktab_offs;
     uint_fast64_t read_offs  = read_begin;
     uint_fast64_t read_end   = lseek64(infd, 0, SEEK_END);
 
     sblock.fblktab_offs = write_offs;
-    
+
     for(unsigned fblockno=0;;)
     {
         if(read_offs >= read_end) break;
-        
+
         unsigned char Buf[17];
         ssize_t r = pread64(infd, Buf, 17, read_offs);
         if(r == 0) break;
         if(r < 0) throw errno;
         if(r < 17) throw EINVAL;
-        
+
         cromfs_fblock_internal fblock;
         fblock.filepos = read_offs+4;
         fblock.length  = R32(Buf+0);
         //uint_fast64_t orig_size = R64(Buf+9);
 
         double position = (read_offs-read_begin) * 100.0 / (read_end-read_begin);
-        
+
         std::printf("\r%75s\rfblock %u... (%s)... %.0f%% done: ",
             "", fblockno++, ReportSize(fblock.length).c_str(),
             position);
         std::fflush(stdout);
-        
+
         uint_fast64_t new_size =
             ConvertBuffer(infd,outfd,
                           fblock.filepos,
                           fblock.length,
                           write_offs+4,
                           true,true, recompress);
-        
+
         if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
         {
             if(new_size > sblock.fsize)
@@ -398,40 +398,40 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
                 return false;
             }
         }
-        
+
         W32(Buf, new_size);
         pwrite64(outfd, Buf, 4, write_offs);
-        
+
         if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
             write_offs += 4 + sblock.fsize;
         else
             write_offs += 4 + new_size;
-        
+
         if(old_storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
             read_offs += 4 + sblock.fsize;
         else
             read_offs += 4 + (uint_fast64_t)fblock.length;
     }
-    
+
     std::printf("\nWriting header...\n");
-    
+
     // Last write the modified header
     sblock.WriteToBuffer(Superblock);
     ( LongFileWrite(outfd, 0, sblock.GetSize(), Superblock) );
     ftruncate64(outfd, write_offs);
-    
+
     std::printf("done.\n");
-    
+
     struct stat64 st;
     fstat64(outfd, &st);
-    
+
     std::printf("Output file size: %lld bytes (actual disk space used: %lld bytes)\n",
         (long long)write_offs,
         (long long)(st.st_blocks * 512));
-    
+
     close(outfd);
     close(infd);
-    
+
     return true;
 }
 
@@ -442,9 +442,9 @@ int main(int argc, char** argv)
     std::string fsfile;
     bool recompress = false;
     bool force = false;
-    
+
     uint_least32_t storage_opts = 0;
-    
+
     for(;;)
     {
         int option_index = 0;
@@ -652,12 +652,12 @@ int main(int argc, char** argv)
         return 1;
     }
     fsfile  = argv[optind++];
-    
+
     if(outfn.size() == 0)
     {
         std::fprintf(stderr, "cvcromfs: output file is mandatory\n");
         return 1;
     }
-    
+
     return Convert(fsfile, outfn, SetVer, recompress, force, storage_opts) ? 0 : -1;
 }

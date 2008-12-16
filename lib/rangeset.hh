@@ -26,7 +26,7 @@ class rangeset
     };
     typedef rangecollection<Key, Valueholder, Allocator> Cont;
     Cont data;
-    
+
 public:
     /* Iterates over _set_ ranges */
     struct const_iterator: public rangetype<Key>
@@ -41,7 +41,7 @@ public:
         bool operator!=(const const_iterator& b) const { return !operator==(b); }
         const_iterator& operator++ ();
         const_iterator& operator-- ();
-        
+
     private:
         const Cont& data;
         void Reconstruct();
@@ -49,29 +49,29 @@ public:
     };
 private:
     const const_iterator ConstructIterator(typename Cont::const_iterator i) const;
-    
+
 public:
     rangeset() : data() {}
-    
+
     /* Erase everything between the given range */
     void erase(const Key& lo, const Key& up) { data.erase(lo, up); }
-    
+
     /* Erase a single value */
     void erase(const Key& lo) { data.erase(lo, lo+1); }
-    
+
     void erase_before(const Key& lo) { data.erase_before(lo); }
     void erase_after(const Key& up) { data.erase_after(up); }
-    
+
     /* Modify the given range to have the given value */
     void set(const Key& lo, const Key& up) { data.set(lo, up, true); }
-    
+
     void insert(const Key& pos) { set(pos, pos+1); }
-    
+
     rangeset intersect(const rangeset& b) const;
-    
+
     /* Find the range that has this value */
     const_iterator find(const Key& v) const { return ConstructIterator(data.find(v)); }
-    
+
     /* Standard functions */
     const_iterator begin() const { return ConstructIterator(data.begin()); }
     const_iterator end() const { return ConstructIterator(data.end()); }
@@ -80,10 +80,10 @@ public:
     unsigned size() const { return data.size(); }
     bool empty() const { return data.empty(); }
     void clear() { data.clear(); }
-    
+
     bool operator==(const rangeset& b) const { return data == b.data; }
     bool operator!=(const rangeset& b) const { return !operator==(b); }
-    
+
     // default copy cons. and assign-op. are fine
 };
 

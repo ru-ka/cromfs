@@ -25,7 +25,7 @@ static void DisplayProgress(
     uint_fast64_t bpos, uint_fast64_t bmax)
 {
     char Buf[4096];
-    std::sprintf(Buf, "%s: %5.1f%% (%llu/%llu)",
+    std::sprintf(Buf, "%s: %5.2f%% (%llu/%llu)",
         label,
         pos
         * 100.0
@@ -44,31 +44,190 @@ static void DisplayProgress(
 
 ///////////////////////////////////////////////
 
-const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
-    const std::vector<unsigned char>& data,
-    const BlockIndexHashType crc)
+/*static const std::string DataDump(const unsigned char* data, uint_fast32_t size)
 {
-    /* Use CRC32 to find the identical block. */
+    std::string result;
+    for(uint_fast32_t a=0; a<size; ++a)
+    {
+        char Buf[32];
+        std::sprintf(Buf, "%s%02X", a?" ":"", data[a]);
+        result += Buf;
+    }
+    char Buf[32];
+    std::sprintf(Buf, " - %08X", BlockIndexHashCalc(data, size));
+    result += Buf;
+    return result;
+}*/
 
+const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
+    const unsigned char* data, uint_fast32_t size,
+    const BlockIndexHashType crc,
+    bool PreferRealIndex)
+{
+    /* Use hashing to find candidate identical blocks. */
+
+    /*
+    Information on threadability:
+    The functions called in this section are:
+      block_index.FindRealIndex()
+        - This uses pread64(), does no changes to data structures
+      block_index.FindAutoIndex()
+        - This uses pread64(), does no changes to data structures
+      block_is()
+        - This accesses fblocks:
+            fblocks[]
+            fblock.InitDataReadBuffer()
+            std::memcmp()
+          For safety, that is put into a critical block.
+    */
+ //{ RemapReadonly ro_marker;
+
+    /*if(crc != BlockIndexHashCalc(data, size))
+    {
+        throw "Wrong hash";
+    }*/
+
+#ifndef _OPENMP
+    /* This is what we want to achieve, in the smallest form. */
     cromfs_blocknum_t     real_match;
     cromfs_block_internal auto_match;
 
+    //Bprintf("                            Reusing-plan for %08X: %s\n", crc, DataDump(data, size).c_str());
+
+    /* The hash may match multiple times, but a hash match is not a sure indication of actual
+     * data match, so we must always use block_is() to actually verify whether we got a match.
+     */
     for(size_t matchcount=0; block_index.FindRealIndex(crc, real_match, matchcount); ++matchcount)
     {
-        /* Identical CRC was found */
-        /* It may be found more than once, and the finds may be
-         * false positives. Hence, we must verify each instance.
-         */
-        if(block_is(real_match, data)) return ReusingPlan(crc, real_match);
+        bool match = block_is(real_match, data, size);
+
+        /*{
+            const cromfs_block_internal& block = blocks[real_match];
+            const mkcromfs_fblock& fblock = fblocks[block.get_fblocknum(BSIZE,FSIZE)];
+            const uint_fast32_t my_offs = block.get_startoffs(BSIZE,FSIZE);
+
+            ScopedLock lck(fblock.GetMutex());
+            DataReadBuffer Buffer; uint_fast32_t BufSize;
+            fblock.InitDataReadBuffer(Buffer, BufSize, my_offs, size);
+            lck.Unlock();
+
+            printf("                            fblock %u:%u%s %s (%u should be >= %u)\n",
+                (unsigned)block.fblocknum, (unsigned)block.startoffs,
+                match ? " (match)" : " (no match)",
+                DataDump(Buffer.Buffer, size).c_str(),
+                (unsigned)BufSize,
+                (unsigned)(my_offs + size));
+
+            if(crc != BlockIndexHashCalc(Buffer.Buffer, size))
+            {
+                throw "Wrong hash";
+            }
+        }*/
+
+        if(match)
+            return ReusingPlan(crc, real_match);
     }
+
     for(size_t matchcount=0; block_index.FindAutoIndex(crc, auto_match, matchcount); ++matchcount)
+        if(block_is(auto_match, data, size))
+            return ReusingPlan(crc, auto_match);
+#else
+    /* OPENMP VERSION */
+    /* Goals: The same functionality as above, but with as much parallelism as possible. */
+
+    cromfs_blocknum_t     which_real_found;
+    cromfs_block_internal which_auto_found;
+    bool real_done=false, real_found=false;
+    bool auto_done=false, auto_found=false;
+    size_t real_matchno=0; MutexType real_matchno_lock, real_which_lock;
+    size_t auto_matchno=0; MutexType auto_matchno_lock, auto_which_lock;
+
+    #pragma omp parallel default(shared)
     {
-        /* Identical CRC was found */
-        /* It may be found more than once, and the finds may be
-         * false positives. Hence, we must verify each instance.
-         */
-        if(block_is(auto_match, data)) return ReusingPlan(crc, auto_match);
+        for(;;) // RealIndex tests
+        {
+            // RealIndex testing end conditions:
+            //  - No more RealIndex slots to test
+            //  - Found RealIndex solution
+            //  - Found AutoIndex solution (only if PreferRealIndex == false)
+            #pragma omp flush(real_done,real_found,auto_found)
+            if(real_done || real_found) break;
+            if(auto_found && !PreferRealIndex) break;
+
+            real_matchno_lock.Lock();
+            size_t matchno;
+            #pragma omp flush(real_matchno)
+            matchno = real_matchno++;
+            #pragma omp flush(real_matchno)
+            real_matchno_lock.Unlock();
+
+            cromfs_blocknum_t real_match;
+            if(!block_index.FindRealIndex(crc, real_match, matchno))
+            {
+                real_done = true;
+                #pragma omp flush(real_done)
+                break;
+            }
+
+            const cromfs_block_internal& block = blocks[real_match];
+            bool match = block_is(block, data, size);
+            //printf("                            fblock %u:%u%s %s\n", (unsigned)block.fblocknum, (unsigned)block.startoffs, match ? " (match)" : " (no match)", DataDump(data, size).c_str());
+            if(match)
+            {
+                if(real_which_lock.TryLock())
+                {
+                    which_real_found=real_match;
+                    real_found=true;
+                    #pragma omp flush(real_found,which_real_found)
+                    real_which_lock.Unlock();
+                }
+                break;
+            }
+        }
+
+        for(;;) // AutoIndex tests
+        {
+            // AutoIndex testing end conditions:
+            //  - No more AutoIndex slots to test
+            //  - Found RealIndex solution
+            //  - Found AutoIndex solution
+            #pragma omp flush(auto_done,real_found,auto_found)
+            if(real_found || auto_found || auto_done) break;
+
+            auto_matchno_lock.Lock();
+            size_t matchno;
+            #pragma omp flush(auto_matchno)
+            matchno = auto_matchno++;
+            #pragma omp flush(auto_matchno)
+            auto_matchno_lock.Unlock();
+
+            cromfs_block_internal auto_match;
+            if(!block_index.FindAutoIndex(crc, auto_match, matchno))
+            {
+                auto_done = true;
+                #pragma omp flush(auto_done)
+                break;
+            }
+
+            const mkcromfs_fblock& fblock = fblocks[auto_match.get_fblocknum(BSIZE,FSIZE)];
+            if(block_is(auto_match, data, size))
+            {
+                if(auto_which_lock.TryLock())
+                {
+                    which_auto_found=auto_match;
+                    auto_found=true;
+                    #pragma omp flush(auto_found,which_auto_found)
+                    auto_which_lock.Unlock();
+                }
+                break;
+            }
+        }
     }
+
+    /* Match? */
+    if(real_found) return ReusingPlan(crc, which_real_found);
+    if(auto_found) return ReusingPlan(crc, which_auto_found);
+#endif
 
     /* Didn't find match. */
     return ReusingPlan(false);
@@ -129,7 +288,7 @@ static void FindOverlap(
         return;
     }
 
-    if(AutoIndexPeriod == 1)
+    if(AutoIndexPeriod == 1 && BSIZE == data.size())
     {
         // If autoindexperiod covers all possible full overlaps,
         // then we need to only search for appends.
@@ -147,10 +306,21 @@ static void FindOverlap(
 
     bool this_is_good =
         overlap_size
-        ? (appended.AppendedSize < (uint_fast32_t)FSIZE)
-        : (appended.AppendedSize < (uint_fast32_t)(FSIZE - MinimumFreeSpace));
+        ? (appended.AppendedSize <= (uint_fast32_t)FSIZE)
+        : (appended.AppendedSize <= (uint_fast32_t)(FSIZE - MinimumFreeSpace));
 
     lck.LockAgain();
+
+    /*printf("For fblock %u(%u/(%u-%u)), minimum=%u, appendpos=%u, adds=%u, overlaps=%u, becomes=%u, good=%s\n",
+        (unsigned)fblocknum,
+        (unsigned)FblockSize,
+        (unsigned)FSIZE, (unsigned)MinimumFreeSpace,
+        (unsigned)minimum_pos,
+        (unsigned)appended.AppendBaseOffset,
+        (unsigned)this_adds,
+        (unsigned)overlap_size,
+        (unsigned)appended.AppendedSize,
+        this_is_good ? "true":"false");*/
 
     if(!smallest.found)
         {} // ok
@@ -186,7 +356,7 @@ struct OverlapFinderParameter
     std::vector<cromfs_fblocknum_t> candidates;
 
     mutable MutexType       mutex;
-    
+
     /* ICC complains of a missing constructor, but we
      * cannot use a constructor, otherwise the {} initialization
      * will be invalid syntax later on.
@@ -250,21 +420,29 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
 
         /* First candidate: The fblock that we would get without brute force. */
         /* I.e. the fblock with smallest fitting hole. */
-        { int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
+        { int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size() + MinimumFreeSpace);
           if(i >= 0)
           {
+            //std::printf("Considering fblock %d for appending %u\n", i, (unsigned)data.size());
             candidates.push_back(i);
-        } }
+          }
+          else
+          {
+            //std::printf("No block with %u bytes of room\n", (unsigned)data.size());
+          }
+          int j = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
+          if(i != j)
+            candidates.push_back(j);
+        }
 
         /* Next candidates: last N (up to MaxFblockCountForBruteForce) */
         cromfs_fblocknum_t j = fblocks.size();
         while(j > 0 && candidates.size() < MaxFblockCountForBruteForce)
         {
             --j;
-            if(!candidates.empty() && j != candidates[0])
-            {
+            if((candidates.size() < 1 || j != candidates[0])
+            && (candidates.size() < 2 || j != candidates[1]))
                 candidates.push_back(j);
-            }
         }
 
 #if 0
@@ -319,6 +497,7 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
         }
 
         /* Oh, so it didn't fit anywhere! */
+        //std::printf("No fit? Creating fblock %u\n", (unsigned)fblocks.size());
     }
 
     /* Our plan is then, create a new fblock just for this block! */
@@ -368,7 +547,36 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
     /* Assign a real blocknumber to the autoindex */
     block_index.DelAutoIndex(plan.crc, block);
     block_index.AddRealIndex(plan.crc, blocknum);
+
+    /* Also autoindex the block right after this, just in case we get a match */
+    PredictiveAutoIndex(fblocknum, startoffs+blocksize, blocksize);
+
     return blocknum;
+}
+
+void cromfs_blockifier::PredictiveAutoIndex(
+    cromfs_fblocknum_t fblocknum,
+    uint_fast32_t startoffs,
+    uint_fast32_t blocksize)
+{
+    const mkcromfs_fblock& fblock = fblocks[fblocknum];
+
+    uint_fast32_t after_block = startoffs + blocksize;
+
+    if(after_block <= fblock.size())
+    {
+        DataReadBuffer Buffer; uint_fast32_t BufSize;
+        fblock.InitDataReadBuffer(Buffer, BufSize, startoffs, blocksize);
+        TryAutoIndex(fblocknum, Buffer.Buffer, blocksize, startoffs);
+    }
+    else if(fblocknum+1 < fblocks.size())
+    {
+        // So we could not index the next block after our match...
+        // But how about the next after that?
+
+        uint_fast32_t new_block_start = after_block - fblock.size();
+        PredictiveAutoIndex(fblocknum+1, new_block_start, blocksize);
+    }
 }
 
 /* Execute an appension plan */
@@ -389,7 +597,9 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
 
     if(DisplayBlockSelections)
     {
-        if(new_data_offset + plan.data.size() <= old_raw_size)
+        uint_fast32_t after_block = new_data_offset + plan.data.size();
+
+        if(after_block <= old_raw_size)
         {
             std::printf("block %u => (%u) [%u @ %u] (overlap fully)",
                 (unsigned)blocks.size(),
@@ -415,6 +625,14 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
         if(new_remaining_room < 0)
         {
             std::printf(" (OVERUSE)");
+        }
+        std::printf("\n");
+
+        if(after_block <= old_raw_size)
+        {
+            /* In case of a full overlap,
+             * also autoindex the block right after this, just in case we get a match */
+            PredictiveAutoIndex(fblocknum, after_block, plan.data.size());
         }
     }
 
@@ -449,11 +667,6 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
         }
     }
 
-    if(DisplayBlockSelections)
-    {
-        std::printf("\n");
-    }
-
     cromfs_block_internal block;
     block.define(fblocknum, new_data_offset);
 
@@ -474,7 +687,11 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     const cromfs_blocknum_t blocknum = CreateNewBlock(block);
     if(DoUpdateBlockIndex)
     {
-        block_index.AddRealIndex(plan.crc, blocknum);
+        if(!CreateReusingPlan(&plan.data[0], plan.data.size(), plan.crc, false))
+        {
+            // Only add to index if we don't have any existing reusing method for this one
+            block_index.AddRealIndex(plan.crc, blocknum);
+        }
     }
     return blocknum;
 }
@@ -489,6 +706,8 @@ bool cromfs_blockifier::block_is(
     const mkcromfs_fblock& fblock = fblocks[block.get_fblocknum(BSIZE,FSIZE)];
     const uint_fast32_t my_offs = block.get_startoffs(BSIZE,FSIZE);
 
+    ScopedLock lck(fblock.GetMutex());
+
     /* Notice: my_offs + data_size may be larger than the fblock size.
      * This can happen if there is a collision in the checksum index. A smaller
      * block might have been indexed, and it matches to a larger request.
@@ -497,8 +716,11 @@ bool cromfs_blockifier::block_is(
 
     DataReadBuffer Buffer; uint_fast32_t BufSize;
     fblock.InitDataReadBuffer(Buffer, BufSize, my_offs, data_size);
-    if(BufSize < my_offs + data_size) return false;
-    return std::memcmp(Buffer.Buffer, &data[0], data_size) == 0;
+
+    lck.Unlock();
+
+    return BufSize >= my_offs + data_size
+          && std::memcmp(Buffer.Buffer, &data[0], data_size) == 0;
 }
 
 /* How many automatic indexes can be done in this amount of data? */
@@ -516,12 +738,17 @@ void cromfs_blockifier::TryAutoIndex(
 {
     const BlockIndexHashType crc = BlockIndexHashCalc(ptr, bsize);
 
-    /* Check if this checksum has already been indexed */
-    cromfs_block_internal match;
-    for(size_t matchcount=0; block_index.FindAutoIndex(crc, match, matchcount); ++matchcount)
+    /* Check whether the block has already been indexed
+     * (don't care whether we get a RealIndex or AutoIndex result,
+     *  just see if it's indexed at all)
+     */
+    if(CreateReusingPlan(ptr, bsize, crc, false))
     {
-        if(block_is(match, ptr, bsize)) return;
+        /* Already indexed */
+        return;
     }
+    /* Add it to the index */
+    cromfs_block_internal match;
     match.define(fblocknum, startoffs);
     block_index.AddAutoIndex(crc, match);
 }
@@ -647,6 +874,9 @@ ReEvaluate:
     /* number of orders might have changed, recheck it */
     num_handle = blockify_orders.size() - max_remaining_orders;
 
+    /* Don't parallelize this loop; it will do bad things
+     * for compression.
+     */
     for(orderlist_t::iterator j,i = blockify_orders.begin();
         num_handle > 0 && i != blockify_orders.end();
         i = j, --num_handle)
@@ -840,7 +1070,8 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
     orderlist_t blockify_orders;
 
-    MAYBE_PARALLEL_NS::stable_sort(schedule.begin(), schedule.end(),
+    // Note: using __gnu_parallel in this sort() will crash the program.
+    std::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
 
     uint_fast64_t total_size = 0, blocks_total = 0;

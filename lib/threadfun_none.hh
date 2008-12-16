@@ -9,6 +9,7 @@ struct MutexType
 {
     inline void Lock() { }
     inline void Unlock() { }
+    inline bool TryLock() { return true; }
     bool IsLocked() const { return false; }
 };
 struct ThreadType

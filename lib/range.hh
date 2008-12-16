@@ -20,18 +20,18 @@ struct rangetype
                            :upper<b.upper; }
     bool operator==(const rangetype& b) const
     { return lower==b.lower&&upper==b.upper; }
-    
+
     bool operator!=(const rangetype& b) const { return !operator==(b); }
-    
+
     /* Public accessory functions */
     bool coincides(const rangetype& b) const
     {
         return lower < b.upper && upper > b.lower;
     }
     bool contains(const Key& v) const { return lower <= v && upper > v; }
-    
+
     rangetype<Key> intersect(const rangetype& b) const;
-    
+
     /* Union and difference can produce two ranges. Thus not implemented... */
 
     unsigned length() const { return upper - lower; }
@@ -52,12 +52,12 @@ public:
     template<typename Valuetype>
     void set(const Key& lo, const Key& up, const Valuetype& val);
     void erase(const Key& lo, const Key& up);
-    
+
     void erase_before(const Key& lo);
     void erase_after(const Key& up);
-    
+
     typedef typename Cont::const_iterator const_iterator;
-    
+
     const const_iterator begin() const { return data.begin(); }
     const const_iterator end() const   { return data.end(); }
     const const_iterator lower_bound(const Key& k) const   { return data.lower_bound(k); }
@@ -69,7 +69,7 @@ public:
     /* flip() inverts the range within the given range.
      * However, it is not yet implemented! */
     void flip(const Key& floor, const Key &ceil);
-    
+
     const const_iterator find(const Key& v) const;
 
     bool operator==(const rangecollection& b) const { return data == b.data; }

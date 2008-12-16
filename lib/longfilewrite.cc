@@ -35,7 +35,7 @@ void LongFileWrite::write
     const unsigned MaxBufSize = std::min(UINT64_C(0x80000), (uint_fast64_t)expected_size);
 
     //goto JustWriteIt;// DEBUG
-    
+
     if(offset == 0 && size == expected_size) goto JustWriteIt;
     if(Buffer.capacity() != MaxBufSize) Buffer.reserve(MaxBufSize);
 
@@ -43,14 +43,14 @@ void LongFileWrite::write
     {
         FlushBuffer();
     }
-    
+
     if(Buffer.empty()) bufpos = offset;
-    
+
     if(offset == getbufend() && Buffer.size() + size <= MaxBufSize)
     {
         /* Append it to the buffer. */
         Buffer.insert(Buffer.end(), buf, buf+size);
-    }   
+    }
     else
     {
         /* If this data does not fit into the buffer, write it at once. */
@@ -62,7 +62,7 @@ void LongFileWrite::write
              * not need to be written.
              */
             SparseWrite(fd, buf, size, offset);
-        }   
+        }
         else
             pwrite64(fd, buf, size, offset);
     }
@@ -100,7 +100,7 @@ public:
     {
         GetEvents(n_pending);
     }
-    
+
     void GetEvents(int n_minimum)
     {
         std::vector<io_event> events(n_pending);
@@ -112,9 +112,9 @@ public:
             {
                 io_event& ep = events[a];
                 struct iocb* ios = ep.obj;
-                
+
                 /* FIXME:
-                 * 
+                 *
                  * For some reason,  this does not work.
                  * Nothing gets written into files.
                  * I'm getting -EINVAL in ep.res.
@@ -122,14 +122,14 @@ public:
                  * I don't understand why.
                  *
                  */
-                
+
                 int fd = ios->aio_fildes;
                 fprintf(stderr, "got closing for %d (%ld,%ld)\n", fd, ep.res, ep.res2);
                 CheckClose(fd, 1);
             }
         }
     }
-    
+
     void Pwrite(int fd, const unsigned char* buf, uint_fast64_t offset, uint_fast64_t size)
     {
         struct iocb ios;
@@ -148,7 +148,7 @@ public:
         ++n_pending;
         ++fdmap[fd].second;
     }
-    
+
     int Open(const std::string& fn)
     {
         int fd = open(fn.c_str(),
@@ -162,7 +162,7 @@ public:
         fdmap[fd] = std::make_pair(false, 0);
         return fd;
     }
-    
+
     void Close(int fd)
     {
         fdmap[fd].first = true;
@@ -173,11 +173,11 @@ private:
     void CheckClose(int fd, int sub_n = 0)
     {
         std::map<int, std::pair<bool,int> >::iterator i = fdmap.find(fd);
-        
+
         if(i == fdmap.end()) return;
-        
+
         i->second.second -= sub_n;
-        
+
         if(i->second.first == true
         && i->second.second <= 0)
         {
@@ -217,7 +217,7 @@ public:
             CheckClose(i, true);
         }
     }
-    
+
     void Pwrite(int fd, const unsigned char* buf, uint_fast64_t offset, uint_fast64_t size)
     {
         struct aiocb64* newcbp = new aiocb64;
@@ -232,7 +232,7 @@ public:
         fdmap[fd].second.push_back(newcbp);
         CheckClose(fd, false);
     }
-    
+
     int Open(const std::string& fn)
     {
     retry:;
@@ -242,18 +242,18 @@ public:
            | O_NOATIME
     # endif
                   );
-        
+
         if(fd < 0 && (errno == ENFILE || errno == EMFILE))
         {
             Flush();
             goto retry;
         }
-        
+
         if(fd < 0) throw(errno);
         fdmap[fd].first = false;
         return fd;
     }
-    
+
     void Close(int fd)
     {
         fdmap_t::iterator i = fdmap.find(fd);
@@ -270,7 +270,7 @@ private:
         fdmap_t::iterator i = fdmap.find(fd);
         if(i == fdmap.end()) return;
         CheckClose(i, false);
-    }        
+    }
     void CheckClose(fdmap_t::iterator& i, bool WaitClose)
     {
         typedef std::list<struct aiocb64*> set_t;
@@ -278,7 +278,7 @@ private:
         for(set_t::iterator k,j = s.begin(); j != s.end(); j=k)
         {
             k=j; ++k;
-            
+
             if(WaitClose)
             {
                 if(aio_suspend64(&*j, 1, NULL) == 0)

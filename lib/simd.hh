@@ -10,7 +10,7 @@
  */
 
 #ifdef __3dNOW__
-# include <mm3dnow.h> /* Note: not available on ICC */ 
+# include <mm3dnow.h> /* Note: not available on ICC */
 #elif defined(__MMX__)
 # include <mmintrin.h>
 #endif
@@ -73,19 +73,19 @@ struct c64_MMX: public c64_common
 
     void Get(const unsigned char* p)      { value = *(const __m64*)p; }
     void Put(      unsigned char* p)const { *(__m64*)p =  value; }
-    
+
     void Init16(short a,short b,short c, short d)
         { value = _mm_setr_pi16(a,b,c,d); }
     void Init16(short a)
         { value = _mm_set1_pi16(a); }
 
     void GetD(const unsigned char* p)      { value = *(const __m64*)p; }
-    
+
     template<int n>
     short Extract16() const { return ((const short*)&value)[n]; }
     template<int n>
     int Extract32() const { return ((const int*)&value)[n]; }
-    
+
     short Extract88_from_1616lo() const
     {
         const unsigned char* data = (const unsigned char*)&value;
@@ -104,19 +104,19 @@ struct c64_MMX: public c64_common
         return data[0] | *(short*)(data+1);
         //return data[0] | ((*(const unsigned int*)data) >> 8);
     }
-    
+
 
     c64& operator&= (const c64& b) { value=_mm_and_si64(value,b.value); return *this; }
     c64& operator|= (const c64& b) { value=_mm_or_si64(value,b.value); return *this; }
     c64& operator^= (const c64& b) { value=_mm_xor_si64(value,b.value); return *this; }
     c64& operator+= (const c64& b) { return *this = *this + b; }
     c64& operator-= (const c64& b) { return *this = *this - b; }
-    
+
     c64 operator~ () const {
         static const uint_least64_t negpat = ~(uint_least64_t)0;
         return c64(_mm_xor_si64(value, *(const __m64*)&negpat));
     }
-    
+
             /* psllqi: p = packed
                        s = shift
                        r = right, l = left
@@ -127,7 +127,7 @@ struct c64_MMX: public c64_common
     c64 operator& (const c64& b) const { return c64(_mm_and_si64(value,b.value)); }
     c64 operator| (const c64& b) const { return c64(_mm_or_si64(value,b.value)); }
     c64 operator^ (const c64& b) const { return c64(_mm_xor_si64(value,b.value)); }
-    
+
     c64 operator- (const c64& b) const
     {
         #ifdef __SSE2__
@@ -144,7 +144,7 @@ struct c64_MMX: public c64_common
         return (const uint64_t&)value + (const uint64_t&)b.value;
         #endif
     }
-    
+
 
     c64 shl64(int b) const { return _mm_slli_si64(value, b); }
     c64 shr64(int b) const { return _mm_srli_si64(value, b); }
@@ -161,7 +161,7 @@ struct c64_MMX: public c64_common
     //c64 mul32(const c64& b) const { return _mm_mullo_pi32(value, b.value); }
     c64 add8(const c64& b) const { return _mm_add_pi8(value, b.value); }
     c64 sub8(const c64& b) const { return _mm_sub_pi8(value, b.value); }
-    
+
     c64 unpacklbw(const c64& b) const { return _mm_unpacklo_pi8(b.value,value); }
     c64 unpacklwd(const c64& b) const { return _mm_unpacklo_pi16(b.value,value); }
     c64 unpackhbw(const c64& b) const { return _mm_unpackhi_pi8(b.value,value); }
@@ -170,7 +170,7 @@ struct c64_MMX: public c64_common
     c64 unpackldq() const { return _mm_unpacklo_pi32(value,value); }
 
     c64 operator& (const uint64_t& v) { return c64(_mm_and_si64(value, *(const __m64*)& v)); }
-    
+
     c64 conv_s32_s16(const c64& b) const { return _mm_packs_pi32(value, b.value); }
     c64 conv_s16_u8(const c64& b) const { return _mm_packs_pu16(value, b.value); }
     c64 conv_s16_s8(const c64& b) const { return _mm_packs_pi16(value, b.value); }
@@ -180,7 +180,7 @@ struct c64_MMX: public c64_common
 struct c64_nonMMX: public c64_common
 {
     typedef c64_nonMMX c64;
-    
+
     uint_least64_t value;
 
     inline c64_nonMMX() : value() { }
@@ -217,7 +217,7 @@ struct c64_nonMMX: public c64_common
 
     void Get(const unsigned char* p)      { value = *(const uint_least64_t*)p; }
     void Put(      unsigned char* p)const { *(uint_least64_t*)p =  value; }
-    
+
     c64& operator&= (const c64& b) { value&=b.value; return *this; }
     c64& operator|= (const c64& b) { value|=b.value; return *this; }
     c64& operator^= (const c64& b) { value^=b.value; return *this; }
@@ -232,7 +232,7 @@ struct c64_nonMMX: public c64_common
     c64 operator& (uint_fast64_t b) const { return value & b; }
 
     c64 operator~ () const { return ~value; }
-    
+
     #define usimdsim(type, count, op) \
         type* p = (type*)&res.value; \
         for(int n=0; n<count; ++n) p[n] = (p[n] op b)
@@ -241,7 +241,7 @@ struct c64_nonMMX: public c64_common
         type* p = (type*)&res.value; \
         const type* o = (const type*)&b.value; \
         for(int n=0; n<count; ++n) p[n] = (p[n] op o[n])
-    
+
     c64 shl64(int b) const { return value << b; }
     c64 shr64(int b) const { return value >> b; }
     c64 shl16(int b) const { c64 res = *this; usimdsim(short, 2, <<); return res; }
@@ -257,10 +257,10 @@ struct c64_nonMMX: public c64_common
     c64 mul16hi(const c64& b) const { c64 res = *this; simdsim(short, 4, *) >> 16; return res; }
     c64 add8(const c64& b) const { c64 res = *this; simdsim(unsigned char, 8, +); return res; }
     c64 sub8(const c64& b) const { c64 res = *this; simdsim(unsigned char, 8, -); return res; }
-    
+
     #undef simdsim
     #undef usimdsim
-    
+
     c64 conv_s32_s16(const c64& b) const
     {
         c64 res; res.

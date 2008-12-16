@@ -6,7 +6,7 @@ const AppendInfo AnalyzeAppend
     size_t minimum_pos,
     size_t minimum_overlap,
     size_t overlap_granularity,
-    
+
     const unsigned char* const haystack,
     size_t hlen
 )
@@ -14,13 +14,13 @@ const AppendInfo AnalyzeAppend
     AppendInfo append;
     append.OldSize = hlen;
     append.SetAppendPos(hlen, needle.size());
-    
+
     /**** Find the appension position ****/
 
     if(minimum_pos < hlen)
     {
         size_t result;
-        
+
         /* If the minimum_pos only allows appending (no complete overlaps possible) */
         if(unlikely(minimum_pos > hlen - std::min(hlen, needle.size())))
         {
@@ -62,14 +62,14 @@ const size_t lr_match_length(const unsigned char* left,
     {
         const unsigned char* leftptr = (const unsigned char*)
             std::memchr(left, right[0], size);
-        
+
         if(!leftptr) break;
-        
+
         if(std::memcmp(leftptr+1, &right[1], size-1) == 0)
         {
             return size;
         }
-        
+
         size_t num_skip = leftptr-left+1;
         left  += num_skip;
         right += num_skip;

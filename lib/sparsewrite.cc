@@ -25,11 +25,11 @@ bool is_zero_block(const unsigned char* data, uint_fast64_t size)
     return !std::memchr(Buffer, '\0', size);
  #else
     /* attempt of a faster implementation using aligned word access where possible */
-    
+
     typedef unsigned int aligned_type;
     const unsigned align_size = sizeof(unsigned long);
     const uint_fast64_t align_mask = align_size-1;
-    
+
     unsigned char result = 0;
     while( ((uint_fast64_t)data) & align_mask
         && likely(size > 0)
@@ -39,7 +39,7 @@ bool is_zero_block(const unsigned char* data, uint_fast64_t size)
         --size;
     }
     if(likely(result > 0)) return false;
-    
+
     unsigned num_aligned_words = (size & ~align_mask) / sizeof(aligned_type);
 
     const aligned_type* data_w = (const aligned_type*) data;
@@ -49,7 +49,7 @@ bool is_zero_block(const unsigned char* data, uint_fast64_t size)
     }
     size -= ((const unsigned char*)data_w) - data;
     data = (const unsigned char*)data_w;
-    
+
     while(size-- > 0) result |= *data++;
     return result == 0;
  #endif
@@ -112,7 +112,7 @@ void SparseWrite(int fd,
     FlushBuf();
 
     #undef AppendBuf
-    #undef FlushBuf 
-    #undef SkipBuf  
+    #undef FlushBuf
+    #undef SkipBuf
 #endif
 }

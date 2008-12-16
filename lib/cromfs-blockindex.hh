@@ -42,7 +42,7 @@ class block_index_type
 public:
     bool FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const;
     bool FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const;
-    
+
     void AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t value);
     void AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
 
@@ -68,19 +68,19 @@ public:
         }
         return *this;
     }
-    
+
     ~block_index_type()
     {
         Close();
     }
-    
+
     void clear()
     {
         Close();
         realindex_fds.clear();
         autoindex_fds.clear();
     }
-    
+
 private:
     void Clone()
     {
@@ -91,8 +91,14 @@ private:
     }
     void Close()
     {
-        for(size_t a=0; a<realindex_fds.size(); ++a) close(realindex_fds[a]);
-        for(size_t a=0; a<autoindex_fds.size(); ++a) close(autoindex_fds[a]);
+        for(size_t a=0; a<realindex_fds.size(); ++a)
+        {
+            close(realindex_fds[a]);
+        }
+        for(size_t a=0; a<autoindex_fds.size(); ++a)
+        {
+            close(autoindex_fds[a]);
+        }
     }
     size_t new_real();
     size_t new_auto();
@@ -105,6 +111,10 @@ private:
     {
         uint_fast64_t res = crc; res *= 8; return res;
     }
+
+    const std::string GetRealFn(size_t index) const;
+    const std::string GetAutoFn(size_t index) const;
+
 private:
     std::vector<int> realindex_fds;
     std::vector<int> autoindex_fds;

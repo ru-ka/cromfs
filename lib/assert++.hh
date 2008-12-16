@@ -108,7 +108,7 @@ namespace assertprivate
 /* If we don't have glibc.. Or have NDEBUG */
 #define assertflush() {}
 #define assertvar(expr) {}
-#define assertset() 
+#define assertset()
 #define asserttest() (0)
 #endif
 /* These are shortcuts for defining more vars with one call */

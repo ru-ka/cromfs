@@ -16,32 +16,32 @@ class MemMappingType
 private:
 public:
     MemMappingType() : ptr(notmapped), size(0), align_factor(0) { }
-    
+
     MemMappingType(int fd, uint_fast64_t pos, uint_fast64_t count)
         : ptr(notmapped),size(0),align_factor(0)
     {
         SetMap(fd, pos, count);
     }
-    
+
     ~MemMappingType()
     {
         if(AutoUnmap) Unmap();
     }
-    
+
     void SetMap(int fd, uint_fast64_t pos, uint_fast64_t count)
     {
         Unmap();
-        
+
         uint_fast64_t pos_aligned_down = pos & ~UINT64_C(4095);
-        
+
         align_factor = pos - pos_aligned_down;
-        
+
         size = count + align_factor;
         ptr =  mmap64(NULL, size,
                       PROT_READ, MAP_SHARED,
                       fd, pos_aligned_down);
     }
-    
+
     void Unmap()
     {
         if(ptr != notmapped)
@@ -50,10 +50,10 @@ public:
             ptr = notmapped;
         }
     }
-    
+
     operator bool() const
         { return ptr != notmapped; }
-    
+
     const unsigned char* get_ptr() const
         { return ((const unsigned char*)ptr) + align_factor; }
     /*

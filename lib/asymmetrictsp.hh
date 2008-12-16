@@ -19,7 +19,7 @@ private:
     {
         return distances[nodea * num_nodes + nodeb];
     }
-    
+
 public:
     /* Initialize the function with an array consisting of the distance*
      * of the nodes.  d.size() should equal to n*n.
@@ -37,7 +37,7 @@ public:
     {
         if(!num_nodes) { solution.clear(); return; }
         solution.reserve(num_nodes);
-        
+
         if(num_nodes <= 6)
         {
             // 6! is less than 6^4, but 7 is the other way around
@@ -56,7 +56,7 @@ public:
             (long)(EvaluateSolution(solution)));
 #endif
     }
-    
+
     /* Brute force algorithm. Guaranteed to find the best solution,
      * but is slow for large number of nodes.
      * Complexity: O(n!)
@@ -79,7 +79,7 @@ public:
             if(!std::next_permutation(option.begin(), option.end())) break;
         }
     }
-    
+
     /* Greedy algorithm. Finds a solution quick, but not necessarily
      * the best solution.
      */
@@ -89,7 +89,7 @@ public:
         const unsigned bitset_bitness = 32;
         std::vector<uint_least32_t> done
             ( (num_nodes + bitset_bitness-1) / bitset_bitness, 0 );
-        
+
         /* Start from the node that has the largest favourite. */
         size_t prev = 0; { size_t prev_score = 0;
         for(size_t a=0; a<num_nodes; ++a)
@@ -104,14 +104,14 @@ public:
             const unsigned prev_bit_index = prev / bitset_bitness;
             const unsigned prev_bit_value = 1U << (prev % bitset_bitness);
             done[prev_bit_index] |= prev_bit_value;
-            
+
             size_t bestnode = 0;
             for(size_t a=0; a<num_nodes; ++a)
             {
                 bestnode = favourites[prev*num_nodes + a];
                 const unsigned done_bit_index = bestnode / bitset_bitness;
                 const unsigned done_bit_value = 1U << (bestnode % bitset_bitness);
-                
+
                 if(!(done[done_bit_index] & done_bit_value)) break;
             }
             solution.push_back(bestnode);
@@ -135,7 +135,7 @@ public:
             for(size_t a=0; a<max_tries; ++a)
             {
                 std::vector<size_t> attempt = solution;
-                
+
                 size_t pos3 = 1 + rand() % num_nodes;
                 size_t pos1 = pos3 - 1 - std::min(max_span, rand() % pos3);
                 size_t pos2 = pos1 + rand() % (pos3-pos1);
@@ -176,7 +176,7 @@ public:
          ok: continue;
         }
     }
- 
+
 
 private:
     struct FavouriteFinder
@@ -195,7 +195,7 @@ private:
     public:
         size_t whose;
     };
-    
+
     /* For each node, calculates the relative favoriteness
      * of the other nodes (sorts other nodes in order of distance)
      */
@@ -206,18 +206,18 @@ private:
         for(size_t a=0; a<num_nodes; ++a)
         {
             find.whose = a;
-            
+
             size_t pos = a*num_nodes;
             for(size_t b=0; b<num_nodes; ++b)
                 result[pos + b] = b;
-            
+
             std::sort(result.begin() + pos,
                       result.begin() + pos + num_nodes,
                       find);
         }
         return result;
     }
-    
+
     /* Returns the score of the given solution */
     const DistanceType EvaluateSolution(const std::vector<size_t>& solution) const
     {

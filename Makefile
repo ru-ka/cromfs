@@ -1,4 +1,4 @@
-VERSION=1.5.5.4
+VERSION=1.5.6
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -21,7 +21,6 @@ ARCHFILES=\
 	cromfs.spec \
 	\
 	cromfs.cc cromfs.hh cromfs-defs.hh \
-	cromfs-write.cc cromfs-write.hh \
 	fuse-ops.cc fuse-ops.hh \
 	fuse-main.c \
 	\
