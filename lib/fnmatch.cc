@@ -5,9 +5,7 @@
 
 bool MatchFile(const std::string& pathname, const std::string& pattern)
 {
-    int result;
-    //#pragma omp critical(fnmatch) // fnmatch() is not re-entrant?
-    result = fnmatch(
+    return fnmatch(
         pattern.c_str(),
         pathname.c_str(),
         0
@@ -22,8 +20,7 @@ bool MatchFile(const std::string& pathname, const std::string& pattern)
          * those will too be extracted, without need to append / and *
          */
 #endif
-      );
-    return result == 0;
+      ) == 0;
 }
 
 bool MatchFileFrom(const std::string& pathname, MatchingFileListType& list, bool empty_means)

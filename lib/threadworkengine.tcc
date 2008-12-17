@@ -23,7 +23,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
      * Just hope that DoWork() does not consume a lot of time.
      */
     bool cancel = false;
-    
+
   #pragma omp parallel for schedule(guided,1) shared(cancel)
     for(ssize_t a=0; a<num_workunits; ++a)
     {
@@ -41,7 +41,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
             if( DoWork(a, workparams) ) break;
         return;
     }
-    
+
     if(threads.size() < num_threads)
     {
         // Create the required threads
@@ -58,7 +58,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
         threads.resize(num_threads);
         /* FIXME: copying of ThreadType might be unsafe */
     }
-    
+
     ScopedLock lck(params.mutex);
     params.init_ok = true;
     params.done_ok = false;
@@ -70,13 +70,13 @@ void ThreadWorkEngine<WorkType>::RunTasks(
     params.cancelled = false;
     params.DoWork = DoWork;
     params.work = &workparams;
-    
+
 #if THREAD_DEBUG >= 1
     ThreadDebug("Threads Go-ahead\n");
 #endif
     // Inform threads that they can now begin
     params.main_cond.Broadcast();
-    
+
 #if THREAD_DEBUG >= 1
     ThreadDebug("Waiting for all inits\n");
 #endif
@@ -91,10 +91,10 @@ void ThreadWorkEngine<WorkType>::RunTasks(
 #if THREAD_DEBUG >= 1
     ThreadDebug("All threads began\n");
 #endif
-    
+
     // Prevent threads from beginning another work yet
     params.init_ok = false;
-    
+
     // Wait until all threads have completed their work
     while(params.num_done < threads.size())
     {
@@ -105,13 +105,13 @@ void ThreadWorkEngine<WorkType>::RunTasks(
         params.sub_cond.Wait(params.mutex);
         if(params.cancelled) break;
     }
-    
+
 #if THREAD_DEBUG >= 1
     ThreadDebug("Threads Done-ok\n");
 #endif
     // Inform all threads that we know they've finished
     params.done_ok = true; params.main_cond.Broadcast();
-    
+
     if(params.cancelled)
     {
         lck.Unlock();
@@ -121,7 +121,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
         threads.clear();
         return;
     }
-    
+
 #if THREAD_DEBUG >= 1
     ThreadDebug("Waiting for doneconfirm\n");
 #endif
@@ -147,47 +147,47 @@ void* ThreadWorkEngine<WorkType>::WorkRunner
     (ThreadWorkEngine<WorkType>::workerparam& params)
 {
     SetCancellableThread();
-    
+
     ScopedLock lck(params.mutex);
-    
+
 #if THREAD_DEBUG >= 1
     void* thread_id = &thread_id;
     // ^Just a way to distinguish different threads for debugging output.
     //  The actual value is not important.
 #endif
-    
+
     for(;;)
     {
 #if THREAD_DEBUG >= 1
         ThreadDebug("Thread %p waiting go\n", thread_id);
 #endif
-    
+
         // Wait for a permission to begin work
         while(!params.init_ok)
             params.main_cond.Wait(params.mutex);
-        
+
         // Inform main that we have began
         ++params.num_inits; params.sub_cond.Signal();
 #if THREAD_DEBUG >= 1
         ThreadDebug("Thread %p acknowledge (now %u)\n", thread_id,
             params.num_inits);
 #endif
-        
+
         // do work here
-        
+
         while(params.work_index < params.num_totalworks
         &&    !params.cancelled)
         {
             const size_t cur_work = params.work_index;
             ++params.work_index;
-            
+
             lck.Unlock();
-            
+
 #if THREAD_DEBUG >= 1
             ThreadDebug("Thread %p checks work unit %u/%u\n", thread_id, cur_work+1,
                  params.num_totalworks);
 #endif
-        
+
             if(cur_work+1 < params.num_totalworks)
             {
                 // Just in case, try to awake some sibling so that this thread
@@ -195,7 +195,7 @@ void* ThreadWorkEngine<WorkType>::WorkRunner
                 params.main_cond.Broadcast();
                 ForceSwitchThread();
             }
-            
+
 #if THREAD_DEBUG >= 1
             ThreadDebug("Thread %p begin work with %u\n", thread_id, cur_work+1);
 #endif
@@ -204,20 +204,20 @@ void* ThreadWorkEngine<WorkType>::WorkRunner
             ThreadDebug("Thread %p end work\n", thread_id);
 #endif
             lck.LockAgain();
-            
+
             if(cancelflag)
             {
                 params.cancelled = true;
                 break;
             }
         }
-        
+
         // Inform RunTasks that we are done
         ++params.num_done; params.sub_cond.Signal();
 #if THREAD_DEBUG >= 1
         ThreadDebug("Thread %p done (now %u)\n", thread_id, params.num_done);
 #endif
-        
+
         // Wait for permission to start waiting another job.
         // Without this line, it is possible that the thread
         // finishes so quickly that it will re-enter the init_ok
@@ -230,12 +230,12 @@ void* ThreadWorkEngine<WorkType>::WorkRunner
 #endif
             params.main_cond.Wait(params.mutex);
         }
-        
+
         // Inform RunTasks that we are now waiting for another job
         ++params.num_doneconfirm; params.sub_cond.Signal();
 #if THREAD_DEBUG >= 1
         ThreadDebug("Thread %p got done-ok, sending doneconfirm (now %u)\n", thread_id,
-            params.num_doneconfirm); 
+            params.num_doneconfirm);
 #endif
     }
     return 0;

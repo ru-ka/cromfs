@@ -30,7 +30,7 @@ void rangecollection<Key,Valueholder,Allocator>::erase(const Key& lo, const Key&
             data.insert(std::make_pair(up, next_thing->second));
         }
     }
-    
+
     /*
      -  Erase all elements that are left inside our range
     */
@@ -41,7 +41,7 @@ void rangecollection<Key,Valueholder,Allocator>::erase(const Key& lo, const Key&
         j=i; ++j;
         data.erase(i);
     }
-    
+
     /*
      -  Find what was going on before <lo>
         If it does not exist or was different than this,
@@ -88,7 +88,7 @@ template<typename Key, typename Valueholder, typename Allocator>
 void rangecollection<Key,Valueholder,Allocator>::set(const Key& lo, const Key& up, const Valuetype& val)
 {
     Valueholder newvalue(val);
-    
+
     /*
      -  Find what is supposed to be continuing after this block
         If nothing was going on before the end, add nil at <up>
@@ -118,7 +118,7 @@ void rangecollection<Key,Valueholder,Allocator>::set(const Key& lo, const Key& u
             data.insert(std::make_pair(up, next_thing->second));
         }
     }
-    
+
     /*
      -  Erase all elements that are left inside our range
     */
@@ -129,7 +129,7 @@ void rangecollection<Key,Valueholder,Allocator>::set(const Key& lo, const Key& u
         j=i; ++j;
         data.erase(i);
     }
-    
+
     /*
      -  Find what was going on before <lo>
         If it does not exist or was different than this,

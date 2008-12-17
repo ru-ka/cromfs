@@ -11,7 +11,7 @@ void cromfs_initialize(void* userdata);
 void cromfs_uncreate(void* userdata);
 
 
-void cromfs_statfs(fuse_req_t req, fuse_ino_t);
+void cromfs_statfs(fuse_req_t req/*, fuse_ino_t*/);
 void cromfs_lookup(fuse_req_t req, fuse_ino_t parent, const char *name);
 void cromfs_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *);
 void cromfs_access(fuse_req_t req, fuse_ino_t ino, int mask);

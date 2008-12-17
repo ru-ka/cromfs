@@ -24,16 +24,16 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Sun Dec 14 01:26:40 EET 2008
+# at Wed Dec 17 15:11:22 EET 2008
 # for Linux chii 2.6.27.5 #1 SMP Sun Nov 9 13:00:41 EET 2008 x86_64 GNU/Linux
 # To change, run ./configure again.
 #
 CC=icc
 CPP=icc
 CXX=icc
-OPTIM +=  -ipo -mmmx -msse -msse2
+OPTIM +=  -DHAS_READDIR_R -mmmx -msse -msse2
 CPPFLAGS +=  -w1 -inline-level=2 -openmp -DUSE_PTHREADS=0 -DHASH_MAP=0
-LDFLAGS +=  -L/opt/intel/cce/10.1.008/bin/lib -lirc -lguide -lpthread -lstdc++ -openmp
+LDFLAGS +=  -L/opt/intel/Compiler/11.0/074/bin/intel64/lib -lirc -lguide -lpthread -lstdc++ -openmp
 WARNINGS += 
 CWARNINGS += 
 CXXWARNINGS += 
