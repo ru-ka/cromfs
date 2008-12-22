@@ -888,8 +888,8 @@ public:
                     }
                     const cromfs_block_internal& block = blktab[ino.blocklist[a]];
 
-                    const uint_fast32_t block_fblocknum = block.get_fblocknum(BSIZE,FSIZE);
-                    const uint_fast32_t block_startoffs = block.get_startoffs(BSIZE,FSIZE);
+                    const uint_fast32_t block_fblocknum = block.fblocknum;
+                    const uint_fast32_t block_startoffs = block.startoffs;
 
                     // Only write data from this fblock that is being handled now.
                     if(block_fblocknum != fblocknum) continue;
@@ -1084,7 +1084,7 @@ private:
             cromfs_inode_internal ino = read_inode_and_blocks(inonum);
             std::set<cromfs_fblocknum_t> fblist;
             for(unsigned a=0; a<ino.blocklist.size(); ++a)
-                fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                fblist.insert(blktab[ino.blocklist[a]].fblocknum);
 
             ListingDisplayInode(entname, inonum, ino, fblist);
         }
@@ -1102,7 +1102,7 @@ private:
             std::set<cromfs_fblocknum_t> fblist;
             for(unsigned a=0; a<ino.blocklist.size(); ++a)
                 if(ino.blocklist[a] < blktab.size())
-                    fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                    fblist.insert(blktab[ino.blocklist[a]].fblocknum);
                 else
                 {
                     fprintf(stderr, "Inode %llu (%s) is corrupt. It refers to block %u which does not exist (%u blocks exist).\n",

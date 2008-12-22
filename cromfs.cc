@@ -164,8 +164,8 @@ const std::string cromfs::DumpBlock(const cromfs_block_internal& block) const
 {
     std::stringstream s;
 
-    s << "fblocknum(" << block.get_fblocknum(CROMFS_BSIZE, CROMFS_FSIZE)
-      << ")startoffs(" << block.get_startoffs(CROMFS_BSIZE, CROMFS_FSIZE)
+    s << "fblocknum(" << block.fblocknum
+      << ")startoffs(" << block.startoffs
       << ")";
 
     return s.str();
@@ -591,11 +591,10 @@ void cromfs::read_block(cromfs_blocknum_t ind,
         DumpBlock(block).c_str());
 #endif
 
-    cromfs_cached_fblock& fblock =
-        read_fblock(block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE));
+    cromfs_cached_fblock& fblock = read_fblock(block.fblocknum);
 
     const uint_fast32_t startoffs =
-        block.get_startoffs(CROMFS_BSIZE,CROMFS_FSIZE)
+        block.startoffs
          + offset;
 
     if(startoffs < fblock.size())
@@ -687,7 +686,7 @@ int_fast64_t cromfs::read_file_data_from_one_fblock_only(
         if(blocknum >= blktab.size()) break; // throw EIO;
 
         const cromfs_block_internal& block = blktab[blocknum];
-        const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
+        const cromfs_fblocknum_t fblocknum = block.fblocknum;
 
         if(fblocknum != allowed_fblocknum)
         {
@@ -795,7 +794,7 @@ int_fast64_t cromfs::read_file_data(
             const cromfs_blocknum_t blocknum = inode.blocklist[begin_block_index];
             if(blocknum >= blktab.size()) break; // throw EIO;
             const cromfs_block_internal& block = blktab[blocknum];
-            const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
+            const cromfs_fblocknum_t fblocknum = block.fblocknum;
 
             if(fblocknum < fblktab.size())
             {

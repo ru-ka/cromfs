@@ -13,6 +13,8 @@ extern unsigned READDIR_CACHE_MAX_SIZE;
 /* How many decompressed fblocks to cache in RAM at the same time maximum */
 extern unsigned FBLOCK_CACHE_MAX_SIZE;
 
+typedef std::vector<unsigned char> cromfs_cached_fblock;
+
 class cromfs
 {
 public:
