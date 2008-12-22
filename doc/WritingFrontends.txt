@@ -1,0 +1,104 @@
+cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL3
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+How to write frontends to cromfs, or to port cromfs for different
+driver platforms.
+
+--------------------------------
+
+The main engine of cromfs is in cromfs.cc, with interface defined
+in cromfs.hh .
+The interface is very simple and rather well documented, consisting
+of the following functions:
+
+  cromfs(int fild)
+    -- Constructor. Initializes the cromfs object by reading the
+       file pointed by the given file descriptor. The file descriptor
+       must be valid throughout the existence of the object.
+  
+  Initialize()
+    -- Second half of the constructor. The constructor is split in
+       two so that if you want to do a fork() after the constructor,
+       there's a safe place to do it, as Initialize() will possibly
+       set up threads and those won't work nicely with fork().
+       It is mandatory to call this function before any other access
+       to cromfs.
+
+  ~cromfs()
+    -- Destructor. It will deallocate the data structures associated
+       with the cromfs object, but it will not close the file pointed
+       by the file descriptor.
+
+  get_superblock()
+    -- Returns the superblock (header) of the filesystem. Its primary
+       use is to determine how many bytes of files there are in the
+       filesystem.
+  
+  read_dir(inodenum, dir_offset, dir_count)
+    -- Reads directory entries from the directory referred to by the
+       given inode number. Use inode number 1 for the root directory.
+       dir_offset and dir_count can be used to restrict the read into
+       a given subsection of the directory. Use 0 for dir_offset and
+       ~0 (as in maximum uint32) for dir_count to read the entire directory.
+       The result will be an associative container listing the filenames
+       in the directory and their respective inode numbers.
+  
+  read_inode(inodenum)
+    -- Reads the header of the given inode. Its primary use is to determine
+       whether the entry denoted by the inode number is a file, a directory,
+       or something else. It also tells the size, the modification time, and
+       other statistics of the file. Use it to implement stat().
+       Note that this information is not returned by read_dir(). The reason
+       for this is because the same inode may appear in multiple directories
+       or even multiple times in the same directory (hard-linking).
+
+  read_file_data(inodenum, file_offset, target_buffer, num_bytes, purpose)
+    -- Reads a section of the file denoted by the given inode number
+       into the buffer, starting from the given file offset and spanning
+       the given number of bytes. The buffer must be large enough to hold
+       num_bytes bytes of data. The "purpose" is only used for debugging.
+       The function will return the number of bytes read (which may be
+       shorter than the requested number, if the file is shorter).
+       Note that there are no open/close commands. If you know the inode number
+       (which you acquire from read_dir()), you are ready to read.
+       Use this function to read contents of files and targets of symlinks.
+       For reading the contents of directories, use read_dir() instead.
+       Other types of entries do not require read_file_data(), because
+       they do not possess content.
+
+  dir_lookup(inodenum, filename)
+    -- A shorthand for read_dir() that only checks whether the directory
+       denoted by the inode number contains a file by the given name.
+       If it does, the function returns the inode number of that file.
+       If it does not, the function returns 0.
+       Note that the file name matching is case-sensitive.
+
+  cromfs will report errors by throwing an exception of type cromfs_exception.
+  cromfs_exception will evaluate into an int value denoting the error code
+  (as in errno.h) for the error.
+  It may also throw std::bad_alloc when out of memory.
+
+Possible gotchas:
+ - Cromfs does not contain any path traversal functions.
+   You cannot dir_lookup "dir_1/dir_2/file_3". You can only
+   dir_lookup entry names from a particular directory, and
+   not with wildcards.
+ - Cromfs filenames and lookups are case-sensitive.
+ - Cromfs allows any characters in a filename that unix systems
+   generally allow: that is, any characters except '\0' and '/'.
+   Windows, for example, has tighter restrictions.
+ - Cromfs does not have a "file handle" concept. Inode number is
+   not a file handle. If your driver needs such a concept, you
+   need to implement it yourself.
+ - Filenames assume an ascii-compatible character encoding.
+   It is recommended to use UTF-8, though not enforced. Internally,
+   they are just bytestreams.
+
+In the Fuse implementation, the access functions that translate
+Fuse concepts into Cromfs concepts and vice versa are defined
+in fuse-ops.cc and fuse-main.c .
+
+Should you wish to create a Windows filesystem driver for example,
+you need to create something like windows-ops.cc and windows-main.c
+using that principle.

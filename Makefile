@@ -13,6 +13,7 @@ ARCHFILES=\
 	doc/README.html \
 	doc/ChangeLog \
 	doc/ImplementationGuide.txt \
+	doc/WritingFrontends.txt \
 	doc/WriteAccess.txt \
 	doc/BlockIndexing.txt \
 	doc/size_demo.txt \
