@@ -302,7 +302,7 @@ void block_index_type::CacheFile<RecSize>::GetPos(BlockIndexHashType crc, int& f
             else
             {
                 unlink(fn.c_str()); // Ensure it gets removed once closed
-                
+#if 0
                 // Check if we get a LargeFileOk...
                 if(NoFilesOpen)
                 {
@@ -319,6 +319,7 @@ void block_index_type::CacheFile<RecSize>::GetPos(BlockIndexHashType crc, int& f
                         }
                     }
                 }
+#endif
             }
             fds[fd_index] = fd;
             NoFilesOpen = false;
