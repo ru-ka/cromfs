@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <utime.h>
 #include <stdarg.h>
+#include <cstring>
 
 #include <getopt.h>
 
@@ -105,7 +106,13 @@ static struct ThreadSafeConsole
         beginline();
     #endif
     }
-    void endthread(int threadno = omp_get_thread_num())
+    void endthread(
+    #ifdef _OPENMP
+        int threadno = omp_get_thread_num()
+    #else
+        int = 0
+    #endif
+                  )
     {
     #ifdef _OPENMP
         lines.erase(threadno);
@@ -191,7 +198,7 @@ private:
         {
             if(GoingLine && DidOneliners)
                 std::fprintf(target, "... ");
-            const char* nlpos = strrchr(fmt, '\n');
+            const char* nlpos = std::strrchr(fmt, '\n');
             GoingLine = nlpos ? nlpos[1] != '\0' : *fmt != '\0';
             DidOneliners = false;
         }
