@@ -1,8 +1,11 @@
 #include "../cromfs-defs.hh"
 
-#include <google/sparse_hash_map>
+#include <vector>
+#include <string>
 
 #include "fsballocator.hh"
+#include "staticallocator.hh"
+#include "rangeset.hh"
 
 #define NO_BLOCK   ((cromfs_blocknum_t)~UINT64_C(0))
 
@@ -83,27 +86,32 @@ private:
     void Close();
     void Clone();
 
-    typedef uint_least64_t HashIndexType; // a pair of newhash (32-bit) & collision index (32-bit)
+    template<typename T>
+    struct CompressedHashLayer
+    {
+        static const unsigned n_per_bucket = 0x10000;
+        static const unsigned n_buckets    = (UINT64_C(1) << 32) / n_per_bucket;
+        static const unsigned bucketsize   = n_per_bucket * sizeof(T);
 
-    typedef google::sparse_hash_map<
-        HashIndexType,
-        cromfs_blocknum_t,
-        SPARSEHASH_HASH<HashIndexType>,
-        std::equal_to<HashIndexType>,
-        FSBAllocator<cromfs_blocknum_t>
-    > realindex_type;
+        rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > hashbits;
 
-    realindex_type realindex;
+        std::vector<unsigned char> buckets[ n_buckets ];
 
-    typedef google::sparse_hash_map<
-        HashIndexType,
-        cromfs_block_internal,
-        SPARSEHASH_HASH<HashIndexType>,
-        std::equal_to<HashIndexType>,
-        FSBAllocator<cromfs_block_internal>
-    > autoindex_type;
+        CompressedHashLayer();
 
-    autoindex_type autoindex;
+        void extract(BlockIndexHashType crc, T& result)       const;
+        void     set(BlockIndexHashType crc, const T& value);
+        void   unset(BlockIndexHashType crc);
+    private:
+        std::vector<unsigned char> dirtybucket;
+        size_t dirtybucketno;
+        enum { none, ro, rw } dirtystate;
+
+        void flushdirty();
+        void load(size_t bucketno);
+    };
+    std::vector<CompressedHashLayer<cromfs_blocknum_t>     > realindex;
+    std::vector<CompressedHashLayer<cromfs_block_internal> > autoindex;
 };
 
 /* This global pointer to block_index is required

@@ -77,6 +77,9 @@ ARCHFILES=\
 	lib/rangeset.hh lib/rangeset.tcc \
 	lib/rangemultimap.hh lib/rangemultimap.tcc \
 	\
+	lib/lzoconf.h lib/lzodefs.h \
+	lib/minilzo.c lib/minilzo.h \
+	\
 	lib/lzma/C/LzmaDec.c \
 	lib/lzma/C/LzmaDec.h \
 	lib/lzma/C/LzmaEnc.c \

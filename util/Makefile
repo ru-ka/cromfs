@@ -40,7 +40,8 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/cromfs-blockindex.o \
 	   ../lib/cromfs-fblockfun.o \
 	   ../lib/cromfs-blockifier.o \
-	   ../lib/boyermoore.o
+	   ../lib/boyermoore.o \
+	   ../lib/minilzo.o
 
 OBJS_UN += unmkcromfs.o ../cromfs.o \
 	   ../lib/fadvise.o \
