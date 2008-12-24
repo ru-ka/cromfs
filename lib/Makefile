@@ -8,7 +8,7 @@ include Makefile.sets
 
 OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-CPPFLAGS += -pthread -I..
+CPPFLAGS += -pthread -I.. -I../lib
 #OPTIM += -O1 -g
 # -ftree-vectorize 
 

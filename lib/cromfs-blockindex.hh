@@ -1,13 +1,8 @@
 #include "../cromfs-defs.hh"
 
-#if 1
-# include "bucketcontainer.hh"
-#else
-# if USE_HASHMAP
-#  include <ext/hash_map>
-#  include "hash.hh"
-# endif
-#endif
+#include <google/sparse_hash_map>
+
+#include "fsballocator.hh"
 
 #define NO_BLOCK   ((cromfs_blocknum_t)~UINT64_C(0))
 
@@ -51,7 +46,7 @@ public:
     bool EmergencyFreeSpace(bool Auto=true, bool Real=true);
 
 public:
-    block_index_type() : realindex(), autoindex() { }
+    block_index_type() : realindex(), autoindex() { Init(); }
 
     block_index_type(const block_index_type& b)
         : realindex(b.realindex),
@@ -84,31 +79,31 @@ public:
     }
 
 private:
-    void Clone();
+    void Init();
     void Close();
-    size_t new_real();
-    size_t new_auto();
+    void Clone();
 
-private:
-    template<unsigned RecSize>
-    class CacheFile
-    {
-    public:
-        explicit CacheFile(const std::string& np);
-        void Clone();
-        void GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos) const;
-        void GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos);
-        void Close();
-        uint_fast64_t GetDiskSize() const;
-    private:
-        enum { n_fds = RecSize*2 };
-        int fds[n_fds];
-        bool LargeFileOk, NoFilesOpen;
-        std::string NamePattern;
-    };
+    typedef uint_least64_t HashIndexType; // a pair of newhash (32-bit) & collision index (32-bit)
 
-    std::vector<CacheFile<4> > realindex;
-    std::vector<CacheFile<8> > autoindex;
+    typedef google::sparse_hash_map<
+        HashIndexType,
+        cromfs_blocknum_t,
+        SPARSEHASH_HASH<HashIndexType>,
+        std::equal_to<HashIndexType>,
+        FSBAllocator<cromfs_blocknum_t>
+    > realindex_type;
+
+    realindex_type realindex;
+
+    typedef google::sparse_hash_map<
+        HashIndexType,
+        cromfs_block_internal,
+        SPARSEHASH_HASH<HashIndexType>,
+        std::equal_to<HashIndexType>,
+        FSBAllocator<cromfs_block_internal>
+    > autoindex_type;
+
+    autoindex_type autoindex;
 };
 
 /* This global pointer to block_index is required

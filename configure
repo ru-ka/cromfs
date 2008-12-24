@@ -28,6 +28,17 @@ EOF
     return $TMP
 }
 
+func_check() {
+  do_echo -n "Checking for $1... "
+  if cc_check "$2" "$3" "$4"; then
+    do_echo Yes
+    return 0
+  else
+    do_echo No
+    return 1
+  fi
+}
+
 select_tool() {
     toolname=$1
     shift
@@ -211,13 +222,39 @@ else
   do_echo No
 fi
 
-do_echo -n "Checking for readdir_r... "
-if cc_check '<dirent.h>' '' 'DIR*dir=opendir(".");dirent e,*ep;readdir_r(dir,&e,&ep);'; then
-  do_echo Yes
-  OPTIM="$OPTIM -DHAS_READDIR_R"
-else
-  do_echo No
-fi
+
+
+if func_check stdint.h \
+   '<stdint.h>' '' 'typedef int x;'; \
+   then OPTIM="$OPTIM -DHAS_STDINT_H"; fi
+
+if func_check inttypes.h \
+   '<inttypes.h>' '' 'typedef int x;'; \
+   then OPTIM="$OPTIM -DHAS_INTTYPES_H"; fi
+
+if func_check readdir_r \
+   '<dirent.h>' '' 'DIR*dir=opendir(".");dirent e,*ep;readdir_r(dir,&e,&ep);'; \
+   then OPTIM="$OPTIM -DHAS_READDIR_R"; fi
+
+if func_check uint16_t \
+   '<stdint.h>' '' 'typedef uint16_t x;'; \
+   then OPTIM="$OPTIM -DHAS_UINT16_T"; fi
+
+if func_check u_int16_t \
+   '<stdint.h>' '' 'typedef u_int16_t x;'; \
+   then OPTIM="$OPTIM -DHAS_U_INT16_T"; fi
+
+if func_check __uint16_t \
+   '<stdint.h>' '' 'typedef _uint16_t x;'; \
+   then OPTIM="$OPTIM -DHAS___UINT16_T"; fi
+
+if func_check __uint16_t \
+   '<stdint.h>' '' 'typedef long long x;'; \
+   then OPTIM="$OPTIM -DHAS_LONG_LONG"; fi
+
+if func_check __uint16_t \
+   '<sys/types.h>' '' 'typedef int x;'; \
+   then OPTIM="$OPTIM -DHAS_SYS_TYPES_H"; fi
 
 WARNINGS=""
 CWARNINGS=""
