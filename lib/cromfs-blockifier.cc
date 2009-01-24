@@ -1186,7 +1186,7 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
     {
         if(!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS))
         {
-            std::printf( "mkcromfs: --16bitblocksnums would have been possible for this filesystem. But you didn't select it.\n");
+            std::printf( "mkcromfs: --16bitblocknums would have been possible for this filesystem. But you didn't select it.\n");
             if(MayAutochooseBlocknumSize)
                 std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
         }
@@ -1195,9 +1195,24 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
     {
         if(!(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS))
         {
-            std::printf( "mkcromfs: --24bitblocksnums would have been possible for this filesystem. But you didn't select it.\n");
-            if(MayAutochooseBlocknumSize)
-                std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
+            if(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS)
+            {
+                std::printf( "mkcromfs: You used --16bitblocknums. However, only --24bitblocknums was possible for this filesystem. Your filesystem is likely corrupt.\n");
+            }
+            else
+            {
+                std::printf( "mkcromfs: --24bitblocknums would have been possible for this filesystem. But you didn't select it.\n");
+                if(MayAutochooseBlocknumSize)
+                    std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
+            }
         }
+    }
+    else if(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS)
+    {
+        std::printf( "mkcromfs: You used --16bitblocknums. However, only --32bitblocknums was possible for this filesystem. Your filesystem is likely corrupt.\n");
+    }
+    else if(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS)
+    {
+        std::printf( "mkcromfs: You used --24bitblocknums. However, only --32bitblocknums was possible for this filesystem. Your filesystem is likely corrupt.\n");
     }
 }
