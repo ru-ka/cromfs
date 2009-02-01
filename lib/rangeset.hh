@@ -84,7 +84,6 @@ public:
     bool operator==(const rangeset& b) const { return data == b.data; }
     bool operator!=(const rangeset& b) const { return !operator==(b); }
 
-    // default copy cons. and assign-op. are fine
 };
 
 #include "rangeset.tcc"

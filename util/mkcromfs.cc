@@ -335,6 +335,7 @@ namespace cromfs_creator
                     // to it from inside WalkDir_Recursive won't be valid after
                     // the collection gets reallocated.
                     std::string path_copy = ent.pathname;
+
                     // Note: If you use OpenMP 3.0 "task" here, you will
                     //       have to change readdir() into readdir_r().
                     WalkDir_Recursive(path_copy, collection, subdir);

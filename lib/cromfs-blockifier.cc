@@ -87,53 +87,64 @@ const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
         throw "Wrong hash";
     }*/
 
-#ifndef _OPENMP
-    /* This is what we want to achieve, in the smallest form. */
-    cromfs_blocknum_t     real_match;
-    cromfs_block_internal auto_match;
-
-    //Bprintf("                            Reusing-plan for %08X: %s\n", crc, DataDump(data, size).c_str());
-
-    /* The hash may match multiple times, but a hash match is not a sure indication of actual
-     * data match, so we must always use block_is() to actually verify whether we got a match.
-     */
-    for(size_t matchcount=0; block_index.FindRealIndex(crc, real_match, matchcount); ++matchcount)
+#if !defined(_OPENMP) || (_OPENMP >= 200805)
+    /* OPENMP 3.0 VERSION and NO OPENMP version */
+    /* Goals: Search for a realindex match. If not found, search for an autoindex match. */
+    /* The same code is also used for No-OPENMP case.
+     * In that case, the #pragma constructs are simply ignored. */
+    bool real_found = false;
+    bool auto_found = false;
+    cromfs_blocknum_t     which_real_found; MutexType RealWhichLock;
+    cromfs_block_internal which_auto_found; MutexType AutoWhichLock;
+    #pragma omp parallel default(shared)
     {
-        bool match = block_is(real_match, data, size);
-
-        /*{
+      #pragma omp single
+      {
+        cromfs_blocknum_t real_match;
+        for(size_t matchno=0;
+               !real_found
+            && (!auto_found || PreferRealIndex)
+            && block_index.FindRealIndex(crc, real_match, matchno);
+            ++matchno)
+        {
+          #pragma omp task shared(real_found,which_real_found,RealWhichLock) \
+                           firstprivate(real_match) shared(data,size)
+          {
             const cromfs_block_internal& block = blocks[real_match];
-            const mkcromfs_fblock& fblock = fblocks[block.get_fblocknum(BSIZE,FSIZE)];
-            const uint_fast32_t my_offs = block.get_startoffs(BSIZE,FSIZE);
-
-            ScopedLock lck(fblock.GetMutex());
-            DataReadBuffer Buffer; uint_fast32_t BufSize;
-            fblock.InitDataReadBuffer(Buffer, BufSize, my_offs, size);
-            lck.Unlock();
-
-            printf("                            fblock %u:%u%s %s (%u should be >= %u)\n",
-                (unsigned)block.fblocknum, (unsigned)block.startoffs,
-                match ? " (match)" : " (no match)",
-                DataDump(Buffer.Buffer, size).c_str(),
-                (unsigned)BufSize,
-                (unsigned)(my_offs + size));
-
-            if(crc != BlockIndexHashCalc(Buffer.Buffer, size))
+            if(block_is(block, data, size) && RealWhichLock.TryLock())
             {
-                throw "Wrong hash";
+              real_found = true;
+              which_real_found = real_match;
+              RealWhichLock.Unlock();
             }
-        }*/
-
-        if(match)
-            return ReusingPlan(crc, real_match);
+          }
+        }
+        cromfs_block_internal auto_match;
+        for(size_t matchno=0;
+               !auto_found
+            && !real_found
+            && block_index.FindAutoIndex(crc, auto_match, matchno);
+            ++matchno)
+        {
+          #pragma omp task shared(auto_found,which_auto_found,AutoWhichLock) \
+                           firstprivate(auto_match) shared(data,size)
+          {
+            if(block_is(auto_match, data, size) && AutoWhichLock.TryLock())
+            {
+              auto_found = true;
+              which_auto_found = auto_match;
+              AutoWhichLock.Unlock();
+            }
+          }
+        }
+      }
     }
-
-    for(size_t matchcount=0; block_index.FindAutoIndex(crc, auto_match, matchcount); ++matchcount)
-        if(block_is(auto_match, data, size))
-            return ReusingPlan(crc, auto_match);
+    /* Match? */
+    if(real_found) return ReusingPlan(crc, which_real_found);
+    if(auto_found) return ReusingPlan(crc, which_auto_found);
 #else
-    /* OPENMP VERSION */
-    /* Goals: The same functionality as above, but with as much parallelism as possible. */
+    /* OPENMP 2.5 VERSION */
+    /* Goals: The same functionality as above. */
 
     cromfs_blocknum_t     which_real_found;
     cromfs_block_internal which_auto_found;
@@ -1175,7 +1186,7 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
     {
         if(!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS))
         {
-            std::printf( "mkcromfs: --16bitblocksnums would have been possible for this filesystem. But you didn't select it.\n");
+            std::printf( "mkcromfs: --16bitblocknums would have been possible for this filesystem. But you didn't select it.\n");
             if(MayAutochooseBlocknumSize)
                 std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
         }
@@ -1184,9 +1195,24 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
     {
         if(!(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS))
         {
-            std::printf( "mkcromfs: --24bitblocksnums would have been possible for this filesystem. But you didn't select it.\n");
-            if(MayAutochooseBlocknumSize)
-                std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
+            if(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS)
+            {
+                std::printf( "mkcromfs: You used --16bitblocknums. However, only --24bitblocknums was possible for this filesystem. Your filesystem is likely corrupt.\n");
+            }
+            else
+            {
+                std::printf( "mkcromfs: --24bitblocknums would have been possible for this filesystem. But you didn't select it.\n");
+                if(MayAutochooseBlocknumSize)
+                    std::printf("          (mkcromfs did not automatically do this, because the block merging went better than estimated.)\n");
+            }
         }
+    }
+    else if(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS)
+    {
+        std::printf( "mkcromfs: You used --16bitblocknums. However, only --32bitblocknums was possible for this filesystem. Your filesystem is likely corrupt.\n");
+    }
+    else if(storage_opts & CROMFS_OPT_24BIT_BLOCKNUMS)
+    {
+        std::printf( "mkcromfs: You used --24bitblocknums. However, only --32bitblocknums was possible for this filesystem. Your filesystem is likely corrupt.\n");
     }
 }

@@ -1,4 +1,4 @@
-VERSION=1.5.6.2
+VERSION=1.5.7
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -13,6 +13,7 @@ ARCHFILES=\
 	doc/README.html \
 	doc/ChangeLog \
 	doc/ImplementationGuide.txt \
+	doc/WritingFrontends.txt \
 	doc/WriteAccess.txt \
 	doc/BlockIndexing.txt \
 	doc/size_demo.txt \
@@ -48,6 +49,8 @@ ARCHFILES=\
 	lib/threadworkengine.hh lib/threadworkengine.tcc \
 	lib/duffsdevice.hh \
 	lib/stringsearchutil.hh \
+	lib/simplevec.hh \
+	lib/staticallocator.hh \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
 	lib/autoclosefd.hh \
@@ -75,6 +78,9 @@ ARCHFILES=\
 	lib/range.hh lib/range.tcc \
 	lib/rangeset.hh lib/rangeset.tcc \
 	lib/rangemultimap.hh lib/rangemultimap.tcc \
+	\
+	lib/lzoconf.h lib/lzodefs.h \
+	lib/minilzo.c lib/minilzo.h \
 	\
 	lib/lzma/C/LzmaDec.c \
 	lib/lzma/C/LzmaDec.h \

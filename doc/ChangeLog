@@ -4,6 +4,18 @@ cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.7 2009-02-01 Joel Yliluoma <bisqwit@iki.fi>
+- Added support for OpenMP 3.0 based task constructs
+- Added protection against stupid umasks in unmkcromfs
+- Updated LZMA to version 4.63. It includes apparently nothing noteworthy.
+- Added some missing documentation files
+- Fixed some compilation problems
+- Added diagnosis for misapplied --16bitblocknums and --24bitblocknums
+- Changed the block index to a memory based system again, reverting
+  the change introduced in version 1.5.5; however, with LZO compression,
+  hopefully bringing down the RAM requirements by a bit or two without
+  significantly affecting the mkcromfs running time adversely.
+
 1.5.6.2 2008-12-16 Joel Yliluoma <bisqwit@iki.fi>
 - Fixed the problem with AutoIndex&RealIndex and $TEMP filesystems
   unable to cope with > 2GB sparse files (Thanks Josh Rabinowitz)

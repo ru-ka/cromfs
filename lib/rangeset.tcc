@@ -21,7 +21,7 @@ void rangeset<Key,Allocator>::const_iterator::Reconstruct()
             rangetype<Key>::upper = j->first;
         else
             rangetype<Key>::upper = rangetype<Key>::lower;
-        
+
         if(i->second.is_nil())
         {
             fprintf(stderr, "rangeset: internal error\n");
@@ -52,26 +52,26 @@ typename rangeset<Key,Allocator>::const_iterator& rangeset<Key,Allocator>::const
     Reconstruct();
     return *this;
 }
-    
+
 template<typename Key,typename Allocator>
 rangeset<Key,Allocator> rangeset<Key,Allocator>::intersect(const rangeset<Key,Allocator>& b) const
 {
     rangeset<Key,Allocator> result;
     const_iterator ai = begin();
     const_iterator bi = b.begin();
-    
+
     for(;;)
     {
         if(ai == end()) break;
         if(bi == b.end()) break;
-        
+
         if(ai->upper <= bi->lower) { ++ai; continue; }
         if(bi->upper <= ai->lower) { ++bi; continue; }
-        
+
         rangetype<Key> intersection = ai->intersect(bi);
         if(!intersection.empty())
             result.set(intersection.lower, intersection.upper);
-        
+
         if(ai->upper < bi->upper)         // A is smaller
             ++ai;
         else if(ai->upper == bi->upper)   // equal

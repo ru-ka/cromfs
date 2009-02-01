@@ -4,6 +4,28 @@
 
 #include <cstring> // std::memcpy
 
+/* Directory format:
+****
+
+FILE CONTENT WHEN: DIRECTORY (size: 4 + (4+entrysize) * n)
+	0000	u32	number of files in directory
+	0004	u32[]	index into each file entry (from directory entry beginning)
+	0004	ENTRY[]	each file entry (variable length)
+	(Note: The files in a directory are sorted in an asciibetical order.
+	 This enables an implementation of lookup() using a binary search,
+	 minimizing the amount of data accessed (and thus yielding fast access
+	 in case of heavy fragmentation).
+	)
+	(Note 2: Currently the algorithm in read_dir() assumes that the directory
+	 entry pointers are in numeric order. If that does not hold, it will fail.
+	)
+
+STRUCT: ENTRY (size: 9 + n)
+	0000	u64	inode number
+	0008	char[]	file name, nul-terminated
+
+****/
+
 size_t
     calc_encoded_directory_size(const cromfs_dirinfo& dir)
 {

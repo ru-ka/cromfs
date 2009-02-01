@@ -70,6 +70,9 @@ public:
     void reset(T *const a) { Set(a); }
     void reset(const autoptr &a) { Set(&*a); }
     
+    // Other
+    bool isShared() const { return p->get_autoptr_refnum() > 1; }
+    
     ~autoptr() { Forget(); }
 private:
     // This conversion shouldn't be available

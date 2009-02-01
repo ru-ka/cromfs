@@ -84,7 +84,7 @@ extern "C" {
         delete fs;
     }
 
-    void cromfs_statfs(fuse_req_t req, fuse_ino_t /*unused_ino*/)
+    void cromfs_statfs(fuse_req_t req/*, fuse_ino_t unused_ino*/)
     {
         if(trace_ops) fprintf(stderr, "statfs\n");
         CROMFS_CTX(fs)

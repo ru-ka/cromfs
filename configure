@@ -28,6 +28,17 @@ EOF
     return $TMP
 }
 
+func_check() {
+  do_echo -n "Checking for $1... "
+  if cc_check "$2" "$3" "$4"; then
+    do_echo Yes
+    return 0
+  else
+    do_echo No
+    return 1
+  fi
+}
+
 select_tool() {
     toolname=$1
     shift
@@ -97,13 +108,14 @@ fi
 
 if [ "$CC" = icc ]; then
   CPPFLAGS="$CPPFLAGS -w1 -inline-level=2"
-  do_echo -n "Checking if your compiler supports -ipo... "
-  if cc_check '<stdio.h>' '-fipo' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
-    do_echo Yes
-    OPTIM="$OPTIM -ipo"
-  else
-    do_echo No
-  fi
+  #do_echo -n "Checking if your compiler supports -ipo... "
+  #if cc_check '<stdio.h>' '-ipo' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+  #  #do_echo Yes
+  #  #OPTIM="$OPTIM -ipo"
+  #  do_echo "Yes, but not using - causes crash of ICC 11.0"
+  #else
+  #  do_echo No
+  #fi
   
   cat > conftest.cpp << EOF
   int main() { }
@@ -116,6 +128,7 @@ EOF
   LDFLAGS="$LDFLAGS -L$ICC_PATH""/lib -lirc -lguide -lpthread -lstdc++"
 fi
 
+HAS_OPENMP=0
 do_echo -n "Checking if your compiler supports -fopenmp... "
 if [ "$CC" = "icc" ] && \
     cc_check '<stdio.h>' '-openmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
@@ -124,12 +137,14 @@ if [ "$CC" = "icc" ] && \
   CPPFLAGS="$CPPFLAGS -openmp"
   LDFLAGS="$LDFLAGS -openmp"
   CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=0"
+  HAS_OPENMP=1
 elif cc_check '<stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
   do_echo Yes
   do_echo "- Will use OpenMP, not checking for -pthread"
   CPPFLAGS="$CPPFLAGS -fopenmp"
   LDFLAGS="$LDFLAGS -fopenmp"
   CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=0"
+  HAS_OPENMP=1
 else
   do_echo No
   do_echo -n "Checking if your compiler supports -pthread... "
@@ -142,6 +157,29 @@ else
     CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=0"
   fi
 fi
+
+if [ "$HAS_OPENMP" = "1" ]; then
+  do_echo -n "Checking for OpenMP version... "
+  rm -f conftest*
+  cat > conftest.cpp << EOF
+#include <stdio.h>
+int main() { printf("%d\n", _OPENMP); return 0; }
+EOF
+  echo "	conftest.cpp:" >> $DEVNULL
+  cat conftest.cpp >> $DEVNULL
+  echo "	$CXX conftest.cpp $CXXFLAGS $LDFLAGS -o conftest" >> $DEVNULL
+  $CXX conftest.cpp $CXXFLAGS $LDFLAGS -o conftest 1>>$DEVNULL 2>>$DEVNULL
+  OPENMP_VERSION="`./conftest`"
+  rm -f conftest*
+  if [ "$OPENMP_VERSION" = "200805" ]; then
+    echo "3.0 ($OPENMP_VERSION)"
+  elif [ "$OPENMP_VERSION" = "200505" ]; then
+    echo "2.5 ($OPENMP_VERSION)"
+  else
+    echo "Unknown ($OPENMP_VERSION)"
+  fi
+fi
+
 
 do_echo -n "Checking if your compiler supports hash_map... "
 if cc_check '"lib/hash.hh"' '-DHASH_MAP=1' 'hash_map<long,int>x; hash_set<long>y;'; then
@@ -183,6 +221,40 @@ if cc_check '<cstdio>' '' 'char Buf[10];using namespace std; vsnprintf(Buf,sizeo
 else
   do_echo No
 fi
+
+
+
+if func_check stdint.h \
+   '<stdint.h>' '' 'typedef int x;'; \
+   then OPTIM="$OPTIM -DHAS_STDINT_H"; fi
+
+if func_check inttypes.h \
+   '<inttypes.h>' '' 'typedef int x;'; \
+   then OPTIM="$OPTIM -DHAS_INTTYPES_H"; fi
+
+if func_check readdir_r \
+   '<dirent.h>' '' 'DIR*dir=opendir(".");dirent e,*ep;readdir_r(dir,&e,&ep);'; \
+   then OPTIM="$OPTIM -DHAS_READDIR_R"; fi
+
+if func_check uint16_t \
+   '<stdint.h>' '' 'typedef uint16_t x;'; \
+   then OPTIM="$OPTIM -DHAS_UINT16_T"; fi
+
+if func_check u_int16_t \
+   '<stdint.h>' '' 'typedef u_int16_t x;'; \
+   then OPTIM="$OPTIM -DHAS_U_INT16_T"; fi
+
+if func_check __uint16_t \
+   '<stdint.h>' '' 'typedef _uint16_t x;'; \
+   then OPTIM="$OPTIM -DHAS___UINT16_T"; fi
+
+if func_check __uint16_t \
+   '<stdint.h>' '' 'typedef long long x;'; \
+   then OPTIM="$OPTIM -DHAS_LONG_LONG"; fi
+
+if func_check __uint16_t \
+   '<sys/types.h>' '' 'typedef int x;'; \
+   then OPTIM="$OPTIM -DHAS_SYS_TYPES_H"; fi
 
 WARNINGS=""
 CWARNINGS=""

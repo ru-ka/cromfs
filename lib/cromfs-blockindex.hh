@@ -1,13 +1,11 @@
 #include "../cromfs-defs.hh"
 
-#if 1
-# include "bucketcontainer.hh"
-#else
-# if USE_HASHMAP
-#  include <ext/hash_map>
-#  include "hash.hh"
-# endif
-#endif
+#include <vector>
+#include <string>
+
+#include "fsballocator.hh"
+#include "staticallocator.hh"
+#include "rangeset.hh"
 
 #define NO_BLOCK   ((cromfs_blocknum_t)~UINT64_C(0))
 
@@ -51,7 +49,7 @@ public:
     bool EmergencyFreeSpace(bool Auto=true, bool Real=true);
 
 public:
-    block_index_type() : realindex(), autoindex() { }
+    block_index_type() : realindex(), autoindex() { Init(); }
 
     block_index_type(const block_index_type& b)
         : realindex(b.realindex),
@@ -84,31 +82,36 @@ public:
     }
 
 private:
-    void Clone();
+    void Init();
     void Close();
-    size_t new_real();
-    size_t new_auto();
+    void Clone();
 
-private:
-    template<unsigned RecSize>
-    class CacheFile
+    template<typename T>
+    struct CompressedHashLayer
     {
-    public:
-        explicit CacheFile(const std::string& np);
-        void Clone();
-        void GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos) const;
-        void GetPos(BlockIndexHashType crc, int& fd, uint_fast64_t& pos);
-        void Close();
-        uint_fast64_t GetDiskSize() const;
-    private:
-        enum { n_fds = RecSize*2 };
-        int fds[n_fds];
-        bool LargeFileOk, NoFilesOpen;
-        std::string NamePattern;
-    };
+        static const unsigned n_per_bucket = 0x10000;
+        static const unsigned n_buckets    = (UINT64_C(1) << 32) / n_per_bucket;
+        static const unsigned bucketsize   = n_per_bucket * sizeof(T);
 
-    std::vector<CacheFile<4> > realindex;
-    std::vector<CacheFile<8> > autoindex;
+        rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > hashbits;
+
+        std::vector<unsigned char> buckets[ n_buckets ];
+
+        CompressedHashLayer();
+
+        void extract(BlockIndexHashType crc, T& result)       const;
+        void     set(BlockIndexHashType crc, const T& value);
+        void   unset(BlockIndexHashType crc);
+    private:
+        std::vector<unsigned char> dirtybucket;
+        size_t dirtybucketno;
+        enum { none, ro, rw } dirtystate;
+
+        void flushdirty();
+        void load(size_t bucketno);
+    };
+    std::vector<CompressedHashLayer<cromfs_blocknum_t>     > realindex;
+    std::vector<CompressedHashLayer<cromfs_block_internal> > autoindex;
 };
 
 /* This global pointer to block_index is required
