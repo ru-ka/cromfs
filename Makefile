@@ -49,6 +49,8 @@ ARCHFILES=\
 	lib/threadworkengine.hh lib/threadworkengine.tcc \
 	lib/duffsdevice.hh \
 	lib/stringsearchutil.hh \
+	lib/simplevec.hh \
+	lib/staticallocator.hh \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
 	lib/autoclosefd.hh \
