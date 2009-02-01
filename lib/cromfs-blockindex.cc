@@ -188,7 +188,7 @@ void block_index_type::
 #if 1
         const size_t decom_max = bucketsize+bucketsize/16+64+3;
         static unsigned char decombuf[decom_max];
-        size_t destlen = decom_max;
+        lzo_uint destlen = decom_max;
         char wrkmem[LZO1X_1_MEM_COMPRESS];
         lzo1x_1_compress(&dirtybucket[0], actual_bucketsize,
                          decombuf, &destlen,
