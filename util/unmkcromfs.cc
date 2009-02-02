@@ -1353,7 +1353,7 @@ int main(int argc, char** argv)
     {
         AddFilePattern(extract_files, argv[optind++]);
     }
-    
+
     umask(0); // Prevent umask screwing up our permission bits.
 
     if(should_create_output)

@@ -94,6 +94,7 @@ private:
         static const unsigned bucketsize   = n_per_bucket * sizeof(T);
 
         rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > hashbits;
+        rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > delbits;
 
         std::vector<unsigned char> buckets[ n_buckets ];
 

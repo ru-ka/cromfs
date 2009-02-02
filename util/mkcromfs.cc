@@ -1475,6 +1475,7 @@ int main(int argc, char** argv)
                     " --autoindexperiod, -A <value>\n"
                     "     Controls how often a new automatic index will be added in an fblock.\n"
                     "     For example, value 32 tells that a new index will be added every 32 bytes.\n"
+                    "     Value of 0 disables autoindex alltogether.\n"
                     "     Default: 256\n"
                     " --autoindexratio, -a <value>\n"
                     "     Deprecated option.\n"
@@ -1630,9 +1631,9 @@ int main(int argc, char** argv)
             {
                 char* arg = optarg;
                 long val = strtol(arg, &arg, 10);
-                if(val < 1)
+                if(val < 0)
                 {
-                    std::fprintf(stderr, "mkcromfs: The minimum allowed autoindexperiod is 1. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed autoindexperiod is 0. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 AutoIndexPeriod = val;
@@ -1962,16 +1963,18 @@ int main(int argc, char** argv)
     }
 
     if(AutoIndexRatio > 0)
+    {
         AutoIndexPeriod = BSIZE / AutoIndexRatio;
 
-    if(AutoIndexPeriod < 1)
-    {
-        std::fprintf(stderr,
-            "mkcromfs: Error: Your autoindexperiod %ld is smaller than 1.\n"
-            "  Cannot comply.\n", (long)AutoIndexPeriod);
-        return -1;
+        if(AutoIndexPeriod < 1)
+        {
+            std::fprintf(stderr,
+                "mkcromfs: Error: Your autoindexperiod %ld is smaller than 1.\n"
+                "  Cannot comply.\n", (long)AutoIndexPeriod);
+            return -1;
+        }
     }
-    if(AutoIndexPeriod <= 4)
+    if(AutoIndexPeriod > 0 && AutoIndexPeriod <= 4)
     {
         char Buf[256];
         if(AutoIndexPeriod == 1) std::sprintf(Buf, "for every possible byte");

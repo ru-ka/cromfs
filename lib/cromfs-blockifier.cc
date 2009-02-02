@@ -556,7 +556,10 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
     }
 
     /* Assign a real blocknumber to the autoindex */
-    block_index.DelAutoIndex(plan.crc, block);
+    if(AutoIndexPeriod)
+    {
+        block_index.DelAutoIndex(plan.crc, block);
+    }
     block_index.AddRealIndex(plan.crc, blocknum);
 
     /* Also autoindex the block right after this, just in case we get a match */
@@ -570,6 +573,8 @@ void cromfs_blockifier::PredictiveAutoIndex(
     uint_fast32_t startoffs,
     uint_fast32_t blocksize)
 {
+    if(!AutoIndexPeriod) return;
+
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
 
     uint_fast32_t after_block = startoffs + blocksize;
@@ -737,6 +742,8 @@ bool cromfs_blockifier::block_is(
 /* How many automatic indexes can be done in this amount of data? */
 static int CalcAutoIndexCount(int_fast32_t raw_size, uint_fast32_t bsize)
 {
+    if(!AutoIndexPeriod) return 0;
+
     int_fast32_t a = (raw_size - bsize + AutoIndexPeriod);
     return a / (int_fast32_t)AutoIndexPeriod;
 }
@@ -747,6 +754,8 @@ void cromfs_blockifier::TryAutoIndex(
     uint_fast32_t bsize,
     uint_fast32_t startoffs)
 {
+    if(!AutoIndexPeriod) return;
+
     const BlockIndexHashType crc = BlockIndexHashCalc(ptr, bsize);
 
     /* Check whether the block has already been indexed
@@ -784,6 +793,8 @@ void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
     uint_fast32_t new_raw_size,
     uint_fast32_t bsize)
 {
+    if(!AutoIndexPeriod) return;
+
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
 
 #if 0 /* NES indexing */

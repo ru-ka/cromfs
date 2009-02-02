@@ -158,6 +158,7 @@ void block_index_type::
 
     std::memcpy(&dirtybucket[bucketpos], &result, sizeof(T));
     hashbits.set(crc, crc+1);
+    delbits.erase(crc);
     dirtystate = rw;
 }
 
@@ -166,12 +167,13 @@ void block_index_type::
     CompressedHashLayer<T>::unset(BlockIndexHashType crc)
 {
     hashbits.erase(crc);
+    delbits.set(crc, crc+1);
 }
 
 template<typename T>
 block_index_type::
     CompressedHashLayer<T>::CompressedHashLayer()
-    : hashbits(),
+    : hashbits(), delbits(),
       dirtybucket(),
       dirtybucketno(n_buckets),
       dirtystate(none)
@@ -186,6 +188,22 @@ void block_index_type::
     {
         size_t actual_bucketsize = dirtybucket.size();
 #if 1
+        typedef rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > rtype;
+        rtype intersection(delbits);
+        intersection.erase_before( (dirtybucketno  ) * n_per_bucket );
+        intersection.erase_after(  (dirtybucketno+1) * n_per_bucket );
+
+        for(rtype::const_iterator i = intersection.begin(); i != intersection.end(); ++i)
+        {
+            const size_t bucketpos1 = (i->lower % n_per_bucket) * sizeof(T);
+            const size_t bucketpos2 = (i->upper % n_per_bucket) * sizeof(T);
+
+            std::memset(&dirtybucket[bucketpos1], 0, bucketpos2-bucketpos1);
+        }
+        delbits.erase((dirtybucketno  ) * n_per_bucket,
+                      (dirtybucketno+1) * n_per_bucket);
+
+
         const size_t decom_max = bucketsize+bucketsize/16+64+3;
         static unsigned char decombuf[decom_max];
         lzo_uint destlen = decom_max;
@@ -193,7 +211,9 @@ void block_index_type::
         lzo1x_1_compress(&dirtybucket[0], actual_bucketsize,
                          decombuf, &destlen,
                          wrkmem);
-        buckets[dirtybucketno].assign(decombuf, decombuf+destlen);
+
+        std::vector<unsigned char> replvec(decombuf, decombuf+destlen);
+        buckets[dirtybucketno].swap(replvec);
 #else
         buckets[dirtybucketno] = dirtybucket;
 #endif
