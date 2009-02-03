@@ -22,16 +22,18 @@
 static void DisplayProgress(
     const char* label,
     uint_fast64_t pos, uint_fast64_t max,
-    uint_fast64_t bpos, uint_fast64_t bmax)
+    uint_fast64_t bpos, uint_fast64_t bmax,
+    const char* suffix = "")
 {
     char Buf[4096];
-    std::sprintf(Buf, "%s: %5.2f%% (%llu/%llu)",
+    std::sprintf(Buf, "%s: %5.2f%% (%llu/%llu)%s",
         label,
         pos
         * 100.0
         / max,
         (unsigned long long)bpos,
-        (unsigned long long)bmax);
+        (unsigned long long)bmax,
+        suffix ? suffix : "");
     if(DisplayBlockSelections)
         std::printf("%s\n", Buf);
     else
@@ -556,14 +558,11 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
     }
 
     /* Assign a real blocknumber to the autoindex */
-    if(AutoIndexPeriod)
-    {
-        block_index.DelAutoIndex(plan.crc, block);
-    }
+    block_index.DelAutoIndex(plan.crc, block);
     block_index.AddRealIndex(plan.crc, blocknum);
 
     /* Also autoindex the block right after this, just in case we get a match */
-    PredictiveAutoIndex(fblocknum, startoffs+blocksize, blocksize);
+    //PredictiveAutoIndex(fblocknum, startoffs+blocksize, blocksize);
 
     return blocknum;
 }
@@ -573,8 +572,6 @@ void cromfs_blockifier::PredictiveAutoIndex(
     uint_fast32_t startoffs,
     uint_fast32_t blocksize)
 {
-    if(!AutoIndexPeriod) return;
-
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
 
     uint_fast32_t after_block = startoffs + blocksize;
@@ -754,8 +751,6 @@ void cromfs_blockifier::TryAutoIndex(
     uint_fast32_t bsize,
     uint_fast32_t startoffs)
 {
-    if(!AutoIndexPeriod) return;
-
     const BlockIndexHashType crc = BlockIndexHashCalc(ptr, bsize);
 
     /* Check whether the block has already been indexed
@@ -1124,7 +1119,8 @@ void cromfs_blockifier::FlushBlockifyRequests()
         uint_fast64_t offset = 0;
         while(nbytes > 0)
         {
-            DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+            DisplayProgress(label, total_done, total_size, blocks_done, blocks_total,
+                            block_index.get_usage().c_str());
 
             uint_fast64_t eat = std::min(blocksize, nbytes);
 

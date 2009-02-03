@@ -1,11 +1,10 @@
+#ifndef bqtCromfsBlockIndexHH
+#define bqtCromfsBlockIndexHH
+
 #include "../cromfs-defs.hh"
 
 #include <vector>
 #include <string>
-
-#include "fsballocator.hh"
-#include "staticallocator.hh"
-#include "rangeset.hh"
 
 #define NO_BLOCK   ((cromfs_blocknum_t)~UINT64_C(0))
 
@@ -13,7 +12,6 @@
 typedef uint_least32_t BlockIndexHashType;
 extern BlockIndexHashType
     BlockIndexHashCalc(const unsigned char* buf, unsigned long size);
-
 
 /* Block index may contain two different types of things:
  *   crc32 -> cromfs_blocknum_t
@@ -49,70 +47,32 @@ public:
     bool EmergencyFreeSpace(bool Auto=true, bool Real=true);
 
 public:
-    block_index_type() : realindex(), autoindex() { Init(); }
+    block_index_type();
+    block_index_type(const block_index_type& b);
 
-    block_index_type(const block_index_type& b)
-        : realindex(b.realindex),
-          autoindex(b.autoindex)
-    {
-        Clone();
-    }
-    block_index_type& operator= (const block_index_type& b)
-    {
-        if(&b != this)
-        {
-            Close();
-            realindex = b.realindex;
-            autoindex = b.autoindex;
-            Clone();
-        }
-        return *this;
-    }
+    block_index_type& operator= (const block_index_type& b);
 
     ~block_index_type()
     {
         Close();
     }
 
-    void clear()
-    {
-        Close();
-        realindex.clear();
-        autoindex.clear();
-    }
+    void clear();
+
+    std::string get_usage() const;
 
 private:
-    void Init();
     void Close();
     void Clone();
 
-    template<typename T>
-    struct CompressedHashLayer
-    {
-        static const unsigned n_per_bucket = 0x10000;
-        static const unsigned n_buckets    = (UINT64_C(1) << 32) / n_per_bucket;
-        static const unsigned bucketsize   = n_per_bucket * sizeof(T);
+public:
+    class realindex_layer;
+    class autoindex_layer;
+    std::vector<realindex_layer*> realindex;
+    std::vector<autoindex_layer*> autoindex;
 
-        rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > hashbits;
-        rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > delbits;
-
-        std::vector<unsigned char> buckets[ n_buckets ];
-
-        CompressedHashLayer();
-
-        void extract(BlockIndexHashType crc, T& result)       const;
-        void     set(BlockIndexHashType crc, const T& value);
-        void   unset(BlockIndexHashType crc);
-    private:
-        std::vector<unsigned char> dirtybucket;
-        size_t dirtybucketno;
-        enum { none, ro, rw } dirtystate;
-
-        void flushdirty();
-        void load(size_t bucketno);
-    };
-    std::vector<CompressedHashLayer<cromfs_blocknum_t>     > realindex;
-    std::vector<CompressedHashLayer<cromfs_block_internal> > autoindex;
+    size_t n_real;
+    size_t n_auto, n_auto_deleted;
 };
 
 /* This global pointer to block_index is required
@@ -121,3 +81,5 @@ private:
  * boundaries when necessary.
  */
 extern block_index_type* block_index_global;
+
+#endif

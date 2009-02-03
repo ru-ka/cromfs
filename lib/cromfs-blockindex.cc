@@ -2,33 +2,35 @@
 #include "util/mkcromfs_sets.hh"
 #include "util.hh" // For ReportSize
 
+#include "cromfs-hashmap_lzo.hh"
+#include "cromfs-hashmap_googlesparse.hh"
+
 #include <cstring>
+#include <sstream>
 
-#include "minilzo.h"
-
-void block_index_type::Init()
+class block_index_type::realindex_layer
+    : public GoogleSparseMap    <BlockIndexHashType, cromfs_blocknum_t>
 {
-    realindex.reserve(32);
-    autoindex.reserve(32);
-}
+};
 
-
+class block_index_type::autoindex_layer
+    : public CompressedHashLayer<BlockIndexHashType, cromfs_block_internal>
+{
+};
 
 bool block_index_type::FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const
 {
     if(find_index >= realindex.size()) return false;
-    if(realindex[find_index].hashbits.find(crc)
-    == realindex[find_index].hashbits.end()) return false;
-    realindex[find_index].extract(crc, result);
+    if(!realindex[find_index]->has(crc)) return false;
+    realindex[find_index]->extract(crc, result);
     return true;
 }
 
 bool block_index_type::FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const
 {
     if(find_index >= autoindex.size()) return false;
-    if(autoindex[find_index].hashbits.find(crc)
-    == autoindex[find_index].hashbits.end()) return false;
-    autoindex[find_index].extract(crc, result);
+    if(!autoindex[find_index]->has(crc)) return false;
+    autoindex[find_index]->extract(crc, result);
     return true;
 }
 
@@ -36,10 +38,11 @@ void block_index_type::AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t va
 {
     for(size_t index = 0; index < realindex.size(); ++index)
     {
-        CompressedHashLayer<cromfs_blocknum_t>& layer = realindex[index];
-        if(layer.hashbits.find(crc) == layer.hashbits.end())
+        realindex_layer& layer = *realindex[index];
+        if(!layer.has(crc))
         {
             layer.set(crc, value);
+            ++n_real;
             return;
         }
         cromfs_blocknum_t tmp;
@@ -47,18 +50,20 @@ void block_index_type::AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t va
         if(tmp == value) return;
     }
     size_t index = realindex.size();
-    realindex.resize(index+1);
-    realindex[index].set(crc, value);
+    realindex.push_back(new realindex_layer);
+    realindex[index]->set(crc, value);
+    ++n_real;
 }
 
 void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
 {
     for(size_t index = 0; index < autoindex.size(); ++index)
     {
-        CompressedHashLayer<cromfs_block_internal>& layer = autoindex[index];
-        if(layer.hashbits.find(crc) == layer.hashbits.end())
+        autoindex_layer& layer = *autoindex[index];
+        if(!layer.has(crc))
         {
             layer.set(crc, value);
+            ++n_auto;
             return;
         }
         cromfs_block_internal tmp;
@@ -66,16 +71,17 @@ void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_i
         if(tmp == value) return;
     }
     size_t index = autoindex.size();
-    autoindex.resize(index+1);
-    autoindex[index].set(crc, value);
+    autoindex.push_back(new autoindex_layer);
+    autoindex[index]->set(crc, value);
+    ++n_auto;
 }
 
 void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
 {
     for(size_t index = 0; index < autoindex.size(); ++index)
     {
-        CompressedHashLayer<cromfs_block_internal>& layer = autoindex[index];
-        if(layer.hashbits.find(crc) == layer.hashbits.end())
+        autoindex_layer& layer = *autoindex[index];
+        if(!layer.has(crc))
         {
             break;
         }
@@ -84,6 +90,8 @@ void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_i
         if(tmp == value)
         {
             layer.unset(crc);
+            --n_auto;
+            ++n_auto_deleted;
             return;
         }
     }
@@ -96,12 +104,71 @@ bool block_index_type::EmergencyFreeSpace(bool Auto, bool Real)
 
 void block_index_type::Clone()
 {
+    for(size_t a=0; a<realindex.size(); ++a)
+        realindex[a] = new realindex_layer(*realindex[a]);
+
+    for(size_t a=0; a<autoindex.size(); ++a)
+        autoindex[a] = new autoindex_layer(*autoindex[a]);
 }
 
 void block_index_type::Close()
 {
+    for(size_t a=0; a<realindex.size(); ++a) delete realindex[a];
+    for(size_t a=0; a<autoindex.size(); ++a) delete autoindex[a];
+    realindex.clear();
+    autoindex.clear();
 }
 
+block_index_type::block_index_type()
+    : realindex(), autoindex(),
+      n_real(0), n_auto(0), n_auto_deleted(0)
+{
+}
+
+block_index_type::block_index_type(const block_index_type& b)
+    : realindex(b.realindex),
+      autoindex(b.autoindex),
+      n_real(b.n_real),
+      n_auto(b.n_auto),
+      n_auto_deleted(b.n_auto_deleted)
+{
+    Clone();
+}
+
+block_index_type& block_index_type::operator= (const block_index_type& b)
+{
+    if(&b != this)
+    {
+        Close();
+        realindex = b.realindex;
+        autoindex = b.autoindex;
+        n_real    = b.n_real;
+        n_auto    = b.n_auto;
+        n_auto_deleted = b.n_auto_deleted;
+        Clone();
+    }
+    return *this;
+}
+
+void block_index_type::clear()
+{
+    Close();
+    realindex.clear();
+    autoindex.clear();
+    n_real = 0;
+    n_auto = 0;
+    n_auto_deleted = 0;
+}
+
+std::string block_index_type::get_usage() const
+{
+    std::stringstream tmp;
+
+    tmp << " index_use:r=" << n_real
+        << ";a=" << n_auto
+        << ",-" << n_auto_deleted;
+    return tmp.str();
+}
 
 /*************************************************
   Goals of this hash calculator:
@@ -128,127 +195,3 @@ BlockIndexHashType
 
 
 block_index_type* block_index_global;
-
-template<typename T>
-void block_index_type::
-    CompressedHashLayer<T>::extract(BlockIndexHashType crc, T& result) const
-{
-    const
-    size_t bucket = crc / n_per_bucket,
-           bucketpos = (crc % n_per_bucket) * sizeof(T);
-
-    (const_cast<CompressedHashLayer<T>*> (this))->
-    load(bucket);
-
-    std::memcpy(&result, &dirtybucket[bucketpos], sizeof(T));
-}
-
-template<typename T>
-void block_index_type::
-    CompressedHashLayer<T>::set(BlockIndexHashType crc, const T& result)
-{
-    const
-    size_t bucket = crc / n_per_bucket,
-           bucketpos = (crc % n_per_bucket) * sizeof(T);
-
-    load(bucket);
-
-    if(dirtybucket.size() < bucketpos + sizeof(T))
-        dirtybucket.resize(bucketpos + sizeof(T));
-
-    std::memcpy(&dirtybucket[bucketpos], &result, sizeof(T));
-    hashbits.set(crc, crc+1);
-    delbits.erase(crc);
-    dirtystate = rw;
-}
-
-template<typename T>
-void block_index_type::
-    CompressedHashLayer<T>::unset(BlockIndexHashType crc)
-{
-    hashbits.erase(crc);
-    delbits.set(crc, crc+1);
-}
-
-template<typename T>
-block_index_type::
-    CompressedHashLayer<T>::CompressedHashLayer()
-    : hashbits(), delbits(),
-      dirtybucket(),
-      dirtybucketno(n_buckets),
-      dirtystate(none)
-{
-}
-
-template<typename T>
-void block_index_type::
-    CompressedHashLayer<T>::flushdirty()
-{
-    if(dirtystate == rw)
-    {
-        size_t actual_bucketsize = dirtybucket.size();
-#if 1
-        typedef rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > rtype;
-        rtype intersection(delbits);
-        intersection.erase_before( (dirtybucketno  ) * n_per_bucket );
-        intersection.erase_after(  (dirtybucketno+1) * n_per_bucket );
-
-        for(rtype::const_iterator i = intersection.begin(); i != intersection.end(); ++i)
-        {
-            const size_t bucketpos1 = (i->lower % n_per_bucket) * sizeof(T);
-            const size_t bucketpos2 = (i->upper % n_per_bucket) * sizeof(T);
-
-            std::memset(&dirtybucket[bucketpos1], 0, bucketpos2-bucketpos1);
-        }
-        delbits.erase((dirtybucketno  ) * n_per_bucket,
-                      (dirtybucketno+1) * n_per_bucket);
-
-
-        const size_t decom_max = bucketsize+bucketsize/16+64+3;
-        static unsigned char decombuf[decom_max];
-        lzo_uint destlen = decom_max;
-        char wrkmem[LZO1X_1_MEM_COMPRESS];
-        lzo1x_1_compress(&dirtybucket[0], actual_bucketsize,
-                         decombuf, &destlen,
-                         wrkmem);
-
-        {std::vector<unsigned char> replvec;
-        buckets[dirtybucketno].swap(replvec);}
-        
-        {std::vector<unsigned char> replvec(decombuf, decombuf+destlen);
-        buckets[dirtybucketno].swap(replvec);}
-#else
-        buckets[dirtybucketno] = dirtybucket;
-#endif
-        dirtystate = ro;
-    }
-}
-
-template<typename T>
-void block_index_type::
-    CompressedHashLayer<T>::load(size_t bucketno)
-{
-    if(dirtystate == none || dirtybucketno != bucketno)
-    {
-        flushdirty();
-
-        lzo_uint destlen = 0;
-        if(!buckets[bucketno].empty())
-        {
-#if 1
-            destlen = bucketsize;
-            dirtybucket.resize(bucketsize);
-            lzo1x_decompress(&buckets[bucketno][0], buckets[bucketno].size(),
-                             &dirtybucket[0], &destlen,
-                             0);
-#else
-            destlen = buckets[bucketno].size();
-            dirtybucket = buckets[bucketno];
-#endif
-        }
-
-        dirtybucket.resize(destlen);
-        dirtybucketno = bucketno;
-        dirtystate = ro;
-    }
-}

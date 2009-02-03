@@ -6,9 +6,10 @@ include Makefile.sets
 # -fmudflap
 #LDOPTS += -fmudflap -lmudflap
 
-OPTIM += -O3
+#OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-#OPTIM += -O3 -g -fno-inline -finline-level=0 -debug extended
+#OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
+OPTIM += -O3 -g -debug extended
 #OPTIM += -O0 -g -fno-inline
 # -ftree-vectorize 
 
@@ -41,6 +42,9 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/cromfs-fblockfun.o \
 	   ../lib/cromfs-blockifier.o \
 	   ../lib/boyermoore.o \
+	   ../lib/cromfs-hashmap_lzo.o \
+	   ../lib/cromfs-hashmap_sparsefile.o \
+	   ../lib/cromfs-hashmap_googlesparse.o \
 	   ../lib/minilzo.o
 
 OBJS_UN += unmkcromfs.o ../cromfs.o \

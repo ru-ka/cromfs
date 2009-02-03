@@ -874,7 +874,8 @@ and is distributed under the terms of the
 version 3 (GPL3).
  <br/>
 The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
-The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
+The SparseTable code from Google embedded within is licensed under
+conditions specified therein.
  <p/>
 Patches and other related material can be submitted to the
 author

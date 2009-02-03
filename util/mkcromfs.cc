@@ -624,11 +624,6 @@ namespace cromfs_creator
                         blockifier
                       );
 
-                if(DisplayFiles)
-                {
-                    std::printf("Paths scanned, now blockifying\n");
-                }
-
                 cromfs_inode_internal root_inode;
                 root_inode.mode  = S_IFDIR | 0555;
                 root_inode.time  = time(NULL);
@@ -657,6 +652,12 @@ namespace cromfs_creator
                     DataClassOrder.Directory,
                     &raw_root_inode[headersize],
                     root_inode.blocksize);
+
+                if(DisplayFiles)
+                {
+                    std::printf("Paths scanned, now blockifying. Inotab size will be %s.\n",
+                        ReportSize(inotab.size()).c_str());
+                }
 
                 // blockify rootdir, write block numbers in raw_root_inode.
                 blockifier.FlushBlockifyRequests();

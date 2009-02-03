@@ -4,8 +4,19 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <map>
+#include <vector>
 
 #include "simplevec.hh"
+
+#ifdef __GNUC__
+# define likely(x)       __builtin_expect(!!(x), 1)
+# define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+# define likely(x)   (x)
+# define unlikely(x) (x)
+#endif
+
 
 /*
   Memory blocks are sorted biggest-first, because

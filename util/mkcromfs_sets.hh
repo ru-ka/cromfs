@@ -1,6 +1,9 @@
 #ifndef bqtMkCromfsSetsHH
 #define bqtMkCromfsSetsHH
 
+#include <vector>
+#include <utility>
+
 extern int LZMA_HeavyCompress;
 extern bool DecompressWhenLookup;
 extern bool MayAutochooseBlocknumSize;

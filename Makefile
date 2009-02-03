@@ -82,6 +82,23 @@ ARCHFILES=\
 	lib/lzoconf.h lib/lzodefs.h \
 	lib/minilzo.c lib/minilzo.h \
 	\
+	lib/cromfs-hashmap_lzo.hh \
+	lib/cromfs-hashmap_lzo.cc \
+	lib/cromfs-hashmap_sparsefile.hh \
+	lib/cromfs-hashmap_sparsefile.cc \
+	lib/cromfs-hashmap_googlesparse.hh \
+	lib/cromfs-hashmap_googlesparse.cc \
+	\
+	lib/google/dense_hash_map \
+	lib/google/dense_hash_set \
+	lib/google/sparse_hash_map \
+	lib/google/sparse_hash_set \
+	lib/google/sparsehash/densehashtable.h \
+	lib/google/sparsehash/sparseconfig.h \
+	lib/google/sparsehash/sparsehashtable.h \
+	lib/google/sparsetable \
+	lib/google/type_traits.h \
+	\
 	lib/lzma/C/LzmaDec.c \
 	lib/lzma/C/LzmaDec.h \
 	lib/lzma/C/LzmaEnc.c \
