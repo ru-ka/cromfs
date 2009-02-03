@@ -194,4 +194,4 @@ BlockIndexHashType
 }
 
 
-block_index_type* block_index_global;
+block_index_type* block_index_global = 0;

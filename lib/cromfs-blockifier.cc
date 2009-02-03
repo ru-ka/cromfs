@@ -562,7 +562,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
     block_index.AddRealIndex(plan.crc, blocknum);
 
     /* Also autoindex the block right after this, just in case we get a match */
-    //PredictiveAutoIndex(fblocknum, startoffs+blocksize, blocksize);
+    PredictiveAutoIndex(fblocknum, startoffs+blocksize, blocksize);
 
     return blocknum;
 }
@@ -598,6 +598,14 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
 {
     const cromfs_fblocknum_t fblocknum = plan.fblocknum;
     const AppendInfo& appended         = plan.appended;
+
+    /*
+        DoUpdateBlockIndex may be "false" when called
+        by EvaluateBlockifyOrders() to figure out
+        what happens to fblocks as part of planning.
+
+        In normal conduct, it is "true".
+    */
 
     /* Note: This line may automatically create a new fblock. */
     mkcromfs_fblock& fblock = fblocks[fblocknum];
@@ -700,9 +708,11 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     const cromfs_blocknum_t blocknum = CreateNewBlock(block);
     if(DoUpdateBlockIndex)
     {
-        if(!CreateReusingPlan(&plan.data[0], plan.data.size(), plan.crc, false))
+        if(!TryOptimalOrganization
+        || !CreateReusingPlan(&plan.data[0], plan.data.size(), plan.crc, false))
         {
             // Only add to index if we don't have any existing reusing method for this one
+            // Note: This check only makes sense if TryOptimalOrganization is used.
             block_index.AddRealIndex(plan.crc, blocknum);
         }
     }
@@ -759,9 +769,10 @@ void cromfs_blockifier::TryAutoIndex(
      */
     if(CreateReusingPlan(ptr, bsize, crc, false))
     {
-        /* Already indexed */
+        /* Already indexed, don't autoindex */
         return;
     }
+
     /* Add it to the index */
     cromfs_block_internal match;
     match.define(fblocknum, startoffs);
@@ -849,12 +860,19 @@ void cromfs_blockifier::AddOrder(
 
     order.badness = offset; // a dummy sorting rule at first
 
-    std::fflush(stdout); std::fflush(stderr);
-    const ReusingPlan plan1 = CreateReusingPlan(order.data, order.crc);
-    if(plan1)
+    if(TryOptimalOrganization)
     {
-        order.Write(Execute(plan1, data.size()));
-        return; // Finished, don't need to postpone it.
+        // TryOptimalOrganization can cause that some plans are erroneously
+        // placed using WritePlan instead of ReusingPlan. So we check right
+        // here whether ReusingPlan is in fact possible.
+
+        std::fflush(stdout); std::fflush(stderr);
+        const ReusingPlan plan1 = CreateReusingPlan(order.data, order.crc);
+        if(plan1)
+        {
+            order.Write(Execute(plan1, data.size()));
+            return; // Finished, don't need to postpone it.
+        }
     }
 
     //printf("Adding order crc %08X\n", order.crc);
@@ -894,11 +912,10 @@ ReEvaluate:
     /* Don't parallelize this loop; it will do bad things
      * for compression.
      */
-    for(orderlist_t::iterator j,i = blockify_orders.begin();
+    for(orderlist_t::iterator i = blockify_orders.begin();
         num_handle > 0 && i != blockify_orders.end();
-        i = j, --num_handle)
+        --num_handle)
     {
-        j = i; ++j;
         individual_order& order = *i;
 
         std::fflush(stdout); std::fflush(stderr);
@@ -937,7 +954,7 @@ ReEvaluate:
             order.Write(Execute(plan2));
         }
 
-        blockify_orders.erase(i);
+        i = blockify_orders.erase(i);
 
         if(TryOptimalOrganization >= 2) goto ReEvaluate;
     }

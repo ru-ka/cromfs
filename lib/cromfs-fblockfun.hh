@@ -7,7 +7,6 @@
 #include "mmapping.hh"
 #include "boyermooreneedle.hh"
 #include "datareadbuf.hh"
-#include "autoclosefd.hh"
 #include "append.hh"
 
 #include "threadfun.hh"
@@ -30,13 +29,15 @@ namespace fblock_private
         uint_fast32_t filesize;
         time_t last_access;
         MemMappingType<false> mmapped;
+        int fd; bool fd_writable;
     public:
         fblock_storage()
             : fblock_disk_id(),
               is_compressed(false),
               filesize(0),
               last_access(0),
-              mmapped()
+              mmapped(),
+              fd(-1), fd_writable()
         {
             static int disk_id = 0;
             fblock_disk_id = disk_id++;
@@ -47,10 +48,10 @@ namespace fblock_private
               is_compressed(false),
               filesize(0),
               last_access(0),
-              mmapped()
+              mmapped(),
+              fd(-1), fd_writable()
         {
             mmapped.Unmap();
-
             Check_Existing_File();
         }
 
@@ -65,6 +66,7 @@ namespace fblock_private
         void Delete()
         {
             Unmap();
+            Close(false);
             ::unlink(getfn().c_str());
             filesize = 0;
         }
@@ -143,12 +145,13 @@ namespace fblock_private
         void Unmap() { mmapped.Unmap(); }
         void Remap()
         {
-            Unmap();
-            if(is_compressed) return;
+            EnsureOpenFor(true);
 
-            const autoclosefd fd(open(getfn().c_str(), O_RDWR | O_LARGEFILE));
-            if(fd >= 0) RemapFd(fd);
-            // fd will be automcally closed.
+            if(fd >= 0 && !is_compressed)
+            {
+                Unmap();
+                RemapFd(fd);
+            }
         }
         uint_fast32_t size()
         {
@@ -158,8 +161,24 @@ namespace fblock_private
 
         time_t get_last_access() const { return last_access; }
 
+        bool Close(bool may_mmap = true)
+        {
+            if(fd >= 0)
+            {
+                if(may_mmap)
+                    EnsureProperlyMapped();
+                close(fd);
+                return fd = -1;
+            }
+            return false;
+        }
+
     private:
         void RemapFd(int fd) { mmapped.SetMap(fd, 0, filesize); }
+
+        void EnsureOpenFor(bool writing, bool create_if_absent = false);
+
+        bool EnsureProperlyMapped();
 
     public:
         typedef uint_fast32_t undo_t;
@@ -205,6 +224,7 @@ public:
     void Unmap() { storage.Unmap(); }
     void Remap() { storage.Remap(); }
     void Delete() { storage.Delete(); }
+    bool Close()  { return storage.Close(); }
 
     MutexType& GetMutex() const { return lock; } // For use with ScopedLocks.
 
@@ -286,9 +306,16 @@ public:
     void restore_backup(const undo_t& e);
 
     void FreeSomeResources();
+    bool CloseSome();
 
 private:
     std::vector<mkcromfs_fblock> fblocks;
 };
 
 extern void set_fblock_name_pattern(const std::string& pat);
+
+/* This global pointer to mkcromfs_fblockset is required
+ * so that individual fblocks can ask fellow fblocks to
+ * close their lingering fds.
+ */
+extern mkcromfs_fblockset* fblockset_global;

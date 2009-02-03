@@ -42,6 +42,26 @@ public:
                       fd, pos_aligned_down);
     }
 
+    void ReMapIfNecessary(int fd, uint_fast64_t pos, uint_fast64_t count)
+    {
+        uint_fast64_t pos_aligned_down = pos & ~UINT64_C(4095);
+        size_t new_align_factor = pos - pos_aligned_down;
+        size_t new_size         = count + align_factor;
+
+        if(new_align_factor != align_factor
+        || new_size         != size)
+        {
+            ptr = mremap(ptr, size, new_size, MREMAP_MAYMOVE);
+            //fprintf(stderr, "did remap %lu->%lu\n", size, new_size);
+
+            align_factor = new_align_factor;
+            size         = new_size;
+        }
+        /*else
+            fprintf(stderr, "%lu=%lu, not remapping\n",
+                size,new_size);*/
+    }
+
     void Unmap()
     {
         if(ptr != notmapped)

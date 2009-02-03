@@ -24,6 +24,7 @@ public:
          * the case of emergency.
          */
         block_index_global = &block_index;
+        fblockset_global   = &fblocks;
     }
     ~cromfs_blockifier()
     {

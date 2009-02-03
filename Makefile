@@ -53,7 +53,6 @@ ARCHFILES=\
 	lib/staticallocator.hh \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
-	lib/autoclosefd.hh \
 	lib/bucketcontainer.hh \
 	lib/datacache.hh \
 	lib/mmapping.hh \

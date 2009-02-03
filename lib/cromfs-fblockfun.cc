@@ -6,7 +6,6 @@
 #include "boyermooreneedle.hh"
 #include "longfilewrite.hh"
 #include "longfileread.hh"
-#include "autoclosefd.hh"
 #include "assert++.hh"
 #include "lzma.hh"
 
@@ -33,12 +32,51 @@ const std::string fblock_storage::getfn() const
     return fblock_name_pattern + Buf;
 }
 
+void fblock_storage::EnsureOpenFor(bool writing, bool create_if_absent)
+{
+    if(fd >= 0)
+    {
+        if(!(writing && !fd_writable))
+            return;
+        Close();
+    }
+    int flags = O_LARGEFILE
+                | (writing ? O_RDWR : O_RDONLY)
+                | (create_if_absent ? O_CREAT : 0);
+retry:
+    fd = open(getfn().c_str(), flags, 0644);
+    if(fd < 0 && errno == ENFILE)
+    {
+        // Too many open files?
+        // Ask kindly a few of our fellow fblocks to close their fds,
+        // and try again.
+        if(fblockset_global->CloseSome())
+        {
+            goto retry;
+        }
+    }
+    fd_writable = writing;
+}
+
+bool fblock_storage::EnsureProperlyMapped()
+{
+    if(!mmapped)
+    {
+        if(fd < 0) return false;
+        mmapped.SetMap(fd, 0, filesize);
+    }
+    else
+    {
+        mmapped.ReMapIfNecessary(fd, 0, filesize);
+    }
+    return mmapped;
+}
+
 void fblock_storage::Check_Existing_File()
 {
     Unmap();
 
-    const autoclosefd fd(open(getfn().c_str(), O_RDONLY | O_LARGEFILE));
-
+    EnsureOpenFor(false);
     if(fd < 0)
     {
         filesize = 0;
@@ -76,21 +114,22 @@ void fblock_storage::put_raw(const std::vector<unsigned char>& raw)
 
     is_compressed = false;
 
-    size_t res=0;
-    {autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
-     if(!!fp)
-      res = std::fwrite(&raw[0], 1, filesize=raw.size(), fp);
-    }
+    EnsureOpenFor(true, true);
 
-    if(res != raw.size())
+    try
     {
-        std::fprintf(stderr, "fwrite(%s,decompressed): Possible trouble: res=%d, should be %d -- trying to write compressed version to save space\n",
-            getfn().c_str(), (int)res, (int)raw.size());
+        ( LongFileWrite(fd, 0, filesize=raw.size(), &raw[0], false) );
+        ftruncate(fd, filesize);
+    }
+    catch(int err)
+    {
+        std::fprintf(stderr, "pwrite(%s,decompressed): Possible trouble -- trying to write compressed version to save space\n",
+            getfn().c_str());
+        if(errno) perror("pwrite");
+
         // Possibly, out of disk space? Try to save compressed instead.
         put_compressed(LZMACompress(raw));
     }
-    /* Remap(); */
-
     last_access = std::time(NULL);
 }
 
@@ -103,16 +142,18 @@ void fblock_storage::put_compressed(const std::vector<unsigned char>& compressed
 
 TryAgain:;
 
-    size_t res=0;
-    {autoclosefp fp(std::fopen(getfn().c_str(), "wb"));
-     if(!!fp)
-      res = std::fwrite(&compressed[0], 1, filesize=compressed.size(), fp);
-    }
+    EnsureOpenFor(true, true);
 
-    if(res != filesize)
+    try
     {
-        std::fprintf(stderr, "fwrite(%s,compressed): Trouble: res=%d, should be %d\n",
-            getfn().c_str(), (int)res, (int)filesize);
+        ( LongFileWrite(fd, 0, filesize=compressed.size(), &compressed[0], false) );
+        ftruncate(fd, compressed.size());
+    }
+    catch(int err)
+    {
+        std::fprintf(stderr, "fwrite(%s,compressed): Trouble writing %d bytes\n",
+            getfn().c_str(), (int)filesize);
+
         if(block_index_global->EmergencyFreeSpace())
         {
             fprintf(stderr, "Trying fwrite again\n");
@@ -134,10 +175,9 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
     {
         /* Not compressed. */
         /* Ok. Ensure it's mmapped (mmapping is handy) */
-        if(!mmapped) Remap();
-        /* If mmapping worked, we're almost done. */
-        if(mmapped)
+        if(EnsureProperlyMapped())
         {
+            /* If mmapping worked, we're almost done. */
             /* If the caller wants raw, just copy it. */
             if(raw) raw->assign(mmapped.get_ptr(), mmapped.get_ptr()+filesize);
 
@@ -156,7 +196,7 @@ void fblock_storage::get(std::vector<unsigned char>* raw,
     }
 
     /* The data could not be mmapped. So we have to read a copy from the file. */
-    const autoclosefd fd(open(getfn().c_str(), O_RDONLY | O_LARGEFILE));
+    EnsureOpenFor(false);
 
     if(fd < 0)
     {
@@ -221,8 +261,6 @@ void fblock_storage::put_appended_raw(
 {
     last_access = std::time(NULL);
 
-    Unmap();
-
     const uint32_t cap = append.AppendBaseOffset + datasize;
     if(cap <= append.OldSize)
     {
@@ -246,8 +284,8 @@ void fblock_storage::put_appended_raw(
         /* We cannot append into compressed data. Must decompress it first. */
 
         std::vector<unsigned char> buf = get_raw();
-        int open_flags = O_RDWR /*| O_CREAT*/ | O_LARGEFILE;
-        autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
+        EnsureOpenFor(true);
+
         if(fd < 0)
         {
             std::perror(getfn().c_str());
@@ -273,18 +311,14 @@ void fblock_storage::put_appended_raw(
 
         filesize = cap;
 
-        RemapFd(fd);
-
-        // fd will be automatically closed.
         return;
     }
 
     /* not truncating */
     const uint32_t added_length = append.AppendedSize - append.OldSize;
 
-    int open_flags = O_RDWR | O_LARGEFILE;
-    if(append.OldSize == 0) open_flags |= O_CREAT;
-    autoclosefd fd(open(getfn().c_str(), open_flags, 0644));
+    EnsureOpenFor(true, append.OldSize == 0);
+
     if(fd < 0)
     {
         std::perror(getfn().c_str());
@@ -316,8 +350,6 @@ TryAgain:
     }
     filesize = append.AppendedSize;
     //ftruncate(fd, filesize); //-- what use is this for?
-    RemapFd(fd);
-    // fd will be automatically closed.
 }
 
 void fblock_storage::InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size)
@@ -341,8 +373,8 @@ void fblock_storage::InitDataReadBuffer(
             put_raw(rawdata);
             if(!is_compressed)
             {
-                if(!mmapped) Remap();
-                if(mmapped) goto UseMMapping;
+                if(EnsureProperlyMapped())
+                    goto UseMMapping;
             }
         }
 
@@ -360,8 +392,7 @@ void fblock_storage::InitDataReadBuffer(
 
         if(req_offset > size) req_offset = size;
 
-        if(!mmapped) Remap();
-        if(mmapped)
+        if(EnsureProperlyMapped())
         {
     UseMMapping:
             //fprintf(stderr, "Using mmap\n"); fflush(stderr);
@@ -373,7 +404,8 @@ void fblock_storage::InitDataReadBuffer(
         {
             //fprintf(stderr, "Has to read\n"); fflush(stderr);
 
-            const autoclosefd fd(open(getfn().c_str(), O_RDWR | O_LARGEFILE));
+            EnsureOpenFor(true);
+
             if(fd < 0)
             {
                 /* File not found. Prevent null pointer, load a dummy buffer. */
@@ -499,13 +531,34 @@ void mkcromfs_fblockset::FreeSomeResources()
             {
                 fblock.put_compressed(LZMACompress(fblock.get_raw()));
                 do_randomcompress = false;
+
+                fblock.Close();
                 continue;
             }
 
             fblock.Unmap();
+            fblock.Close();
         }
     }
 
     if(do_randomcompress)
         counter = 0; /* postpone it if we cannot comply */
 }
+
+bool mkcromfs_fblockset::CloseSome()
+{
+    std::vector<size_t> fblocknums(fblocks.size());
+    for(size_t a=0; a<fblocks.size(); ++a)
+        fblocknums[a]=a;
+    std::sort(fblocknums.begin(), fblocknums.end(), OrderByAccessTime(fblocks) );
+
+    for(size_t a=0; a<fblocks.size(); ++a)
+    {
+        mkcromfs_fblock& fblock = fblocks[fblocknums[a]];
+        if(fblock.Close())
+            return true;
+    }
+    return false;
+}
+
+mkcromfs_fblockset* fblockset_global = 0;
