@@ -212,8 +212,11 @@ void block_index_type::
                          decombuf, &destlen,
                          wrkmem);
 
-        std::vector<unsigned char> replvec(decombuf, decombuf+destlen);
-        buckets[dirtybucketno].swap(replvec);
+        {std::vector<unsigned char> replvec;
+        buckets[dirtybucketno].swap(replvec);}
+        
+        {std::vector<unsigned char> replvec(decombuf, decombuf+destlen);
+        buckets[dirtybucketno].swap(replvec);}
 #else
         buckets[dirtybucketno] = dirtybucket;
 #endif

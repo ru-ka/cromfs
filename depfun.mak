@@ -69,7 +69,7 @@ git_release: ${ARCHFILES} ;
 	 # Limit the index to those files we publish
 	 #
 	 git rm -fr --cached '*' &> /dev/null
-	 git add --ignore-errors ${ARCHFILES} ${EXTRA_ARCHFILES} depfun.mak Makefile
+	 git add -f --ignore-errors ${ARCHFILES} ${EXTRA_ARCHFILES} depfun.mak Makefile
 	 @if [ -f docmaker.php ]; then php -q docmaker.php ${ARCHNAME} > README.html; git add docmaker.php README.html; fi
 	 @if [ -f makediff.php ]; then git add makediff.php; fi
 	 #
@@ -106,7 +106,7 @@ git_test_release: ${ARCHFILES}
 	 # Limit the index to those files we publish
 	 #
 	 git rm -fr --cached '*' &> /dev/null
-	 git add --ignore-errors ${ARCHFILES} ${EXTRA_ARCHFILES} depfun.mak Makefile
+	 git add -f --ignore-errors ${ARCHFILES} ${EXTRA_ARCHFILES} depfun.mak Makefile
 	 @if [ -f docmaker.php ]; then php -q docmaker.php ${ARCHNAME} > README.html; git add docmaker.php README.html; fi
 	 @if [ -f makediff.php ]; then git add makediff.php; fi
 	 #
