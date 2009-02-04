@@ -11,24 +11,33 @@ template<typename HashType, typename T>
 class CompressedHashLayer
 {
 public:
-    CompressedHashLayer();
+    CompressedHashLayer(uint_fast64_t max = (UINT64_C(1) << 32));
+    ~CompressedHashLayer();
 
     void extract(HashType crc, T& result)       const;
     void     set(HashType crc, const T& value);
     void   unset(HashType crc);
     bool     has(HashType crc) const;
 
-    void Close() {}
-    void Clone() {}
+    void Merge(const CompressedHashLayer& b,
+               uint_fast32_t target_offset);
+
+    uint_fast64_t   GetLength() const;
+    static unsigned GetGranularity() { return n_per_bucket; }
+    void Resize(uint_fast64_t length);
+
 private:
-    static const unsigned n_per_bucket = 0x10000;
-    static const unsigned n_buckets    = (UINT64_C(1) << 32) / n_per_bucket;
+    CompressedHashLayer(const CompressedHashLayer&);
+    void operator=(const CompressedHashLayer&);
+private:
+    unsigned n_buckets;
+    static const unsigned n_per_bucket = 0x4000;
     static const unsigned bucketsize   = n_per_bucket * sizeof(T);
 
-    rangeset<HashType, StaticAllocator<HashType> > hashbits;
-    //rangeset<HashType, StaticAllocator<HashType> > delbits;
+    typedef rangeset<HashType, StaticAllocator<HashType> > hashbits_t;
+    hashbits_t hashbits;
 
-    std::vector<unsigned char> buckets[ n_buckets ];
+    std::vector<unsigned char>* buckets;
     std::vector<unsigned char> dirtybucket;
     size_t dirtybucketno;
     enum { none, ro, rw } dirtystate;
@@ -36,6 +45,13 @@ private:
 
     void flushdirty();
     void load(size_t bucketno);
+    void set_no_update_hashbits(HashType crc, const T& value);
+
+private:
+    static inline size_t calc_n_buckets(uint_fast64_t extent)
+    {
+        return (extent + n_per_bucket-1) / n_per_bucket;
+    }
 };
 
 #endif

@@ -22,11 +22,9 @@ public:
     void   unset(HashType crc);
     bool     has(HashType crc) const;
 
-    void Close() {}
-    void Clone() {}
 private:
 #ifdef OPTIMAL_GOOGLE_SPARSETABLE
-    typedef google::sparsetable<T, 0x8000, uint_fast64_t> index_type;
+    typedef google::sparsetable<T, 0x1000, uint_fast64_t> index_type;
 #else
     typedef google::sparse_hash_map<
         HashType,

@@ -11,13 +11,12 @@ private:
     enum { RecSize = sizeof(T) };
 public:
     CacheFile();
+    ~CacheFile();
+
     void extract(HashType crc, T& result)       const;
     void     set(HashType crc, const T& value);
     void   unset(HashType crc);
     bool     has(HashType crc) const;
-
-    void Clone();
-    void Close();
 
 private:
     explicit CacheFile(const std::string& np);

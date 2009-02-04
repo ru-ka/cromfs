@@ -87,6 +87,8 @@ ARCHFILES=\
 	lib/cromfs-hashmap_sparsefile.cc \
 	lib/cromfs-hashmap_googlesparse.hh \
 	lib/cromfs-hashmap_googlesparse.cc \
+	lib/cromfs-hashmap_lzo_sparse.hh \
+	lib/cromfs-hashmap_lzo_sparse.cc \
 	\
 	lib/google/dense_hash_map \
 	lib/google/dense_hash_set \

@@ -27,6 +27,7 @@ CacheFile<HashType,T>::CacheFile()
         fds[a] = -1;
 }
 
+/*
 template<typename HashType, typename T>
 void CacheFile<HashType,T>::Clone()
 {
@@ -37,6 +38,7 @@ void CacheFile<HashType,T>::Clone()
             if(fds[a] >= 0)
                 fds[a] = dup(fds[a]);
 }
+*/
 
 template<typename HashType, typename T>
 void CacheFile<HashType,T>::GetPos(HashType crc, int& fd, uint_fast64_t& pos) const
@@ -111,8 +113,9 @@ void CacheFile<HashType,T>::GetPos(HashType crc, int& fd, uint_fast64_t& pos)
 }
 
 template<typename HashType, typename T>
-void CacheFile<HashType,T>::Close()
+CacheFile<HashType,T>::~CacheFile()
 {
+//void CacheFile<HashType,T>::Close()
     if(LargeFileOk)
         close(fds[0]);
     else
@@ -217,18 +220,20 @@ bool
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
 typedef CacheFile<BlockIndexHashType,cromfs_blocknum_t> ri;
 template ri::CacheFile();
+template ri::~CacheFile();
 template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
 template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
 //template void ri::unset(BlockIndexHashType);
 template bool ri::has(BlockIndexHashType)const;
-template void ri::Close();
-template void ri::Clone();
+//template void ri::Close();
+//template void ri::Clone();
 
 typedef CacheFile<BlockIndexHashType,cromfs_block_internal> ai;
 template ai::CacheFile();
+template ai::~CacheFile();
 template void ai::extract(BlockIndexHashType,cromfs_block_internal&) const;
 template void ai::set(BlockIndexHashType,const cromfs_block_internal&);
 template void ai::unset(BlockIndexHashType);
 template bool ai::has(BlockIndexHashType)const;
-template void ai::Close();
-template void ai::Clone();
+//template void ai::Close();
+//template void ai::Clone();

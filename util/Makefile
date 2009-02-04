@@ -45,6 +45,7 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/cromfs-hashmap_lzo.o \
 	   ../lib/cromfs-hashmap_sparsefile.o \
 	   ../lib/cromfs-hashmap_googlesparse.o \
+	   ../lib/cromfs-hashmap_lzo_sparse.o \
 	   ../lib/minilzo.o
 
 OBJS_UN += unmkcromfs.o ../cromfs.o \

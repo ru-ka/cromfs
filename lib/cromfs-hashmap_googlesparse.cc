@@ -66,8 +66,6 @@ template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
 template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
 //template void ri::unset(BlockIndexHashType);
 template bool ri::has(BlockIndexHashType)const;
-//template void ri::Close();
-//template void ri::Clone();
 
 typedef GoogleSparseMap<BlockIndexHashType,cromfs_block_internal> ai;
 template ai::GoogleSparseMap();
@@ -76,5 +74,3 @@ template void ai::extract(BlockIndexHashType,cromfs_block_internal&) const;
 template void ai::set(BlockIndexHashType,const cromfs_block_internal&);
 template void ai::unset(BlockIndexHashType);
 template bool ai::has(BlockIndexHashType)const;
-//template void ai::Close();
-//template void ai::Clone();

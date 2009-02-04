@@ -52,6 +52,13 @@ void CompressedHashLayer<HashType,T>::extract(HashType crc, T& result) const
 template<typename HashType, typename T>
 void CompressedHashLayer<HashType,T>::set(HashType crc, const T& result)
 {
+    set_no_update_hashbits(crc, result);
+    hashbits.set(crc, crc+1);
+}
+
+template<typename HashType, typename T>
+void CompressedHashLayer<HashType,T>::set_no_update_hashbits(HashType crc, const T& result)
+{
     const
     size_t bucket = crc / n_per_bucket,
            bucketpos = (crc % n_per_bucket) * sizeof(T);
@@ -62,8 +69,6 @@ void CompressedHashLayer<HashType,T>::set(HashType crc, const T& result)
         dirtybucket.resize(bucketpos + sizeof(T));
 
     std::memcpy(&dirtybucket[bucketpos], &result, sizeof(T));
-    hashbits.set(crc, crc+1);
-    //delbits.erase(crc);
     dirtystate = rw;
 }
 
@@ -102,17 +107,24 @@ void CompressedHashLayer<HashType,T>::unset(HashType crc)
         }
     }
     hashbits.erase(crc);
-    //delbits.set(crc, crc+1);
 }
 
 template<typename HashType, typename T>
-CompressedHashLayer<HashType,T>::CompressedHashLayer()
-: hashbits(), //delbits(),
+CompressedHashLayer<HashType,T>::CompressedHashLayer(uint_fast64_t max)
+: n_buckets( calc_n_buckets(max) ),
+  hashbits(),
+  buckets(new std::vector<unsigned char> [n_buckets]),
   dirtybucket(),
   dirtybucketno(n_buckets),
   dirtystate(none),
   lock()
 {
+}
+
+template<typename HashType, typename T>
+CompressedHashLayer<HashType,T>::~CompressedHashLayer()
+{
+    delete[] buckets;
 }
 
 template<typename HashType, typename T>
@@ -122,29 +134,6 @@ void CompressedHashLayer<HashType,T>::flushdirty()
     {
         size_t actual_bucketsize = dirtybucket.size();
 #if 1
-        /*
-        typedef rangeset<HashType, StaticAllocator<HashType> > rtype;
-        rtype intersection(delbits);
-        intersection.erase_before( (dirtybucketno  ) * n_per_bucket );
-        intersection.erase_after(  (dirtybucketno+1) * n_per_bucket );
-
-        for(typename rtype::const_iterator i = intersection.begin(); i != intersection.end(); ++i)
-        {
-            const size_t bucketpos1 = (i->lower % n_per_bucket) * sizeof(T);
-            const size_t bucketpos2 = (i->upper % n_per_bucket) * sizeof(T);
-            if(bucketpos1 < dirtybucket.size())
-            {
-                size_t nbytes = bucketpos2-bucketpos1;
-                if(bucketpos1 + nbytes > dirtybucket.size())
-                    nbytes = dirtybucket.size() - bucketpos1;
-
-                std::memset(&dirtybucket[bucketpos1], 0, nbytes);
-           }
-        }
-        delbits.erase((dirtybucketno  ) * n_per_bucket,
-                      (dirtybucketno+1) * n_per_bucket);
-        */
-
         const size_t decom_max = bucketsize+bucketsize/16+64+3;
         static unsigned char decombuf[decom_max];
         lzo_uint destlen = decom_max;
@@ -199,21 +188,66 @@ bool CompressedHashLayer<HashType,T>::has(HashType crc) const
     return hashbits.find(crc) != hashbits.end();
 }
 
+template<typename HashType, typename T>
+uint_fast64_t CompressedHashLayer<HashType,T>::GetLength() const
+{
+    return n_buckets * uint_fast64_t(n_per_bucket);
+}
+
+template<typename HashType, typename T>
+void CompressedHashLayer<HashType,T>::Resize(uint_fast64_t length)
+{
+    uint_fast64_t new_n_buckets = calc_n_buckets(length);
+    if(new_n_buckets > n_buckets)
+    {
+        std::vector<unsigned char>* new_buckets =
+            new std::vector<unsigned char> [new_n_buckets];
+        for(size_t a=0; a<n_buckets; ++a)
+            new_buckets[a].swap(buckets[a]);
+        delete[] buckets;
+        buckets   = new_buckets;
+        n_buckets = new_n_buckets;
+    }
+}
+
+template<typename HashType, typename T>
+void CompressedHashLayer<HashType,T>::Merge
+    (const CompressedHashLayer& b,
+     uint_fast32_t target_offset)
+{
+    Resize(target_offset + b.GetLength());
+    T tmp;
+    for(typename hashbits_t::const_iterator
+        i = b.hashbits.begin();
+        i != b.hashbits.end();
+        ++i)
+    {
+        hashbits.set( i->lower + target_offset, i->upper + target_offset);
+        for(HashType pos = i->lower; pos != i->upper; ++pos)
+        {
+            b.extract(pos, tmp);
+            set_no_update_hashbits(target_offset + pos, tmp);
+        }
+    }
+}
+
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
 typedef CompressedHashLayer<BlockIndexHashType,cromfs_blocknum_t> ri;
-template ri::CompressedHashLayer();
+template ri::CompressedHashLayer(uint_fast64_t);
+template ri::~CompressedHashLayer();
 template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
 template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
 //template void ri::unset(BlockIndexHashType);
 template bool ri::has(BlockIndexHashType)const;
-//template void ri::Close();
-//template void ri::Clone();
+template uint_fast64_t ri::GetLength()const;
+template void ri::Merge(const ri&, uint_fast32_t);
 
 typedef CompressedHashLayer<BlockIndexHashType,cromfs_block_internal> ai;
-template ai::CompressedHashLayer();
+template ai::CompressedHashLayer(uint_fast64_t);
+template ai::~CompressedHashLayer();
 template void ai::extract(BlockIndexHashType,cromfs_block_internal&) const;
 template void ai::set(BlockIndexHashType,const cromfs_block_internal&);
 template void ai::unset(BlockIndexHashType);
 template bool ai::has(BlockIndexHashType)const;
-//template void ai::Close();
-//template void ai::Clone();
+template uint_fast64_t ai::GetLength()const;
+template void ai::Merge(const ai&, uint_fast32_t);

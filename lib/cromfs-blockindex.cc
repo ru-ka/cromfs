@@ -3,22 +3,25 @@
 #include "util.hh" // For ReportSize
 
 #include "cromfs-hashmap_lzo.hh"
-#include "cromfs-hashmap_googlesparse.hh"
+#include "cromfs-hashmap_lzo_sparse.hh"
+//#include "cromfs-hashmap_googlesparse.hh"
 
 #include <cstring>
 #include <sstream>
 
 class block_index_type::realindex_layer
-    : public GoogleSparseMap    <BlockIndexHashType, cromfs_blocknum_t>
+//    : public GoogleSparseMap    <BlockIndexHashType, cromfs_blocknum_t>
+    : public CompressedHashLayer_Sparse<BlockIndexHashType, cromfs_blocknum_t>
 {
 };
 
 class block_index_type::autoindex_layer
-#ifdef OPTIMAL_GOOGLE_SPARSETABLE
-    : public GoogleSparseMap    <BlockIndexHashType, cromfs_block_internal>
-#else
-    : public CompressedHashLayer<BlockIndexHashType, cromfs_block_internal>
-#endif
+//#ifdef OPTIMAL_GOOGLE_SPARSETABLE
+//    : public GoogleSparseMap    <BlockIndexHashType, cromfs_block_internal>
+//#else
+//    : public CompressedHashLayer<BlockIndexHashType, cromfs_block_internal>
+//#endif
+    : public CompressedHashLayer_Sparse<BlockIndexHashType, cromfs_block_internal>
 {
 };
 
