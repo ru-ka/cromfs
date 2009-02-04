@@ -3,8 +3,12 @@
 
 #include "fsballocator.hh"
 
-#include <google/sparse_hash_map>
-
+#if 1
+# include <google/sparsetable>
+# define OPTIMAL_GOOGLE_SPARSETABLE
+#else
+# include <google/sparse_hash_map>
+#endif
 
 template<typename HashType, typename T>
 class GoogleSparseMap
@@ -21,6 +25,9 @@ public:
     void Close() {}
     void Clone() {}
 private:
+#ifdef OPTIMAL_GOOGLE_SPARSETABLE
+    typedef google::sparsetable<T, 0x8000, uint_fast64_t> index_type;
+#else
     typedef google::sparse_hash_map<
         HashType,
         T,
@@ -28,7 +35,7 @@ private:
         std::equal_to<HashType>,
         FSBAllocator<T>
     > index_type;
-
+#endif
     index_type index;
 };
 

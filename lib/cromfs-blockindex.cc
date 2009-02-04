@@ -14,7 +14,11 @@ class block_index_type::realindex_layer
 };
 
 class block_index_type::autoindex_layer
+#ifdef OPTIMAL_GOOGLE_SPARSETABLE
+    : public GoogleSparseMap    <BlockIndexHashType, cromfs_block_internal>
+#else
     : public CompressedHashLayer<BlockIndexHashType, cromfs_block_internal>
+#endif
 {
 };
 

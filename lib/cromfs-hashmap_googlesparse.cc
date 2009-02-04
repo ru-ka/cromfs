@@ -5,7 +5,11 @@
 
 template<typename HashType, typename T>
 GoogleSparseMap<HashType,T>::GoogleSparseMap()
+#ifdef OPTIMAL_GOOGLE_SPARSETABLE
+    : index(UINT64_C(0x100000000))
+#else
     : index()
+#endif
 {
 }
 
@@ -17,15 +21,23 @@ GoogleSparseMap<HashType,T>::~GoogleSparseMap()
 template<typename HashType, typename T>
 void GoogleSparseMap<HashType,T>::extract(HashType crc, T& result) const
 {
+#ifdef OPTIMAL_GOOGLE_SPARSETABLE
+    result = index.get(crc);
+#else
     typename index_type::const_iterator i = index.find(crc);
     if(i != index.end())
         result = i->second;
+#endif
 }
 
 template<typename HashType, typename T>
 void GoogleSparseMap<HashType,T>::set(HashType crc, const T& value)
 {
+#ifdef OPTIMAL_GOOGLE_SPARSETABLE
+    index.set(crc, value);
+#else
     index.insert(std::make_pair(crc, value));
+#endif
 }
 
 template<typename HashType, typename T>
@@ -37,7 +49,11 @@ void GoogleSparseMap<HashType,T>::unset(HashType crc)
 template<typename HashType, typename T>
 bool GoogleSparseMap<HashType,T>::has(HashType crc) const
 {
+#ifdef OPTIMAL_GOOGLE_SPARSETABLE
+    return index.test(crc);
+#else
     return index.find(crc) != index.end();
+#endif
 }
 
 

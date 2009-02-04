@@ -1061,7 +1061,8 @@ inline void swap(sparsegroup<T,GROUP_SIZE> &x, sparsegroup<T,GROUP_SIZE> &y) {
 // ---------------------------------------------------------------------------
 
 
-template <class T, u_int16_t GROUP_SIZE = DEFAULT_SPARSEGROUP_SIZE>
+template <class T, u_int16_t GROUP_SIZE = DEFAULT_SPARSEGROUP_SIZE,
+          typename sz_type = size_t>
 class sparsetable {
  public:
   // Basic types
@@ -1073,7 +1074,7 @@ class sparsetable {
   typedef table_element_adaptor<sparsetable<T, GROUP_SIZE> > element_adaptor;
   typedef value_type &reference;
   typedef const value_type &const_reference;
-  typedef size_t size_type;
+  typedef sz_type size_type;
   typedef ptrdiff_t difference_type;
   typedef STL_NAMESPACE::reverse_iterator<const_iterator> const_reverse_iterator;
   typedef STL_NAMESPACE::reverse_iterator<iterator> reverse_iterator;
@@ -1155,16 +1156,17 @@ class sparsetable {
     return i / GROUP_SIZE;
   }
   GroupsReference which_group(size_type i) {
-    return groups[group_num(i)];
+    return *groups[group_num(i)];
   }
   GroupsConstReference which_group(size_type i) const {
-    return groups[group_num(i)];
+    return *groups[group_num(i)];
   }
 
  public:
   // Constructors -- default, normal (when you specify size), and copy
   sparsetable(size_type sz = 0)
     : groups(num_groups(sz)), table_size(sz), num_buckets(0) { }
+  
   // We'll can get away with using the default copy constructor,
   // and default destructor, and hence the default operator=.  Huzzah!
 
@@ -1196,15 +1198,24 @@ class sparsetable {
 
   // OK, we'll let you resize one of these puppies
   void resize(size_type new_size) {
-    groups.resize(num_groups(new_size));
+    
+    size_type new_grpcount = num_groups(new_size);
+    for(size_type o=groups.size(); o>new_grpcount; )
+      delete groups[--o];
+    
+    groups.resize(new_grpcount);
+    
+    
     if ( new_size < table_size) {   // lower num_buckets, clear last group
-      if ( pos_in_group(new_size) > 0 )     // need to clear inside last group
-        groups.back().erase(groups.back().begin() + pos_in_group(new_size),
-                            groups.back().end());
+      if ( pos_in_group(new_size) > 0
+       &&  groups.back() )     // need to clear inside last group
+        groups.back()->erase(groups.back()->begin() + pos_in_group(new_size),
+                             groups.back()->end());
       num_buckets = 0;                       // refigure # of used buckets
       GroupsConstIterator group;
       for ( group = groups.begin(); group != groups.end(); ++group )
-        num_buckets += group->num_nonempty();
+        if (*group)
+          num_buckets += (*group)->num_nonempty();
     }
     table_size = new_size;
   }
@@ -1212,28 +1223,44 @@ class sparsetable {
 
   // We let you see if a bucket is non-empty without retrieving it
   bool test(size_type i) const {
-    return which_group(i).test(pos_in_group(i));
+    GroupsConstReference grp = which_group(i);
+    if(!&grp) return false;
+    return grp.test(pos_in_group(i));
   }
   bool test(iterator pos) const {
-    return which_group(pos.pos).test(pos_in_group(pos.pos));
+    GroupsConstReference grp = which_group(pos.pos);
+    if(!&grp) return false;
+    return grp.test(pos_in_group(pos.pos));
   }
   bool test(const_iterator pos) const {
-    return which_group(pos.pos).test(pos_in_group(pos.pos));
+    GroupsConstReference grp = which_group(pos.pos);
+    if(!&grp) return false;
+    return grp.test(pos_in_group(pos.pos));
   }
 
+  const_reference default_value() const {
+    static value_type defaultval = value_type();
+    return defaultval;
+  }
+  
   // We only return const_references because it's really hard to
   // return something settable for empty buckets.  Use set() instead.
   const_reference get(size_type i) const {
     assert(i < table_size);
-    return which_group(i).get(pos_in_group(i));
+    GroupsConstReference grp = which_group(i);
+    if(!&grp) return default_value();
+    return grp.get(pos_in_group(i));
   }
 
   // TODO(csilvers): make protected + friend element_adaptor
   reference mutating_get(size_type i) {    // fills bucket i before getting
     assert(i < table_size);
-    size_type old_numbuckets = which_group(i).num_nonempty();
-    reference retval = which_group(i).mutating_get(pos_in_group(i));
-    num_buckets += which_group(i).num_nonempty() - old_numbuckets;
+    size_type grpnum = group_num(i);
+    if(!groups[grpnum]) groups[grpnum] = new sparsegroup<value_type,GROUP_SIZE>;
+    GroupsReference grp = groups[grpnum];
+    size_type old_numbuckets = grp.num_nonempty();
+    reference retval = grp.mutating_get(pos_in_group(i));
+    num_buckets += grp.num_nonempty() - old_numbuckets;
     return retval;
   }
 
@@ -1248,21 +1275,35 @@ class sparsetable {
 
   // Needed for hashtables, gets as a nonempty_iterator.  Crashes for empty bcks
   const_nonempty_iterator get_iter(size_type i) const {
+
     assert(test(i));    // how can a nonempty_iterator point to an empty bucket?
+    
+    /* FIXME: constness problem here */
+
+    size_type grpnum = group_num(i);
+    if(!groups[grpnum]) groups[grpnum] = new sparsegroup<value_type,GROUP_SIZE>;
+    GroupsConstReference grp = *groups[grpnum];
+
     return const_nonempty_iterator(
       groups.begin(), groups.end(),
       groups.begin() + group_num(i),
-      (groups[group_num(i)].nonempty_begin() +
-       groups[group_num(i)].pos_to_offset(pos_in_group(i))));
+      (grp.nonempty_begin() +
+       grp.pos_to_offset(pos_in_group(i))));
   }
   // For nonempty we can return a non-const version
   nonempty_iterator get_iter(size_type i) {
+
     assert(test(i));    // how can a nonempty_iterator point to an empty bucket?
+
+    size_type grpnum = group_num(i);
+    if(!groups[grpnum]) groups[grpnum] = new sparsegroup<value_type,GROUP_SIZE>;
+    GroupsReference grp = *groups[grpnum];
+
     return nonempty_iterator(
       groups.begin(), groups.end(),
       groups.begin() + group_num(i),
-      (groups[group_num(i)].nonempty_begin() +
-       groups[group_num(i)].pos_to_offset(pos_in_group(i))));
+      (grp.nonempty_begin() +
+       grp.pos_to_offset(pos_in_group(i))));
   }
 
 
@@ -1270,9 +1311,14 @@ class sparsetable {
   // The trick is to figure out whether we're replacing or inserting anew
   reference set(size_type i, const_reference val) {
     assert(i < table_size);
-    size_type old_numbuckets = which_group(i).num_nonempty();
-    reference retval = which_group(i).set(pos_in_group(i), val);
-    num_buckets += which_group(i).num_nonempty() - old_numbuckets;
+
+    size_type grpnum = group_num(i);
+    if(!groups[grpnum]) groups[grpnum] = new sparsegroup<value_type,GROUP_SIZE>;
+    GroupsReference grp = *groups[grpnum];
+
+    size_type old_numbuckets = grp.num_nonempty();
+    reference retval = grp.set(pos_in_group(i), val);
+    num_buckets += grp.num_nonempty() - old_numbuckets;
     return retval;
   }
 
@@ -1280,9 +1326,14 @@ class sparsetable {
   // "undefining", rather than "clearing".
   void erase(size_type i) {
     assert(i < table_size);
-    size_type old_numbuckets = which_group(i).num_nonempty();
-    which_group(i).erase(pos_in_group(i));
-    num_buckets += which_group(i).num_nonempty() - old_numbuckets;
+
+    size_type grpnum = group_num(i);
+    if(!groups[grpnum]) return;
+    GroupsReference grp = *groups[grpnum];
+
+    size_type old_numbuckets = grp.num_nonempty();
+    grp.erase(pos_in_group(i));
+    num_buckets += grp.num_nonempty() - old_numbuckets;
   }
 
   void erase(iterator pos) {
@@ -1296,6 +1347,7 @@ class sparsetable {
       erase(start_it);
   }
 
+#if 0
 
   // We support reading and writing tables to disk.  We don't store
   // the actual array contents (which we don't know how to store),
@@ -1429,10 +1481,42 @@ class sparsetable {
   bool operator>(const sparsetable& x) const { return x < *this; }
   bool operator>=(const sparsetable& x) const { return !(*this < x); }
 
+#endif
+
+  ~sparsetable()
+  {
+    for(size_t a=0; a<groups.size(); ++a)
+      delete groups[a];
+  }
+  sparsetable(const sparsetable& b)
+    : groups(b.groups), table_size(b.table_size),
+      num_buckets(b.num_buckets)
+  {
+    for(size_t a=0; a<groups.size(); ++a)
+      if(groups[a])
+        groups[a] = new sparsegroup<value_type,GROUP_SIZE> (*groups[a]);
+  }
+  
+  sparsetable& operator=(const sparsetable& b)
+  {
+    if(&b != this)
+    {
+      for(size_t a=0; a<groups.size(); ++a)
+        delete groups[a];
+
+      groups = b.groups;
+      table_size = b.table_size;
+      num_buckets =  b.num_buckets;
+
+      for(size_t a=0; a<groups.size(); ++a)
+        if(groups[a])
+          groups[a] = new sparsegroup<value_type,GROUP_SIZE> (*groups[a]);
+    }
+  }
 
  private:
   // The actual data
-  vector< sparsegroup<value_type, GROUP_SIZE> > groups;  // our list of groups
+  vector< sparsegroup<value_type, GROUP_SIZE>* > groups;  // our list of groups
   size_type table_size;                         // how many buckets they want
   size_type num_buckets;                        // number of non-empty buckets
 };
