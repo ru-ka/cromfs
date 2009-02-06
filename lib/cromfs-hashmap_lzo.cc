@@ -3,6 +3,8 @@
 
 #include "cromfs-hashmap_lzo.hh"
 
+#include <cstring>
+
 template<size_t size>
 struct IsZeroAt
 {

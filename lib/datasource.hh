@@ -74,6 +74,43 @@ private:
     uint_fast64_t pos;
 };
 
+struct datasource_vector_ref: public datasource_t
+{
+    datasource_vector_ref(const std::vector<unsigned char>& vec, const std::string& nam = "")
+        : data(vec), name(nam), pos(0) { }
+
+
+    virtual void rewind(uint_fast64_t p) { pos = p; }
+    virtual const std::string getname() const { return name; }
+    virtual const std::vector<unsigned char> read(uint_fast64_t n)
+    {
+        pos += n;
+        return std::vector<unsigned char>(
+            data.begin() + pos - n,
+            data.begin() + pos);
+    }
+    virtual const std::vector<unsigned char> read(uint_fast64_t n, uint_fast64_t p)
+    {
+        return std::vector<unsigned char>(
+            data.begin() + p,
+            data.begin() + p + n);
+    }
+    virtual void read(DataReadBuffer& buf, uint_fast64_t n)
+    {
+        buf.AssignRefFrom(&data[pos], n);
+        pos += n;
+    }
+    virtual void read(DataReadBuffer& buf, uint_fast64_t n, uint_fast64_t p)
+    {
+        buf.AssignRefFrom(&data[p], n);
+    }
+    virtual uint_fast64_t size() const { return data.size(); }
+private:
+    const std::vector<unsigned char>& data;
+    std::string name;
+    uint_fast64_t pos;
+};
+
 struct datasource_file: public datasource_t
 {
 private:

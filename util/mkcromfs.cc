@@ -213,15 +213,52 @@ namespace cromfs_creator
             { return pathname < b.pathname;
             }
     };
-    typedef std::vector<direntry> dircollection;
+
+#if defined(HAS_READDIR_R) && defined(_OPENMP) && (_OPENMP >= 200805)
+ /*
+  * The different recursion levels of WalkDir_Recursive()
+  * can be multitasked, if the following conditions are met:
+  *
+  *  readdir_r is defined (readdir is not thread-safe)
+  *  We have got OPENMP 3.0 (2.5 does not have "task")
+  */
+
+ #define USE_RECURSIVE_OMP_READDIR
+#else
+ #undef USE_RECURSIVE_OMP_READDIR
+#endif
+
+    class dircollection: public std::vector<direntry>
+    {
+    public:
+        MutexType lock;
+    };
 
     /* Reads the contents of one directory. Put rudimentary dircollection
      * entries into collection. Notably, num_blocks won't be filled yet.
      */
     static void CollectOneDir(const std::string& path, dircollection& collection)
     {
+        std::vector<std::string> dnames;
+
+      {
         DIR* dir = opendir(path.c_str());
         if(!dir) { std::perror(path.c_str()); return; }
+
+    #ifdef USE_RECURSIVE_OMP_READDIR
+      {
+        int dirent_len = offsetof(dirent, d_name) + pathconf(path.c_str(), _PC_NAME_MAX) + 1;
+        std::vector<char> dirent_buf(dirent_len);
+        dirent* dent = 0;
+        while(readdir_r(dir, (dirent*)&dirent_buf[0], &dent)==0 && dent)
+            dnames.push_back(dent->d_name);
+      }
+    #else
+        while(dirent* dent = readdir(dir)) // Note: readdir is not re-entrant
+            dnames.push_back(dent->d_name);
+    #endif
+        closedir(dir);
+      } // scope for dir
 
         direntry ent;
         /* Fields common in all entries: */
@@ -238,12 +275,6 @@ namespace cromfs_creator
          * - num_blocks
          * - needs_blockify
          */
-        std::vector<std::string> dnames;
-        while(dirent* dent = readdir(dir)) // Note: readdir is not re-entrant
-            dnames.push_back(dent->d_name);
-        closedir(dir);
-
-        MutexType CollectionLock;
 
         // using "long" here becase OpenMP 2.5 requires a signed iteration variable
         #pragma omp parallel for firstprivate(ent) schedule(guided)
@@ -269,7 +300,7 @@ namespace cromfs_creator
             else if(S_ISDIR(ent.st.st_mode)) ent.sortkey = DirParseOrder.Dir;
             else ent.sortkey = DirParseOrder.Other;
 
-            ScopedLock lck(CollectionLock);
+            ScopedLock lck(collection.lock);
             collection.push_back(ent);
         }
     }
@@ -293,17 +324,36 @@ namespace cromfs_creator
         // Step 1: Scan the contents of this directory.
         //         Ignore entries which were not wanted (through MatchFile).
 
+    #ifdef USE_RECURSIVE_OMP_READDIR
+        dircollection tmpcollection;
+        CollectOneDir(path, tmpcollection);
+
+        collection.lock.Lock();
+        const size_t collection_begin_pos = collection.size();
+        collection.insert(collection.end(),
+                          tmpcollection.begin(),
+                          tmpcollection.end());
+        const size_t collection_end_pos = collection.size();
+        collection.lock.Unlock();
+    #else
         const size_t collection_begin_pos = collection.size();
         CollectOneDir(path, collection);
         const size_t collection_end_pos = collection.size();
-
+    #endif
+      /*
         // Step 2: Sort the contents of the directory according
         //         to the filename.
-
+        // Is this really useful? Removed for now.
+        {
+    #ifdef USE_RECURSIVE_OMP_READDIR
+        ScopedLock lck(collection.lock);
+    #endif
         MAYBE_PARALLEL_NS::stable_sort(
             &collection[collection_begin_pos],
             &collection[collection_end_pos],
             std::mem_fun_ref(&direntry::CompareName));
+        }
+      */
 
         // Step 3: Read subdirectories and calculate the number of
         //         blocks. Also assign the target for the inode number.
@@ -314,9 +364,19 @@ namespace cromfs_creator
         // span of inode numbers.
         for(size_t p=collection_begin_pos; p<collection_end_pos; ++p)
         {
+        #ifdef USE_RECURSIVE_OMP_READDIR
+          #pragma omp task
+          {
+        #endif
             uint_fast64_t bytesize = 0;
             if(true) // scope
             {
+                #ifdef USE_RECURSIVE_OMP_READDIR
+                // We don't want our references to collection[]
+                // to be moved to other location in RAM unexpectedly.
+                ScopedLock lck(collection.lock);
+                #endif
+
                 /* Scan subdirectory, if one exists. */
                 direntry& ent = collection[p];
                 const struct stat64& st = ent.st;
@@ -330,6 +390,10 @@ namespace cromfs_creator
                     // to it from inside WalkDir_Recursive won't be valid after
                     // the collection gets reallocated.
                     std::string path_copy = ent.pathname;
+
+                #ifdef USE_RECURSIVE_OMP_READDIR
+                    lck.Unlock();
+                #endif
 
                     // Note: If you use OpenMP 3.0 "task" here, you will
                     //       have to change readdir() into readdir_r().
@@ -346,6 +410,10 @@ namespace cromfs_creator
             // a new reference and abandon the current one.
             if(true) // scope
             {
+            #ifdef USE_RECURSIVE_OMP_READDIR
+                ScopedLock lck(collection.lock);
+            #endif
+
                 direntry& ent = collection[p];
                 ent.num_blocks = CalcSizeInBlocks(bytesize, CalcBSIZEfor(ent.pathname));
                 /* This inserts the entry in the directory
@@ -355,7 +423,10 @@ namespace cromfs_creator
                  */
                 ent.inonum = &(result_dirinfo[ent.name] = 0);
             }
-        }
+        #ifdef USE_RECURSIVE_OMP_READDIR
+          } // omp task
+        #endif
+        } // for collection
     }
 
     /* Scans some directory and schedules all the entries
@@ -403,7 +474,17 @@ namespace cromfs_creator
         */
         dircollection collection;
         cromfs_dirinfo root_dirinfo;
+    #ifdef USE_RECURSIVE_OMP_READDIR
+       #pragma omp parallel
+       {
+        #pragma omp single
+        {
+    #endif
         WalkDir_Recursive(path, collection, root_dirinfo); // Step 1.
+    #ifdef USE_RECURSIVE_OMP_READDIR
+       } // omp single
+      } // omp parallel
+    #endif
 
         uint_fast64_t inotab_size = inotab.size(); // Step 2.
 
@@ -457,6 +538,9 @@ namespace cromfs_creator
             collection.end(),
             std::mem_fun_ref(&direntry::CompareSortKey)); // Step 3.
 
+        /* Don't parallelize this loop. Otherwise you'll mess up
+         * the "blockifying order".
+         */
         for(size_t p=0; p<collection.size(); ++p) // Step 4.
         {
             direntry& ent = collection[p];
@@ -661,7 +745,11 @@ namespace cromfs_creator
                         ReportSize(inotab.size()).c_str());
                 }
 
-                // blockify rootdir, write block numbers in raw_root_inode.
+                // blockify all files&dirs, write block numbers in raw_root_inode.
+                std::printf("Inotab spans %p..%p\n",
+                    &inotab[0], &inotab[inotab.size()]);
+                std::printf("Root inode spans %p..%p\n",
+                    &raw_root_inode[headersize], &raw_root_inode[raw_root_inode.size()]);
                 blockifier.FlushBlockifyRequests();
 
                 if(DisplayEndProcess)
@@ -690,7 +778,7 @@ namespace cromfs_creator
                  */
 
                 datasource_t* datasrc =
-                    new datasource_vector(inotab, "inotab");
+                    new datasource_vector_ref(inotab, "inotab");
 
                 PutInodeSize(inotab_inode, datasrc->size());
 
@@ -711,6 +799,8 @@ namespace cromfs_creator
                     inotab_inode.blocksize);
 
                 // blockify inotab, write block numbers in raw_inotab_inode.
+                std::printf("Inotab inode spans %p..%p\n",
+                    &raw_inotab_inode[headersize], &raw_inotab_inode[raw_inotab_inode.size()]);
                 blockifier.FlushBlockifyRequests();
 
                 blockifier.EnablePackedBlocksIfPossible();

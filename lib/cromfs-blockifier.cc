@@ -855,11 +855,6 @@ public:
     typename schedlist::sched_item_t*
         Find(schedlist& sched, uint_fast32_t want_blockno, uint_fast64_t& filepos)
     {
-#if 0
-        const block_where_info& info = where_all[want_blockno];
-        filepos = info.second;
-        return &sched.Get(info.first);
-#endif
         typedef std::vector<uint_least32_t>::const_iterator it;
         it i = std::lower_bound(block_list.begin(), block_list.end(), want_blockno);
         if(i != block_list.end() && *i == want_blockno)
@@ -884,20 +879,13 @@ public:
         block_list.push_back(blocknum);
     }
 private:
-#if 0
-    typedef std::pair<size_t/*scheduleno*/,
-                      uint_least64_t/*offset*/
-                     > block_where_info;
-
-    block_where_info* where_all = new block_where_info[blocks_total];
-    autodealloc_array<block_where_info> autodealloc_whereall(where_all);
-#endif
     std::vector<uint_least32_t/*blocknum*/> block_list/*scheduleno*/;
 };
 
 void cromfs_blockifier::FlushBlockifyRequests()
 {
     // Note: using __gnu_parallel in this sort() will crash the program.
+    // Probably because of autoptr not being threadsafe.
     std::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
 
@@ -917,8 +905,9 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
     if(BlockHashing_Method == BlockHashing_All_Prepass)
     {
-        schedule_cache<schedule_item, 1> schedule_cache(schedule);
         static const char label[] = "Finding identical hashes";
+
+        fprintf(stderr, "Beginning task: %s\n", label);
 
         // Precollect list of duplicate hashes
         hash_seen      = new bitset1p32;
@@ -926,11 +915,15 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
         uint_fast64_t total_done  = 0;
         uint_fast64_t blocks_done = 0;
-        uint_fast64_t last_report_pos = 0;
+        uint_fast64_t last_report_pos = -1048576*4;
 
+        enum { n_hashlocks = 4096 };
+        MutexType hashlock[n_hashlocks+1], displaylock;
+
+        #pragma omp parallel for
         for(size_t a=0; a < schedule.size(); ++a)
         {
-            schedule_item& s = schedule_cache.Get(a);
+            schedule_item& s = schedule[a];
             datasource_t* source  = s.GetDataSource();
             //unsigned char* target = s.GetBlockTarget();
             uint_fast64_t nbytes  = source->size();
@@ -944,11 +937,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
                     (unsigned long long)blocksize);
             }
 
-            enum { n_hashlocks = 256 };
-            MutexType hashlock[n_hashlocks+1], displaylock;
-
-            DataReadBuffer buf;
-            #pragma omp parallel for
+            source->open();
             for(uint_fast64_t offset=0; offset<nbytes; offset += blocksize)
             {
                 if(total_done - last_report_pos >= 1048576*4) // at 4 MB intervals
@@ -980,6 +969,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
               #pragma omp atomic
                 ++blocks_done;
             }
+            source->close();
         }
         DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
     }
@@ -995,8 +985,10 @@ void cromfs_blockifier::FlushBlockifyRequests()
         schedule_cache<schedule_item, 32> schedule_cache(schedule);
         static const char label[] = "Finding identical blocks";
 
+        fprintf(stderr, "Beginning task: %s\n", label);
+
         uint_fast64_t total_done = 0, blocks_done  = 0;
-        uint_fast64_t last_report_pos = 0;
+        uint_fast64_t last_report_pos = -1048576*4;
 
         typedef block_index_stack<newhash_t, uint_least32_t> blocks_list;
         blocks_list blockhashlist;
@@ -1080,14 +1072,17 @@ void cromfs_blockifier::FlushBlockifyRequests()
                         MutexType      identical_lock;
 
                         /*
-                          TODO: Make the identical block selection configurable.
+                          The identical block selection is configurable.
                              Options:
-                               1. Always run identical block check (default)
-                               2. Only run it for blocks consisting entirely
+                              all:
+                                  Always run identical block check (default)
+                              blanks:
+                                  Only run it for blocks consisting entirely
                                   of some particular byte value
-                               3. Never run it (fastest, no block-merging benefits whatsoever)
-
-                               0. Run a pre-pass to find out which hashes might overlap
+                              none:
+                                  Never run it (fastest, no block-merging benefits whatsoever)
+                              prepass:
+                                  Run a pre-pass to find out which hashes might overlap
                                   at all. Maintain two bitmasks:
                                     bitmask_1: This hash has been sighted.
                                     bitmask_2: This hash was already sighted when it was
@@ -1095,7 +1090,6 @@ void cromfs_blockifier::FlushBlockifyRequests()
                                  In the actual pass, add to the hashmap only those hashes
                                  that were marked in bitmask_2.
                         */
-
 
                     #pragma omp parallel
                       {
@@ -1124,7 +1118,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
                             {
                                 if(identical_lock.TryLock())
                                 {
-                                    fprintf(stderr, "... matches block %llu\n", (unsigned long long)other);
+                                    //fprintf(stderr, "... matches block %llu\n", (unsigned long long)other);
                                     identical_list.push_back( std::make_pair(blocks_done, other) );
                                     identical_found = true;
                                     identical_lock.Unlock();
@@ -1163,8 +1157,10 @@ void cromfs_blockifier::FlushBlockifyRequests()
         schedule_cache<schedule_item, 32> schedule_cache(schedule);
         static const char label[] = "Blockifying";
 
+        fprintf(stderr, "Beginning task: %s\n", label);
+
         uint_fast64_t total_done=0, blocks_done=0;
-        uint_fast64_t last_report_pos = 0;
+        uint_fast64_t last_report_pos = -1048576*4;
 
         size_t identical_list_pos=0;
 
@@ -1266,12 +1262,14 @@ void cromfs_blockifier::FlushBlockifyRequests()
                         Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
                     }
                 }
-                //target += BLOCKNUM_SIZE_BYTES(); // where block number will be written to.
+                target += BLOCKNUM_SIZE_BYTES(); // where block number will be written to.
                 total_done += eat;
                 ++blocks_done;
             }
         }
     }
+
+    schedule.clear();
 }
 
 void cromfs_blockifier::ScheduleBlockify(

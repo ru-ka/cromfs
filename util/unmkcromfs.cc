@@ -892,10 +892,8 @@ public:
                     uint_fast64_t read_size = block_size;
 
                     /* the last block may be smaller than the block size */
-                    if(a+1 == ino.blocklist.size() && (ino.bytesize % block_size) > 0)
-                    {
-                        read_size = ino.bytesize % block_size;
-                    }
+                    if(a+1 == ino.blocklist.size())
+                        read_size = ino.bytesize - (ino.blocklist.size()-1) * block_size;
 
                     if(block_startoffs + read_size > fblock.size())
                     {
@@ -1185,10 +1183,8 @@ private:
             /* Count how much. */
             uint_fast64_t size = block_size;
             /* the last block may be smaller than the block size */
-            if(a+1 == ino.blocklist.size() && (ino.bytesize % size) > 0)
-            {
-                size = ino.bytesize % block_size;
-            }
+            if(a+1 == ino.blocklist.size())
+                size = ino.bytesize - (ino.blocklist.size()-1) * block_size;
 
             cromfs_block_index b(blk);
             result.set(b, b + size);
