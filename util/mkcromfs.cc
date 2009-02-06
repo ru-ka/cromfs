@@ -59,12 +59,7 @@ bool MayPackBlocks = true;
 bool MayAutochooseBlocknumSize = true;
 bool MaySuggestDecompression = true;
 
-// Number of blockifys to keep in buffer, hoping for optimal sorting
-size_t BlockifyAmount1 = 64;
-// Number of blockifys to add to buffer at once
-size_t BlockifyAmount2 = 1;
-// 0 = nope. 1 = yep, 2 = use TSP, 3 = yes, and try combinations too
-int TryOptimalOrganization = 0;
+BlockHashingMethods BlockHashing_Method = BlockHashing_All; // TODO: Add commandline option
 
 
 long FSIZE = 2097152;
@@ -558,6 +553,13 @@ namespace cromfs_creator
             {
                 inode.rdev = st.st_rdev;
             }
+
+            /*
+            size_t n_blocks = CalcSizeInBlocks(inode.bytesize, inode.blocksize);
+            inode.blocklist.resize(n_blocks);
+            for(size_t a=0; a<n_blocks; ++a)
+                inode.blocklist[a] = ~cromfs_blocknum_t(0);
+            */
 
             put_inode(&inotab[inotab_offset], inode, storage_opts);
         }
@@ -1336,6 +1338,7 @@ int main(int argc, char** argv)
             {"blockifybufferincrement", 1,0,3002},
             {"blockifyoptimizemethod",  1,0,3003},
             {"blockifyoptimisemethod",  1,0,3003},
+            {"blockindexmethod",        1,0,3004},
             {"32bitblocknums",          0,0,'4'},
             {"24bitblocknums",          0,0,'3'},
             {"16bitblocknums",          0,0,'2'},
@@ -1477,6 +1480,7 @@ int main(int argc, char** argv)
                     "     Controls how often a new automatic index will be added in an fblock.\n"
                     "     For example, value 32 tells that a new index will be added every 32 bytes.\n"
                     "     Value of 0 disables autoindex alltogether.\n"
+                    "     (Overlaps still cause predictive autoindexing to happen.)\n"
                     "     Default: 256\n"
                     " --autoindexratio, -a <value>\n"
                     "     Deprecated option.\n"
@@ -1502,24 +1506,33 @@ int main(int argc, char** argv)
                     "     try every possible option. Beware it will consume lots of time.\n"
                     "     \"--lzmabits auto\" is a lighter alternative to \"--lzmabits full\",\n"
                     "     and enabled by default.\n"
-                    " --blockifybufferincrement <value>\n"
-                    "     Number of blocks (of bsize) to handle simultaneously (default: 1)\n"
-                    " --blockifybufferlength <value>\n"
-                    "     Number of blocks to keep in a pending buffer (default: 64)\n"
-                    "     Increasing this number will increase memory and CPU usage, and\n"
-                    "     may sometimes yield a better compression, sometimes worse.\n"
-                    "     Use 0 to disable.\n"
-                    " --blockifyoptimizemethod <value>\n"
-                    "     Selects method for selecting blocks to \"blockify\"\n"
-                    "     0 (default) = straightforward selection\n"
-                    "     1 = selects the pending block which gets largest overlap\n"
-                    "     2 = selects the order of pending blocks which yields shortest superstring\n"
-                    "     3 = selects the pending block which enables best compression for others\n"
-                    "     This feature is under development. For now, 0 is usually best.\n"
                     " --blockifyorder <value>\n"
                     "     Specifies the priorities for blockifying different types of data\n"
                     "     Default: dir=1,link=2,file=3,inotab=4\n"
                     "     Changing it may affect compressibility.\n"
+                    " --blockindexmethod <value>\n"
+                    "     Controls the way how identical blocks are recognized.\n"
+                    "     Four possible methods exist:\n"
+                    "       --blockindexmethod none\n"
+                    "            Blocks are not indexed. Fastest, uses least memory,\n"
+                    "            but also neglects most of cromfs's power.\n"
+                    "       --blockindexmethod all  (default)\n"
+                    "            All blocks are indexed before blockifying.\n"
+                    "            If your filesystem is large (millions of blocks),\n"
+                    "            note that the index construction may require\n"
+                    "            excessive amounts of virtual memory.\n"
+                    "       --blockindexmethod prepass\n"
+                    "            This option uses an extra 1 gigabyte of virtual memory\n"
+                    "            before running the \"all\" blocks indexing\n"
+                    "            in hopes of consuming less virtual memory overall.\n"
+                    "            Use it if \"all\" consumes way too much virtual memory.\n"
+                    "       --blockindexmethod blanks\n"
+                    "            Only zero-filled blocks are indexed.\n"
+                    "            This parallels the \"sparse file\" optimization\n"
+                    "            that occurs in most compressing filesystems,\n"
+                    "            and requires relatively little virtual memory. It\n"
+                    "            neglects most of cromfs's power, though.\n"
+                    "            Use it if \"prepass\" consumes too much virtual memory.\n"
                     " --nosortbyfilename\n"
                     "     Disables sorting by filename when blockifying. Use when\n"
                     "     you have made attempts to affect manually the order in which\n"
@@ -1820,7 +1833,8 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: The parameter blockifybufferlength may not be negative. You gave %ld%s.\n", size,arg);
                     return -1;
                 }
-                BlockifyAmount1 = size;
+                //BlockifyAmount1 = size;
+                std::fprintf(stderr, "mkcromfs: --blockifybufferlength is obsolete and does not do anything.\n");
                 break;
             }
             case 3002: // blockifybufferincrement
@@ -1832,7 +1846,8 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: The parameter blockifybufferincrement may not be less than 1. You gave %ld%s.\n", size,arg);
                     return -1;
                 }
-                BlockifyAmount2 = size;
+                //BlockifyAmount2 = size;
+                std::fprintf(stderr, "mkcromfs: --blockifybufferincrement is obsolete and does not do anything.\n");
                 break;
             }
             case 3003: // blockifyoptimizemethod
@@ -1844,7 +1859,27 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: Blockifyoptimizemethod may only be 0, 1, 2 or 3. You gave %ld%s.\n", size,arg);
                     return -1;
                 }
-                TryOptimalOrganization = size;
+                //TryOptimalOrganization = size;
+                std::fprintf(stderr, "mkcromfs: --blockifyoptimizemethod is obsolete and does not do anything.\n");
+                break;
+            }
+            case 3004: // blockindexmethod
+            {
+                char* arg = optarg;
+                if(!strcmp(arg, "all"))
+                    BlockHashing_Method = BlockHashing_All;
+                else if(!strcmp(arg, "prepass"))
+                    BlockHashing_Method = BlockHashing_All_Prepass;
+                else if(!strcmp(arg, "blanks")
+                     || !strcmp(arg, "blank"))
+                    BlockHashing_Method = BlockHashing_BlanksOnly;
+                else if(!strcmp(arg, "none"))
+                    BlockHashing_Method = BlockHashing_None;
+                else
+                {
+                    std::fprintf(stderr, "mkcromfs: Blockindexmethod may only be none, blanks, prepass or all. You gave %s.\n", arg);
+                    return -1;
+                }
                 break;
             }
             case 4003: // threads

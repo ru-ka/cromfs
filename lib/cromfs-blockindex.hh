@@ -27,59 +27,27 @@ extern BlockIndexHashType
  * However, we now use two separate indexes to conserve resources.
  */
 
-/* Index for reusable material */
-/* This structure should be optimized for minimal RAM usage,
- * though its access times should not be very slow either.
- * One important aspect in the design of this structure
- * is knowing you never need to delete anything from it.
- */
-class block_index_type
+template<typename Key, typename Value>
+class block_index_stack
 {
+    class layer;
+    std::vector<layer*> index;
 public:
-    bool FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const;
-    bool FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const;
-
-    void AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t value);
-    void AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
-
-    void DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
-
-    bool EmergencyFreeSpace(bool Auto=true, bool Real=true);
-
+    size_t size, deleted;
 public:
-    block_index_type();
-    block_index_type(const block_index_type& b);
-
-    block_index_type& operator= (const block_index_type& b);
-
-    ~block_index_type()
-    {
-        Close();
-    }
-
+    block_index_stack();
+    block_index_stack(const block_index_stack&);
+    block_index_stack& operator= (const block_index_stack& b);
+    ~block_index_stack() { Close(); }
     void clear();
 
-    std::string get_usage() const;
+    bool Find(Key crc, Value& result, size_t find_index) const;
+    void Add(Key crc, const Value& value);
+    void Del(Key crc, const Value& value);
 
 private:
     void Close();
     void Clone();
-
-public:
-    class realindex_layer;
-    class autoindex_layer;
-    std::vector<realindex_layer*> realindex;
-    std::vector<autoindex_layer*> autoindex;
-
-    size_t n_real;
-    size_t n_auto, n_auto_deleted;
 };
-
-/* This global pointer to block_index is required
- * so that cromfs-fblockfun.cc can call
- * the EmergencyFreeSpace() method across module
- * boundaries when necessary.
- */
-extern block_index_type* block_index_global;
 
 #endif

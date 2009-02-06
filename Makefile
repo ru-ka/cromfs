@@ -69,8 +69,6 @@ ARCHFILES=\
 	lib/longfilewrite.hh lib/longfilewrite.cc \
 	lib/boyermooreneedle.hh \
 	lib/boyermoore.hh lib/boyermoore.cc \
-	lib/superstringfinder.hh \
-	lib/asymmetrictsp.hh \
 	lib/fsballocator.hh \
 	lib/autoptr \
 	\

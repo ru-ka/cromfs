@@ -38,15 +38,15 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/longfilewrite.o \
 	   ../lib/cromfs-inodefun.o \
 	   ../lib/cromfs-directoryfun.o \
-	   ../lib/cromfs-blockindex.o \
 	   ../lib/cromfs-fblockfun.o \
 	   ../lib/cromfs-blockifier.o \
-	   ../lib/boyermoore.o \
+	   ../lib/cromfs-blockindex.o \
 	   ../lib/cromfs-hashmap_lzo.o \
-	   ../lib/cromfs-hashmap_sparsefile.o \
-	   ../lib/cromfs-hashmap_googlesparse.o \
 	   ../lib/cromfs-hashmap_lzo_sparse.o \
-	   ../lib/minilzo.o
+	   ../lib/cromfs-hashmap_googlesparse.o \
+	   ../lib/cromfs-hashmap_sparsefile.o \
+	   ../lib/minilzo.o \
+	   ../lib/boyermoore.o
 
 OBJS_UN += unmkcromfs.o ../cromfs.o \
 	   ../lib/fadvise.o \

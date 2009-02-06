@@ -140,7 +140,7 @@ void fblock_storage::put_compressed(const std::vector<unsigned char>& compressed
     //fprintf(stderr, "[1;mstoring compressed[m\n");
     is_compressed = true;
 
-TryAgain:;
+//TryAgain:;
 
     EnsureOpenFor(true, true);
 
@@ -154,11 +154,13 @@ TryAgain:;
         std::fprintf(stderr, "fwrite(%s,compressed): Trouble writing %d bytes\n",
             getfn().c_str(), (int)filesize);
 
-        if(block_index_global->EmergencyFreeSpace())
+/*
+        if(block_index_global && block_index_global->EmergencyFreeSpace())
         {
             fprintf(stderr, "Trying fwrite again\n");
             goto TryAgain;
         }
+*/
         std::fprintf(stderr, "fwrite(%s,compressed): Fatal error\n", getfn().c_str());
         throw std::runtime_error("Cannot write a fblock"); // FATAL ERROR
     }
@@ -326,7 +328,7 @@ void fblock_storage::put_appended_raw(
     }
     errno = 0;
 
-TryAgain:
+//TryAgain:
     try
     {
         ( LongFileWrite(fd, append.OldSize, added_length, &data[datasize - added_length],
@@ -341,11 +343,13 @@ TryAgain:
              );
         if(errno) perror("pwrite");
 
-        if(block_index_global->EmergencyFreeSpace())
+/*
+        if(block_index_global && block_index_global->EmergencyFreeSpace())
         {
             fprintf(stderr, "Trying pwrite again\n");
             goto TryAgain;
         }
+*/
         throw std::runtime_error("Cannot append to a fblock"); // FATAL ERROR
     }
     filesize = append.AppendedSize;

@@ -26,12 +26,15 @@ public:
     static unsigned GetGranularity() { return n_per_bucket; }
     void Resize(uint_fast64_t length);
 
-private:
-    CompressedHashLayer(const CompressedHashLayer&);
-    void operator=(const CompressedHashLayer&);
+public:
+    struct NotCopiableError { };
+    CompressedHashLayer(const CompressedHashLayer&)
+        { throw NotCopiableError(); }
+    void operator=(const CompressedHashLayer&)
+        { throw NotCopiableError(); }
 private:
     unsigned n_buckets;
-    static const unsigned n_per_bucket = 0x4000;
+    static const unsigned n_per_bucket = 0x10000;
     static const unsigned bucketsize   = n_per_bucket * sizeof(T);
 
     typedef rangeset<HashType, StaticAllocator<HashType> > hashbits_t;

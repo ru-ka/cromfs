@@ -71,15 +71,15 @@ redo:;
     HashType prev_distance = new_begin - prev_end;
     HashType next_distance = next_begin - new_end;
 
-    bool merge_prev = prev_distance <= 0x8000;
-    bool merge_next = next_distance <= 0x8000;
+    bool merge_prev = prev_distance <= granu*3;
+    bool merge_next = next_distance <= granu*3;
 
     if(prev == data.end()) merge_prev = false;
     if(next == data.end()) merge_next = false;
 
     if(!(merge_prev || merge_next))
     {
-        if(data.size() >= 256)
+        if(data.size() >= 1024)
         {
             // Find the shortest gap in the map and merge them, then try again
             bool first=true; HashType shortest_gap=0;
@@ -164,16 +164,16 @@ bool CompressedHashLayer_Sparse<HashType,T>::has(HashType crc) const
     return false;
 }
 
-
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
+/*
 typedef CompressedHashLayer_Sparse<BlockIndexHashType,cromfs_blocknum_t> ri;
 template ri::CompressedHashLayer_Sparse();
 template ri::~CompressedHashLayer_Sparse();
 template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
 template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
-//template void ri::unset(BlockIndexHashType);
+template void ri::unset(BlockIndexHashType);
 template bool ri::has(BlockIndexHashType)const;
-
+*/
 typedef CompressedHashLayer_Sparse<BlockIndexHashType,cromfs_block_internal> ai;
 template ai::CompressedHashLayer_Sparse();
 template ai::~CompressedHashLayer_Sparse();
@@ -181,3 +181,11 @@ template void ai::extract(BlockIndexHashType,cromfs_block_internal&) const;
 template void ai::set(BlockIndexHashType,const cromfs_block_internal&);
 template void ai::unset(BlockIndexHashType);
 template bool ai::has(BlockIndexHashType)const;
+
+typedef CompressedHashLayer_Sparse<unsigned,uint_least32_t> si;
+template si::CompressedHashLayer_Sparse();
+template si::~CompressedHashLayer_Sparse();
+template void si::extract(unsigned,uint_least32_t&) const;
+template void si::set(unsigned,const uint_least32_t&);
+template void si::unset(unsigned);
+template bool si::has(unsigned)const;

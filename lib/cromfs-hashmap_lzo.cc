@@ -232,16 +232,17 @@ void CompressedHashLayer<HashType,T>::Merge
 }
 
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
+/*
 typedef CompressedHashLayer<BlockIndexHashType,cromfs_blocknum_t> ri;
 template ri::CompressedHashLayer(uint_fast64_t);
 template ri::~CompressedHashLayer();
 template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
 template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
-//template void ri::unset(BlockIndexHashType);
+template void ri::unset(BlockIndexHashType);
 template bool ri::has(BlockIndexHashType)const;
 template uint_fast64_t ri::GetLength()const;
 template void ri::Merge(const ri&, uint_fast32_t);
-
+*/
 typedef CompressedHashLayer<BlockIndexHashType,cromfs_block_internal> ai;
 template ai::CompressedHashLayer(uint_fast64_t);
 template ai::~CompressedHashLayer();
@@ -251,3 +252,13 @@ template void ai::unset(BlockIndexHashType);
 template bool ai::has(BlockIndexHashType)const;
 template uint_fast64_t ai::GetLength()const;
 template void ai::Merge(const ai&, uint_fast32_t);
+
+typedef CompressedHashLayer<unsigned,uint_least32_t> si;
+template si::CompressedHashLayer(uint_fast64_t);
+template si::~CompressedHashLayer();
+template void si::extract(unsigned,uint_least32_t&) const;
+template void si::set(unsigned,const uint_least32_t&);
+template void si::unset(unsigned);
+template bool si::has(unsigned)const;
+template uint_fast64_t si::GetLength()const;
+template void si::Merge(const si&, uint_fast32_t);

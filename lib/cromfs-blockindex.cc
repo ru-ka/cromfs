@@ -2,180 +2,146 @@
 #include "util/mkcromfs_sets.hh"
 #include "util.hh" // For ReportSize
 
-#include "cromfs-hashmap_lzo.hh"
 #include "cromfs-hashmap_lzo_sparse.hh"
+//#include "cromfs-hashmap_lzo.hh"
 //#include "cromfs-hashmap_googlesparse.hh"
+//#include "cromfs-hashmap_sparsefile.hh"
 
 #include <cstring>
 #include <sstream>
 
-class block_index_type::realindex_layer
-//    : public GoogleSparseMap    <BlockIndexHashType, cromfs_blocknum_t>
-    : public CompressedHashLayer_Sparse<BlockIndexHashType, cromfs_blocknum_t>
+template<typename Key, typename Value>
+class block_index_stack<Key,Value>::layer
+    : public CompressedHashLayer_Sparse<Key,Value>
+//    : public CompressedHashLayer<Key,Value>
+//    : public CacheFile<Key,Value>
+//    : public GoogleSparseMap<Key,Value>
 {
 };
 
-class block_index_type::autoindex_layer
-//#ifdef OPTIMAL_GOOGLE_SPARSETABLE
-//    : public GoogleSparseMap    <BlockIndexHashType, cromfs_block_internal>
-//#else
-//    : public CompressedHashLayer<BlockIndexHashType, cromfs_block_internal>
-//#endif
-    : public CompressedHashLayer_Sparse<BlockIndexHashType, cromfs_block_internal>
+template<typename Key, typename Value>
+bool block_index_stack<Key,Value>::Find(Key crc, Value& result,     size_t find_index) const
 {
-};
-
-bool block_index_type::FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const
-{
-    if(find_index >= realindex.size()) return false;
-    if(!realindex[find_index]->has(crc)) return false;
-    realindex[find_index]->extract(crc, result);
+    if(find_index >= index.size()) return false;
+    if(!index[find_index]->has(crc)) return false;
+    index[find_index]->extract(crc, result);
     return true;
 }
 
-bool block_index_type::FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const
+template<typename Key, typename Value>
+void block_index_stack<Key,Value>::Add(Key crc, const Value& value)
 {
-    if(find_index >= autoindex.size()) return false;
-    if(!autoindex[find_index]->has(crc)) return false;
-    autoindex[find_index]->extract(crc, result);
-    return true;
-}
-
-void block_index_type::AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t value)
-{
-    for(size_t index = 0; index < realindex.size(); ++index)
+    for(size_t ind = 0; ind < index.size(); ++ind)
     {
-        realindex_layer& layer = *realindex[index];
-        if(!layer.has(crc))
+        layer& lay = *index[ind];
+        if(!lay.has(crc))
         {
-            layer.set(crc, value);
-            ++n_real;
+            lay.set(crc, value);
+            ++size;
             return;
-        }
-        cromfs_blocknum_t tmp;
-        layer.extract(crc, tmp);
-        if(tmp == value) return;
+        }/*
+        Value tmp;
+        lay.extract(crc, tmp);
+        if(tmp == value) return;*/
     }
-    size_t index = realindex.size();
-    realindex.push_back(new realindex_layer);
-    realindex[index]->set(crc, value);
-    ++n_real;
+    size_t ind = index.size();
+    index.push_back(new layer);
+    index[ind]->set(crc, value);
+    ++size;
 }
 
-void block_index_type::AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
+template<typename Key, typename Value>
+void block_index_stack<Key,Value>::Del(Key crc, const Value& value)
 {
-    for(size_t index = 0; index < autoindex.size(); ++index)
+    for(size_t ind = 0; ind < index.size(); ++ind)
     {
-        autoindex_layer& layer = *autoindex[index];
-        if(!layer.has(crc))
-        {
-            layer.set(crc, value);
-            ++n_auto;
-            return;
-        }
-        cromfs_block_internal tmp;
-        layer.extract(crc, tmp);
-        if(tmp == value) return;
-    }
-    size_t index = autoindex.size();
-    autoindex.push_back(new autoindex_layer);
-    autoindex[index]->set(crc, value);
-    ++n_auto;
-}
-
-void block_index_type::DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value)
-{
-    for(size_t index = 0; index < autoindex.size(); ++index)
-    {
-        autoindex_layer& layer = *autoindex[index];
-        if(!layer.has(crc))
+        layer& lay = *index[ind];
+        if(!lay.has(crc))
         {
             break;
         }
-        cromfs_block_internal tmp;
-        layer.extract(crc, tmp);
+        Value tmp;
+        lay.extract(crc, tmp);
         if(tmp == value)
         {
-            layer.unset(crc);
-            --n_auto;
-            ++n_auto_deleted;
+            lay.unset(crc);
+            --size;
+            ++deleted;
             return;
         }
     }
 }
 
+/*
 bool block_index_type::EmergencyFreeSpace(bool Auto, bool Real)
 {
     return false;
 }
+*/
 
-void block_index_type::Clone()
+template<typename Key, typename Value>
+void block_index_stack<Key,Value>::Clone()
 {
-    for(size_t a=0; a<realindex.size(); ++a)
-        realindex[a] = new realindex_layer(*realindex[a]);
-
-    for(size_t a=0; a<autoindex.size(); ++a)
-        autoindex[a] = new autoindex_layer(*autoindex[a]);
+    for(size_t a=0; a<index.size(); ++a)
+        index[a] = new layer(*index[a]);
 }
 
-void block_index_type::Close()
+template<typename Key, typename Value>
+void block_index_stack<Key,Value>::Close()
 {
-    for(size_t a=0; a<realindex.size(); ++a) delete realindex[a];
-    for(size_t a=0; a<autoindex.size(); ++a) delete autoindex[a];
-    realindex.clear();
-    autoindex.clear();
+    for(size_t a=0; a<index.size(); ++a) delete index[a];
+    index.clear();
 }
 
-block_index_type::block_index_type()
-    : realindex(), autoindex(),
-      n_real(0), n_auto(0), n_auto_deleted(0)
+template<typename Key, typename Value>
+block_index_stack<Key,Value>::block_index_stack()
+    : index(), size(0), deleted(0)
 {
 }
 
-block_index_type::block_index_type(const block_index_type& b)
-    : realindex(b.realindex),
-      autoindex(b.autoindex),
-      n_real(b.n_real),
-      n_auto(b.n_auto),
-      n_auto_deleted(b.n_auto_deleted)
+template<typename Key, typename Value>
+block_index_stack<Key,Value>::block_index_stack(const block_index_stack<Key,Value>& b)
+    : index(b.index),
+      size(b.size),
+      deleted(b.deleted)
 {
     Clone();
 }
 
-block_index_type& block_index_type::operator= (const block_index_type& b)
+template<typename Key, typename Value>
+block_index_stack<Key,Value>&
+block_index_stack<Key,Value>::operator= (const block_index_stack<Key,Value>& b)
 {
     if(&b != this)
     {
         Close();
-        realindex = b.realindex;
-        autoindex = b.autoindex;
-        n_real    = b.n_real;
-        n_auto    = b.n_auto;
-        n_auto_deleted = b.n_auto_deleted;
+        index = b.index;
+        size  = b.size;
+        deleted = b.deleted;
         Clone();
     }
     return *this;
 }
 
-void block_index_type::clear()
+template<typename Key, typename Value>
+void block_index_stack<Key,Value>::clear()
 {
     Close();
-    realindex.clear();
-    autoindex.clear();
-    n_real = 0;
-    n_auto = 0;
-    n_auto_deleted = 0;
+    index.clear();
+    size = deleted = 0;
 }
 
+/*
 std::string block_index_type::get_usage() const
 {
     std::stringstream tmp;
 
-    tmp << " index_use:r=" << n_real
-        << ";a=" << n_auto
-        << ",-" << n_auto_deleted;
+    tmp << " index_use:r=" << real.size
+        << ";a=" << autom.size
+        << ",-" << autom.deleted;
     return tmp.str();
 }
+*/
 
 /*************************************************
   Goals of this hash calculator:
@@ -200,5 +166,29 @@ BlockIndexHashType
     return newhash_calc(buf, size);
 }
 
-
+/*
 block_index_type* block_index_global = 0;
+*/
+
+
+typedef block_index_stack<unsigned,uint_least32_t> si;
+template si::block_index_stack();
+template si& si::operator=(const si&);
+template si::block_index_stack(const si&);
+template void si::clear();
+template bool si::Find(unsigned crc, uint_least32_t& result, size_t find_index) const;
+template void si::Add(unsigned crc, const uint_least32_t& value);
+template void si::Del(unsigned crc, const uint_least32_t& value);
+template void si::Close();
+template void si::Clone();
+
+typedef block_index_stack<BlockIndexHashType,cromfs_block_internal> ai;
+template ai::block_index_stack();
+template ai& ai::operator=(const ai&);
+template ai::block_index_stack(const ai&);
+template void ai::clear();
+template bool ai::Find(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const;
+template void ai::Add(BlockIndexHashType crc, const cromfs_block_internal& value);
+template void ai::Del(BlockIndexHashType crc, const cromfs_block_internal& value);
+template void ai::Close();
+template void ai::Clone();

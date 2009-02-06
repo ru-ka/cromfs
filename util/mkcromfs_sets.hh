@@ -27,13 +27,13 @@ typedef char SchedulerDataClass;
 
 extern uint_fast32_t storage_opts;
 
-// Number of blockifys to keep in buffer, hoping for optimal sorting
-extern size_t BlockifyAmount1;
-// Number of blockifys to add to buffer at once
-extern size_t BlockifyAmount2;
-// 0 = nope. 1 = yep, 2 = use TSP, 3 = yes, and try combinations too
-extern int TryOptimalOrganization;
-
 extern const char* GetTempDir();
 
+enum BlockHashingMethods
+    { BlockHashing_All,
+      BlockHashing_All_Prepass,
+      BlockHashing_BlanksOnly,
+      BlockHashing_None
+    };
+extern BlockHashingMethods BlockHashing_Method;
 #endif

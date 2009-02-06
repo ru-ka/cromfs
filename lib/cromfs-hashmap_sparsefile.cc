@@ -218,16 +218,17 @@ bool
 }
 
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
+/*
 typedef CacheFile<BlockIndexHashType,cromfs_blocknum_t> ri;
 template ri::CacheFile();
 template ri::~CacheFile();
 template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
 template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
-//template void ri::unset(BlockIndexHashType);
+template void ri::unset(BlockIndexHashType);
 template bool ri::has(BlockIndexHashType)const;
 //template void ri::Close();
 //template void ri::Clone();
-
+*/
 typedef CacheFile<BlockIndexHashType,cromfs_block_internal> ai;
 template ai::CacheFile();
 template ai::~CacheFile();
@@ -237,3 +238,13 @@ template void ai::unset(BlockIndexHashType);
 template bool ai::has(BlockIndexHashType)const;
 //template void ai::Close();
 //template void ai::Clone();
+
+typedef CacheFile<unsigned,uint_least32_t> si;
+template si::CacheFile();
+template si::~CacheFile();
+template void si::extract(unsigned,uint_least32_t&) const;
+template void si::set(unsigned,const uint_least32_t&);
+template void si::unset(unsigned);
+template bool si::has(unsigned)const;
+//template void si::Close();
+//template void si::Clone();

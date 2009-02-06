@@ -17,10 +17,10 @@ private:
 public:
     MemMappingType() : ptr(notmapped), size(0), align_factor(0) { }
 
-    MemMappingType(int fd, uint_fast64_t pos, uint_fast64_t count)
+    MemMappingType(int fd, uint_fast64_t pos, uint_fast64_t length)
         : ptr(notmapped),size(0),align_factor(0)
     {
-        SetMap(fd, pos, count);
+        SetMap(fd, pos, length);
     }
 
     ~MemMappingType()
@@ -28,7 +28,7 @@ public:
         if(AutoUnmap) Unmap();
     }
 
-    void SetMap(int fd, uint_fast64_t pos, uint_fast64_t count)
+    void SetMap(int fd, uint_fast64_t pos, uint_fast64_t length)
     {
         Unmap();
 
@@ -36,17 +36,17 @@ public:
 
         align_factor = pos - pos_aligned_down;
 
-        size = count + align_factor;
+        size = length + align_factor;
         ptr =  mmap64(NULL, size,
                       PROT_READ, MAP_SHARED,
                       fd, pos_aligned_down);
     }
 
-    void ReMapIfNecessary(int fd, uint_fast64_t pos, uint_fast64_t count)
+    void ReMapIfNecessary(int fd, uint_fast64_t pos, uint_fast64_t length)
     {
         uint_fast64_t pos_aligned_down = pos & ~UINT64_C(4095);
         size_t new_align_factor = pos - pos_aligned_down;
-        size_t new_size         = count + align_factor;
+        size_t new_size         = length + align_factor;
 
         if(new_align_factor != align_factor
         || new_size         != size)
