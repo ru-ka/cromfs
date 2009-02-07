@@ -8,7 +8,7 @@ include Makefile.sets
 
 #OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-#OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
+OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
 #OPTIM += -O3 -g -fno-inline 
 #OPTIM += -O3 -g -debug extended
 #OPTIM += -O0 -g -fno-inline

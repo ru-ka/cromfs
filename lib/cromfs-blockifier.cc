@@ -882,7 +882,7 @@ private:
     std::vector<uint_least32_t/*blocknum*/> block_list/*scheduleno*/;
 };
 
-void cromfs_blockifier::FlushBlockifyRequests()
+void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 {
     // Note: using __gnu_parallel in this sort() will crash the program.
     // Probably because of autoptr not being threadsafe.
@@ -907,7 +907,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
     {
         static const char label[] = "Finding identical hashes";
 
-        fprintf(stderr, "Beginning task: %s\n", label);
+        fprintf(stderr, "Beginning task for %s: %s\n", purpose, label);
 
         // Precollect list of duplicate hashes
         hash_seen      = new bitset1p32;
@@ -915,7 +915,7 @@ void cromfs_blockifier::FlushBlockifyRequests()
 
         uint_fast64_t total_done  = 0;
         uint_fast64_t blocks_done = 0;
-        uint_fast64_t last_report_pos = -1048576*4;
+        uint_fast64_t last_report_pos = 0;
 
         enum { n_hashlocks = 4096 };
         MutexType hashlock[n_hashlocks+1], displaylock;
@@ -985,10 +985,10 @@ void cromfs_blockifier::FlushBlockifyRequests()
         schedule_cache<schedule_item, 32> schedule_cache(schedule);
         static const char label[] = "Finding identical blocks";
 
-        fprintf(stderr, "Beginning task: %s\n", label);
+        fprintf(stderr, "Beginning task for %s: %s\n", purpose, label);
 
         uint_fast64_t total_done = 0, blocks_done  = 0;
-        uint_fast64_t last_report_pos = -1048576*4;
+        uint_fast64_t last_report_pos = 0;
 
         typedef block_index_stack<newhash_t, uint_least32_t> blocks_list;
         blocks_list blockhashlist;
@@ -1157,10 +1157,10 @@ void cromfs_blockifier::FlushBlockifyRequests()
         schedule_cache<schedule_item, 32> schedule_cache(schedule);
         static const char label[] = "Blockifying";
 
-        fprintf(stderr, "Beginning task: %s\n", label);
+        fprintf(stderr, "Beginning task for %s: %s\n", purpose, label);
 
         uint_fast64_t total_done=0, blocks_done=0;
-        uint_fast64_t last_report_pos = -1048576*4;
+        uint_fast64_t last_report_pos = 0;
 
         size_t identical_list_pos=0;
 

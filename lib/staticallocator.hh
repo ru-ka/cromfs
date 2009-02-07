@@ -56,6 +56,17 @@ namespace StaticAllocatorImplementation
 
     static size_t FreeCounter=0;
 
+    static struct StaticAllocatorCleanerUpper
+    {
+        /* This makes valgrind happier. No memory leaks! */
+        ~StaticAllocatorCleanerUpper()
+        {
+            for(size_t a=0; a<Pools.size(); ++a)
+                delete Pools[a];
+            Pools.clear();
+            FreeInfo.clear();
+        }
+    } StaticAllocatorCleanerUpper;
 
 //private:
 #if 1
@@ -98,10 +109,9 @@ namespace StaticAllocatorImplementation
         }
         if(pending) FreeInfo.insert(prev);
 
-
+        /*
         size_t average = FreeInfo.empty() ? 0 : nfree/FreeInfo.size();
 
-        /*
         std::cerr << "Warning: Done defragmentating! "
                      "Saved " << nsaved
                   << ", size now " << FreeInfo.size()
@@ -128,6 +138,7 @@ namespace StaticAllocatorImplementation
         }
         return 0;
     }
+    /*
     static void DumpPools()
     {
         const size_t MaxAllocatorPools = Pools.size();
@@ -139,6 +150,7 @@ namespace StaticAllocatorImplementation
         }
         std::cerr << "Total: " << (MaxAllocatorBytes*MaxAllocatorPools) << " bytes\n";
     }
+    */
     static bool AddPool() throw()
     {
         size_t MaxAllocatorPools = Pools.size();

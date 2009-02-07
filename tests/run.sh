@@ -7,11 +7,10 @@
 #   without being root
 #
 
-make -C ../util mkcromfs unmkcromfs
-
 ## TEST 1
 
-if true;then
+if true; then
+	make -C ../util mkcromfs unmkcromfs -j4
 	rm -f tmp.cromfs
 	../util/mkcromfs a tmp.cromfs -B'*.hh:128' -b16384 -f65536 -e --threads 4 >/dev/null
 	rm -rf b
@@ -31,8 +30,9 @@ fi
 ## TEST 2 (no sparse files)
 
 if true; then
+	make -C ../util mkcromfs unmkcromfs -j4
 	rm -f tmp.cromfs
-	../util/mkcromfs a tmp.cromfs -b64 -f512 --threads 1  >/dev/null
+	../util/mkcromfs a tmp.cromfs -b64 -f512 --threads 1 --blockindexmethod prepass -A1 >/dev/null
 	rm -rf b
 	../util/unmkcromfs tmp.cromfs b -s >/dev/null
 
@@ -49,16 +49,28 @@ if true; then
 	rm -rf a.listing b.listing tmp.cromfs b
 fi
 
-## TEST 3: Boyer-Moore
-
 if [ "$CXX" = "" ]; then CXX=g++; fi
-$CXX -o test-boyermoore -O3 test-boyermoore.cc -ftree-vectorize
-echo "Testing Boyer-Moore search algorithm..."
-./test-boyermoore
-rm -f test-boyermoore
+
+## TEST 3: Boyer-Moore
+if true; then
+	$CXX -o test-boyermoore -O3 test-boyermoore.cc -ftree-vectorize
+	echo "Testing Boyer-Moore search algorithm..."
+	./test-boyermoore
+	rm -f test-boyermoore
+fi
 
 ## TEST 4: Backwards match
-$CXX -o test-backwards_match -O3 test-backwards_match.cc -g -Wall -W -ftree-vectorize
-echo "Testing Backwards match..."
-./test-backwards_match
-rm -f test-backwards_match
+if true; then
+	$CXX -o test-backwards_match -O3 test-backwards_match.cc -g -Wall -W -ftree-vectorize
+	echo "Testing Backwards match..."
+	./test-backwards_match
+	rm -f test-backwards_match
+fi
+
+## TEST 5: Hashmaps
+if true; then
+	$CXX -o test-hashmaps -O3 test-hashmaps.cc ../lib/minilzo.c ../lib/newhash.cc -g -Wall -W -ftree-vectorize -I../lib
+	echo "Testing Hashmaps..."
+	./test-hashmaps
+	rm -f test-hashmaps
+fi

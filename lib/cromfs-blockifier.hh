@@ -143,7 +143,7 @@ public:
         long BlockSize);
 
     /* Flushes all blockifying requests so far. */
-    void FlushBlockifyRequests();
+    void FlushBlockifyRequests(const char* purpose);
 
     /* Method for reducing RAM use when no more blockifying requests are expected. */
     void NoMoreBlockifying();

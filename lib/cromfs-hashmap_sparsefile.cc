@@ -201,16 +201,20 @@ bool
     ssize_t res = pread64(fd, Packet, RecSize, pos);
     if(res != RecSize) return false;
 
+    /*printf("has test %08X: ", crc);
+    for(unsigned a=0; a<RecSize; ++a) printf(" %02X", (unsigned char)Packet[a]);
+    printf("\n");*/
+
     unsigned a=0;
-    for(; a<RecSize; a += sizeof(unsigned long))
+    for(; (a+sizeof(long))<=RecSize; a += sizeof(long))
     {
-        if(*(const unsigned long*)&Packet[a]) return true;
+        if(*(const long*)&Packet[a]) return true;
     }
-    for(; a<RecSize; a += sizeof(unsigned))
+    for(; (a+sizeof(int))<=RecSize; a += sizeof(int))
     {
-        if(*(const unsigned*)&Packet[a]) return true;
+        if(*(const int*)&Packet[a]) return true;
     }
-    for(; a<RecSize; a += sizeof(char))
+    for(; (a+sizeof(char))<=RecSize; a += sizeof(char))
     {
         if(*(const char*)&Packet[a]) return true;
     }
@@ -218,6 +222,9 @@ bool
 }
 
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
+#define ri spfile_ri
+#define ai spfile_ai
+#define si spfile_si
 /*
 typedef CacheFile<BlockIndexHashType,cromfs_blocknum_t> ri;
 template ri::CacheFile();
@@ -248,3 +255,6 @@ template void si::unset(unsigned);
 template bool si::has(unsigned)const;
 //template void si::Close();
 //template void si::Clone();
+#undef ri
+#undef ai
+#undef si

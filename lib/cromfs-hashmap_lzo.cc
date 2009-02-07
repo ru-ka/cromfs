@@ -140,6 +140,23 @@ void CompressedHashLayer<HashType,T>::flushdirty()
         static unsigned char decombuf[decom_max];
         lzo_uint destlen = decom_max;
         char wrkmem[LZO1X_1_MEM_COMPRESS];
+
+        /* FIXME:
+               This sometimes triggers two kinds of valgrind errors:
+
+==29018== Conditional jump or move depends on uninitialised value(s)
+==29018==    at 0x410D78: _ZL20_lzo1x_1_do_compressPKhmPhPmPv (minilzo.c:2858)
+==29018==    by 0x4113F1: lzo1x_1_compress (minilzo.c:3071)
+==29018==    by 0x4062DB: CompressedHashLayer<unsigned, int>::flushdirty() (cromfs-hashmap_lzo.cc:160)
+==29018==    by 0x406E61: CompressedHashLayer<unsigned, int>::load(unsigned long) (cromfs-hashmap_lzo.cc:181)
+==29018==
+==29018== Use of uninitialised value of size 8
+==29018==    at 0x410D7E: _ZL20_lzo1x_1_do_compressPKhmPhPmPv (minilzo.c:2858)
+==29018==    by 0x4113F1: lzo1x_1_compress (minilzo.c:3071)
+==29018==    by 0x4062DB: CompressedHashLayer<unsigned, int>::flushdirty() (cromfs-hashmap_lzo.cc:160)
+==29018==    by 0x406E61: CompressedHashLayer<unsigned, int>::load(unsigned long) (cromfs-hashmap_lzo.cc:181)
+
+         */
         lzo1x_1_compress(&dirtybucket[0], actual_bucketsize,
                          decombuf, &destlen,
                          wrkmem);
@@ -224,7 +241,8 @@ void CompressedHashLayer<HashType,T>::Merge
         i != b.hashbits.end();
         ++i)
     {
-        hashbits.set( i->lower + target_offset, i->upper + target_offset);
+        hashbits.set( i->lower + target_offset,
+                      i->upper + target_offset);
         for(HashType pos = i->lower; pos != i->upper; ++pos)
         {
             b.extract(pos, tmp);
@@ -234,6 +252,9 @@ void CompressedHashLayer<HashType,T>::Merge
 }
 
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
+#define ri lzo_ri
+#define ai lzo_ai
+#define si lzo_si
 /*
 typedef CompressedHashLayer<BlockIndexHashType,cromfs_blocknum_t> ri;
 template ri::CompressedHashLayer(uint_fast64_t);
@@ -264,3 +285,6 @@ template void si::unset(unsigned);
 template bool si::has(unsigned)const;
 template uint_fast64_t si::GetLength()const;
 template void si::Merge(const si&, uint_fast32_t);
+#undef ri
+#undef ai
+#undef si

@@ -750,7 +750,7 @@ namespace cromfs_creator
                     &inotab[0], &inotab[inotab.size()]);
                 std::printf("Root inode spans %p..%p\n",
                     &raw_root_inode[headersize], &raw_root_inode[raw_root_inode.size()]);
-                blockifier.FlushBlockifyRequests();
+                blockifier.FlushBlockifyRequests("Files and directories");
 
                 if(DisplayEndProcess)
                     printf("Compressing raw rootdir inode (%s)\n",
@@ -801,7 +801,7 @@ namespace cromfs_creator
                 // blockify inotab, write block numbers in raw_inotab_inode.
                 std::printf("Inotab inode spans %p..%p\n",
                     &raw_inotab_inode[headersize], &raw_inotab_inode[raw_inotab_inode.size()]);
-                blockifier.FlushBlockifyRequests();
+                blockifier.FlushBlockifyRequests("INOTAB");
 
                 blockifier.EnablePackedBlocksIfPossible();
 

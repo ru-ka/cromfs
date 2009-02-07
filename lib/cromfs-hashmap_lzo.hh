@@ -11,7 +11,7 @@ template<typename HashType, typename T>
 class CompressedHashLayer
 {
 public:
-    CompressedHashLayer(uint_fast64_t max = (UINT64_C(1) << 32));
+    CompressedHashLayer(uint_fast64_t max = (UINT64_C(1) << (8*sizeof(HashType))));
     ~CompressedHashLayer();
 
     void extract(HashType crc, T& result)       const;
@@ -34,7 +34,7 @@ public:
         { throw NotCopiableError(); }
 private:
     unsigned n_buckets;
-    static const unsigned n_per_bucket = 0x10000;
+    static const unsigned n_per_bucket = 0x2000;
     static const unsigned bucketsize   = n_per_bucket * sizeof(T);
 
     typedef rangeset<HashType, StaticAllocator<HashType> > hashbits_t;

@@ -117,7 +117,8 @@ ARCHFILES=\
 	tests/a/dir2 tests/a/dir2/util.cc \
 	tests/a/dir2/util.hh \
 	tests/a/sparse.bin \
-	tests/test-boyermoore.cc
+	tests/test-boyermoore.cc \
+	tests/test-hashmaps.cc
 
 include Makefile.sets
 
@@ -183,7 +184,7 @@ install: $(PROGS) FORCE
 	@echo "The 'install' directory was prepared. Copy the contents to the locations you see fit."
 	@echo "*****************************************"
 
-test: $(PROGS) FORCE
+test: FORCE
 	cd tests && ./run.sh
 
 .libdepend: lib/.depend

@@ -59,6 +59,9 @@ bool GoogleSparseMap<HashType,T>::has(HashType crc) const
 
 
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
+#define ri goog_ri
+#define ai goog_ai
+#define si goog_si
 /*
 typedef GoogleSparseMap<BlockIndexHashType,cromfs_blocknum_t> ri;
 template ri::GoogleSparseMap();
@@ -83,3 +86,6 @@ template void si::extract(unsigned,uint_least32_t&) const;
 template void si::set(unsigned,const uint_least32_t&);
 template void si::unset(unsigned);
 template bool si::has(unsigned)const;
+#undef ri
+#undef ai
+#undef si

@@ -610,6 +610,13 @@ To control the memory usage, use these tips:
  <li>In mkcromfs, adjust the block size (--bsize). The RAM usage of mkcromfs
      is directly proportional to the number of blocks (and the filesystem size),
      so smaller blocks require more memory and larger require less.
+ <li>Adjust the --blockindexmethod option. Different values of this option
+     have different effect on the virtual memory use of mkcromfs (it does
+     not affect cromfs-driver, though).
+     Use \"--blockindexmethod none\" and \"-A0\" if you want the smallest possible
+     memory usage for your selected block size. It has an impact on the compression
+     power, but you can compensate it by using a large value for the --bruteforcelimit
+     option instead, if you don't mind longer runtime.
 </ul>
 
 ", '1.1.1. To control the filesystem speed' => "

@@ -4,6 +4,7 @@
 #include <map>
 
 #include "cromfs-hashmap_lzo.hh"
+#include "fsballocator.hh"
 
 template<typename HashType, typename T>
 class CompressedHashLayer_Sparse
@@ -19,7 +20,10 @@ public:
 
 private:
     typedef CompressedHashLayer<HashType,T> array_t;
-    typedef std::map<HashType/*begin*/, array_t*> map_t;
+    typedef std::map<HashType/*begin*/, array_t*,
+                     std::less<HashType>,
+                     FSBAllocator<std::pair<const HashType, array_t*> >
+                    > map_t;
 
     map_t data;
 };
