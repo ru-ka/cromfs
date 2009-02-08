@@ -17,14 +17,34 @@
  * On 32-bit, we can use MMX registers, if MMX is enabled
  *   However, SSE2 must ALSO be enabled, because otherwise
  *   we cannot do 64-bit sub/add efficiently.
- *
- * 128-bit is not feasible, because SSE2 does not
- * have 128-bit add/sub ops. They cannot be even synthesized
- * from 64-bit adds/subs, because there's no carry update.
  */
 # define SIXTY_BIT_PLATFORM
 #else
 # undef SIXTY_BIT_PLATFORM
+#endif
+
+#if defined(__GNUC__) && defined(__LP64__) && !defined(__ICC)
+//# define HUNDREDTWENTYEIGHTBIT_PLATFORM
+/*
+ * 128-bit with SSE2 is not feasible, because SSE2 does not
+ * have 128-bit add/sub ops. They cannot be even synthesized
+ * from 64-bit adds/subs, because there's no carry update.
+ * More importantly there's no 128-bit shift to left or right.
+ *
+ * __attribute__((mode(TI))) can be used to created a 128-bit
+ * integer type on GCC, however, it does not work on ICC.
+ *
+ * Most importantly though, we lack the following important
+ * things:
+ *   - mix128 algorithm. I don't know how to create it.
+ */
+
+#ifdef __SSE2__
+ #include <xmmintrin.h>
+#endif
+
+#else
+# undef HUNDREDTWENTYEIGHTBIT_PLATFORM
 #endif
 
 /* Based on Robert J. Jenkins Jr.'s hash code
@@ -38,36 +58,36 @@
 /* The mixing step */
 #define mix32(a,b,c) \
 do{ \
-  a=(a-b-c) ^ (c>>13); \
-  b=(b-c-a) ^ (a<<8);  \
-  c=(c-a-b) ^ (b>>13); \
+  a=(a-b-c) ^ (c>>13); /*-19*/ \
+  b=(b-c-a) ^ (a<<8);  /*-24*/ \
+  c=(c-a-b) ^ (b>>13); /*-19*/ \
   \
-  a=(a-b-c) ^ (c>>12); \
-  b=(b-c-a) ^ (a<<16); \
-  c=(c-a-b) ^ (b>>5);  \
+  a=(a-b-c) ^ (c>>12); /*-20*/ \
+  b=(b-c-a) ^ (a<<16); /*-16*/ \
+  c=(c-a-b) ^ (b>>5);  /*-27*/ \
   \
-  a=(a-b-c) ^ (c>>3);  \
-  b=(b-c-a) ^ (a<<10); \
-  c=(c-a-b) ^ (b>>15); \
+  a=(a-b-c) ^ (c>>3);  /*-29*/ \
+  b=(b-c-a) ^ (a<<10); /*-22*/ \
+  c=(c-a-b) ^ (b>>15); /*-17*/ \
 }while(0)
 
 #define mix64(a,b,c) \
 do{ \
-  a=(a-b-c) ^ (c>>43); \
-  b=(b-c-a) ^ (a<<9); \
-  c=(c-a-b) ^ (b>>8); \
+  a=(a-b-c) ^ (c>>43); /*-21*/ \
+  b=(b-c-a) ^ (a<<9);  /*-55*/ \
+  c=(c-a-b) ^ (b>>8);  /*-56*/ \
   \
-  a=(a-b-c) ^ (c>>38); \
-  b=(b-c-a) ^ (a<<23); \
-  c=(c-a-b) ^ (b>>5); \
+  a=(a-b-c) ^ (c>>38); /*-26*/ \
+  b=(b-c-a) ^ (a<<23); /*-41*/ \
+  c=(c-a-b) ^ (b>>5);  /*-59*/ \
   \
-  a=(a-b-c) ^ (c>>35); \
-  b=(b-c-a) ^ (a<<49); \
-  c=(c-a-b) ^ (b>>11); \
+  a=(a-b-c) ^ (c>>35); /*-29*/ \
+  b=(b-c-a) ^ (a<<49); /*-15*/ \
+  c=(c-a-b) ^ (b>>11); /*-53*/ \
   \
-  a=(a-b-c) ^ (c>>12); \
-  b=(b-c-a) ^ (a<<18); \
-  c=(c-a-b) ^ (b>>22); \
+  a=(a-b-c) ^ (c>>12); /*-52*/ \
+  b=(b-c-a) ^ (a<<18); /*-46*/ \
+  c=(c-a-b) ^ (b>>22); /*-42*/ \
 }while(0)
 
 /*#define mix128(a,b,c) \
@@ -93,22 +113,165 @@ do{ \
   c=(c-a-b) ^ (b>> ?? ); \
 }while(0)*/
 
+#ifdef HUNDREDTWENTYEIGHTBIT_PLATFORM
+typedef unsigned int uint128_t __attribute__((mode(TI)));
+
+class c128
+{
+public:
+    uint128_t value;
+public:
+    c128() : value()
+    {
+    }
+    c128(uint128_t v) : value(v) { }
+    c128(uint_fast64_t a, uint_fast64_t b)
+        : value(a)
+    {
+        value <<= 64;
+        value |= b;
+    }
+    c128(uint_least64_t a) : value(a)
+    {
+    }
+    c128(uint_least32_t a) : value(a)
+    {
+    }
+    #ifdef __SSE2__
+    c128(const __m128& b) : value(*(const uint128_t*)&b)
+    {
+    }
+    #endif
+
+    c128& operator += (const c128& b) { value += b.value; return *this; }
+    c128& operator -= (const c128& b) { value -= b.value; return *this; }
+    c128& operator ^= (const c128& b)
+    {
+    #ifdef __SSE2__
+        *(__m128*)&value = _mm_xor_ps( *(const __m128*)&value, *(const __m128*)&b.value);
+    #else
+        value ^= b.value;
+    #endif
+        return *this;
+    }
+    c128& operator &= (const c128& b)
+    {
+    #ifdef __SSE2__
+        *(__m128*)&value = _mm_and_ps( *(const __m128*)&value, *(const __m128*)&b.value);
+    #else
+        value &= b.value;
+    #endif
+        return *this;
+    }
+    c128& operator |= (const c128& b)
+    {
+    #ifdef __SSE2__
+        *(__m128*)&value = _mm_or_ps( *(const __m128*)&value, *(const __m128*)&b.value);
+    #else
+        value |= b.value;
+    #endif
+        return *this;
+    }
+    c128& operator <<= (int nbits) { value <<= nbits; return *this; }
+    c128& operator >>= (int nbits) { value >>= nbits; return *this; }
+
+    c128 operator+ (const c128& b) const { return value + b.value; }
+    c128 operator- (const c128& b) const { return value - b.value; }
+    c128 operator^ (const c128& b) const
+    {
+    #ifdef __SSE2__
+        return _mm_xor_ps( *(const __m128*)&value, *(const __m128*)&b.value);
+    #else
+        return value ^ b.value;
+    #endif
+    }
+    c128 operator& (const c128& b) const
+    {
+    #ifdef __SSE2__
+        return _mm_and_ps( *(const __m128*)&value, *(const __m128*)&b.value);
+    #else
+        return value & b.value;
+    #endif
+    }
+    c128 operator| (const c128& b) const
+    {
+    #ifdef __SSE2__
+        return _mm_or_ps( *(const __m128*)&value, *(const __m128*)&b.value);
+    #else
+        return value | b.value;
+    #endif
+    }
+    c128 operator<< (int nbits) const { return value << nbits; }
+    c128 operator>> (int nbits) const { return value >> nbits; }
+    c128 operator~ () const { return ~value; }
+};
+
+c128 R128(const void* p)
+{
+  #ifdef LITTLE_ENDIAN_AND_UNALIGNED_ACCESS_OK
+    return *(const uint128_t*)p;
+  #else
+    const unsigned char* data = (const unsigned char*)p;
+    c128 res( R64(data) );
+    c128 res2( R64(data + 8) );
+    res |= res2 << 64;
+    return res;
+  #endif
+}
+static inline c128 RnSubstitute(const void* p, unsigned bytes)
+{
+    const unsigned char* data = (const unsigned char*)p;
+    switch(bytes)
+    {
+        case 1: case 2: case 3: case 4:
+        case 5: case 6: case 7: case 8:
+            return Rn(p, bytes);
+        case 16: return R128(p);
+    }
+    return c128(R64(data)) | (c128(Rn(data+8, bytes-8)) << 64);
+}
+#define Rn RnSubstitute
+
+#endif // 128bit
+
 newhash_t newhash_calc(const unsigned char* buf, unsigned long size)
 {
     return newhash_calc_upd(0, buf, size);
 }
 newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long size)
 {
-#ifdef SSE2_PLATFORM
-    a = b = UINT128_C(0x9e3779b97f4a7c15f39cc0605cedc834); // 2^128 / ((1+sqrt(5))/2)
-    /* TODO: implement the rest */
-    /* This code is current not used. */
+#ifdef HUNDREDTWENTYEIGHTBIT_PLATFORM
+    c128 c_cast = c; { c128 c = c_cast;
+    unsigned long len = size;
+    c128 a(UINT64_C(0x9e3779b97f4a7c15),UINT64_C(0xf39cc0605cedc834)); // 2^128 / ((1+sqrt(5))/2)
+    c128 b(a);
+    while(len >= 16*3)
+    {
+        a += (c128)R128(buf+0);
+        b += (c128)R128(buf+16);
+        c += (c128)R128(buf+32);
+        mix128(a,b,c);
+        buf += 48; len -= 48;
+    }
+    /*------------------------------------- handle the last 47 bytes */
+    c = c + uint64_t(size);
+    if(len >32)       { c += (c128)Rn(buf+31, len-31) & ~c128(0xFFu);
+                        b += (c128)R128(buf+16);
+                        a += (c128)R128(buf); }
+    else if(len > 16) { b += (c128)Rn(buf+16,  std::min(16UL, len-16));
+                        a += (c128)R128(buf); }
+    else                a += (c128)Rn(buf, std::min(16UL, len));
+    /* the first byte of c is reserved for the length */
+    mix128(a,b,c);
+    /*-------------------------------------------- report the result */
+    return c.value; /* Note: this returns just the lowest 32 bits of the hash */
+   }
 #elif defined(SIXTY_BIT_PLATFORM)
     c64 c_cast = (uint64_t)c; { c64 c = c_cast;
-    c64 a,b;
     unsigned long len = size;
-    a = b = UINT64_C(0x9e3779b97f4a7c13); // 2^64 / ((1+sqrt(5))/2)
-    while(len >= 24)
+    c64 a(UINT64_C(0x9e3779b97f4a7c13)); // 2^64 / ((1+sqrt(5))/2)
+    c64 b(a);
+    while(len >= 8*3)
     {
         a += (c64)R64(buf+0);
         b += (c64)R64(buf+8);
@@ -139,7 +302,7 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     uint_least32_t a,b;
     unsigned long len = size;
     a = b = UINT32_C(0x9e3779b9); // 2^32 / ((1+sqrt(5))/2
-    while(len >= 12)
+    while(len >= 4*3)
     {
         a += R32(buf+0);
         b += R32(buf+4);

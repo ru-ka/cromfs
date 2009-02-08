@@ -96,7 +96,7 @@ static inline uint_fast64_t R64r(const void* p)
 static inline uint_fast64_t Rn(const void* p, unsigned bytes)
 {
     const unsigned char* data = (const unsigned char*)p;
-    uint_fast64_t res = 0;
+    uint_fast64_t res(0);
     switch(bytes)
     {
         case 8: return R64(p);
