@@ -916,11 +916,13 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         uint_fast64_t total_done  = 0;
         uint_fast64_t blocks_done = 0;
         uint_fast64_t last_report_pos = 0;
+        uint_fast64_t n_collisions = 0;
+        uint_fast64_t n_unique     = 0;
 
         enum { n_hashlocks = 4096 };
         MutexType hashlock[n_hashlocks+1], displaylock;
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(guided)
         for(size_t a=0; a < schedule.size(); ++a)
         {
             schedule_item& s = schedule[a];
@@ -959,9 +961,17 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
                 hashlock[hash / (UINT64_C(0x100000000) / n_hashlocks)].Lock();
                 if(hash_seen->test(hash))
+                {
                     hash_duplicate->set(hash);
+                    #pragma omp atomic
+                    ++n_collisions;
+                }
                 else
+                {
                     hash_seen->set(hash);
+                    #pragma omp atomic
+                    ++n_unique;
+                }
                 hashlock[hash / (UINT64_C(0x100000000) / n_hashlocks)].Unlock();
 
               #pragma omp atomic
@@ -972,6 +982,11 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             source->close();
         }
         DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+        std::printf("%lu recurring hashes found. %lu unique. Prepass helped skip about %.1f%% of work.\n",
+            (unsigned long) n_collisions,
+            (unsigned long) n_unique,
+            n_unique ? (n_unique - n_collisions) / (double)n_unique : 0.0
+                   );
     }
 
     BlockWhereList where_list;
