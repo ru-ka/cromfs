@@ -160,7 +160,9 @@ namespace cromfs_creator
         std::string pathname; // Source path
         std::string name;     // Just the entry name
         struct stat64 st;
+        /*
         char sortkey;
+        */
 
         size_t             num_blocks; // Number of blocks (for determining inode number)
         cromfs_inodenum_t* inonum;     // Where inode number will be written when known
@@ -168,14 +170,14 @@ namespace cromfs_creator
         cromfs_dirinfo* dirinfo; // In case of a directory
         bool needs_blockify;
 
-        direntry() : pathname(),name(), st(),sortkey(), // -Weffc++
+        direntry() : pathname(),name(), st()/*,sortkey()*/, // -Weffc++
             num_blocks(0),inonum(0), dirinfo(0), needs_blockify()
         {
         }
 
         direntry(const direntry& b)
             : pathname(b.pathname), name(b.name),
-              st(b.st), sortkey(b.sortkey),
+              st(b.st), /*sortkey(b.sortkey),*/
               num_blocks(b.num_blocks),
               inonum(b.inonum), dirinfo(b.dirinfo),
               needs_blockify(b.needs_blockify) // -Weffc++
@@ -191,7 +193,7 @@ namespace cromfs_creator
             if(&b != this)
             {
                 pathname=b.pathname; name=b.name;
-                st=b.st; sortkey=b.sortkey;
+                st=b.st; /*sortkey=b.sortkey;*/
                 num_blocks=b.num_blocks;
                 inonum=b.inonum; dirinfo=b.dirinfo;
                 needs_blockify=b.needs_blockify;
@@ -200,7 +202,7 @@ namespace cromfs_creator
         }
 
         bool CompareSortKey(const direntry& b) const
-            { if(sortkey != b.sortkey) return sortkey < b.sortkey;
+            { /*if(sortkey != b.sortkey) return sortkey < b.sortkey;*/
               //return *inonum < *b.inonum;
               if(SortByFilename) return name < b.name;
               /*return std::lexicographical_compare(
@@ -295,11 +297,11 @@ namespace cromfs_creator
                 std::perror(ent.pathname.c_str());
                 continue;
             }
-
+            /*
             if(S_ISLNK(ent.st.st_mode)) ent.sortkey = DirParseOrder.Link;
             else if(S_ISDIR(ent.st.st_mode)) ent.sortkey = DirParseOrder.Dir;
             else ent.sortkey = DirParseOrder.Other;
-
+            */
             ScopedLock lck(collection.lock);
             collection.push_back(ent);
         }
@@ -340,20 +342,19 @@ namespace cromfs_creator
         CollectOneDir(path, collection);
         const size_t collection_end_pos = collection.size();
     #endif
-      /*
         // Step 2: Sort the contents of the directory according
         //         to the filename.
-        // Is this really useful? Removed for now.
+        // This must be done so that a directory gets the inode
+        // numbers assigned in their name order.
         {
     #ifdef USE_RECURSIVE_OMP_READDIR
         ScopedLock lck(collection.lock);
     #endif
-        MAYBE_PARALLEL_NS::stable_sort(
+        MAYBE_PARALLEL_NS::sort(
             &collection[collection_begin_pos],
             &collection[collection_end_pos],
             std::mem_fun_ref(&direntry::CompareName));
         }
-      */
 
         // Step 3: Read subdirectories and calculate the number of
         //         blocks. Also assign the target for the inode number.
@@ -532,15 +533,16 @@ namespace cromfs_creator
          * sort the entry list in the order in which we want to
          * blockify it.
          */
-
+        /*
         MAYBE_PARALLEL_NS::stable_sort(
             collection.begin(),
             collection.end(),
             std::mem_fun_ref(&direntry::CompareSortKey)); // Step 3.
+        */
 
-        /* Don't parallelize this loop. Otherwise you'll mess up
-         * the "blockifying order".
-         */
+        MutexType blockify_lock;
+
+        #pragma omp parallel for schedule(guided)
         for(size_t p=0; p<collection.size(); ++p) // Step 4.
         {
             direntry& ent = collection[p];
@@ -590,12 +592,14 @@ namespace cromfs_creator
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
+
+                ScopedLock lck(blockify_lock);
                 blockifier.ScheduleBlockify(
                     datasrc,
                     DataClassOrder.Directory,
                     &inotab[inotab_offset + headersize],
                     inode.blocksize);
-
+                // If you remove blockify_lock, make this atomic.
                 bytes_of_files += inode.bytesize;
             }
             else if(S_ISLNK(st.st_mode))
@@ -610,12 +614,14 @@ namespace cromfs_creator
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
+
+                ScopedLock lck(blockify_lock);
                 blockifier.ScheduleBlockify(
                     datasrc,
                     DataClassOrder.Symlink,
                     &inotab[inotab_offset + headersize],
                     inode.blocksize);
-
+                // If you remove blockify_lock, make this atomic.
                 bytes_of_files += inode.bytesize;
             }
             else if(S_ISREG(st.st_mode))
@@ -625,12 +631,14 @@ namespace cromfs_creator
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
+
+                ScopedLock lck(blockify_lock);
                 blockifier.ScheduleBlockify(
                     datasrc,
                     DataClassOrder.File,
                     &inotab[inotab_offset + headersize],
                     inode.blocksize);
-
+                // If you remove blockify_lock, make this atomic.
                 bytes_of_files += inode.bytesize;
             }
             else if(S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode))
@@ -2034,6 +2042,10 @@ int main(int argc, char** argv)
                     }
                     if(last_comma) break;
                     arg=comma+1;
+                }
+                if(c == 5002)
+                {
+                    std::fprintf(stderr, "mkcromfs: --dirparseorder is obsolete and does not do anything.\n");
                 }
                 break;
             }

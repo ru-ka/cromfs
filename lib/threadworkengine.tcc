@@ -7,7 +7,7 @@
 template<typename WorkType>
 void ThreadWorkEngine<WorkType>::RunTasks(
     size_t
-    #if !(defined(_OPENMP) || !USE_PTHREADS)
+    #if !( defined(_OPENMP) || USE_PTHREADS==0 )
            num_threads /* Note: <- unused when OPENMP */
     #endif
                       ,
@@ -17,7 +17,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
     /* DoWork returns bool if it wants to cancel its siblings */
 )
 {
-#if defined(_OPENMP) || !defined(USE_PTHREADS)
+#if defined(_OPENMP) || USE_PTHREADS==0
     /* This version does not cancel sibling threads,
      * but may be a little more robust that way.
      * Just hope that DoWork() does not consume a lot of time.
@@ -35,7 +35,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
         }
     }
 #else
-    if(num_threads <= 1 || num_workunits <= 1)
+    if(num_threads <= 1 || num_workunits <= 1) // just do linearly
     {
         for(size_t a = 0; a < num_workunits; ++a)
             if( DoWork(a, workparams) ) break;
@@ -141,7 +141,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
 #endif
 }
 
-#if !(defined(_OPENMP) || !USE_PTHREADS)
+#if !(defined(_OPENMP) || USE_PTHREADS==0)
 template<typename WorkType>
 void* ThreadWorkEngine<WorkType>::WorkRunner
     (ThreadWorkEngine<WorkType>::workerparam& params)

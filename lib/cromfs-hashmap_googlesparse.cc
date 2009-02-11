@@ -1,5 +1,4 @@
 #include "endian.hh"
-#include "minilzo.h"
 
 #include "cromfs-hashmap_googlesparse.hh"
 

@@ -266,9 +266,8 @@ void fblock_storage::put_appended_raw(
     const uint32_t cap = append.AppendBaseOffset + datasize;
     if(cap <= append.OldSize)
     {
-        assertvar(is_compressed),
-        assertvar(append.OldSize);
-        assertvar(filesize);
+        assertbegin();
+        assert3var(is_compressed, append.OldSize, filesize),
         assert(is_compressed || append.OldSize == filesize);
         assertflush();
 
@@ -276,8 +275,8 @@ void fblock_storage::put_appended_raw(
         return;
     }
 
-    assertvar(cap);
-    assertvar(append.AppendedSize);
+    assertbegin();
+    assert2var(cap, append.AppendedSize);
     assert(cap == append.AppendedSize);
     assertflush();
 
@@ -296,8 +295,8 @@ void fblock_storage::put_appended_raw(
 
         is_compressed = false;
 
-        assertvar(buf.size());
-        assertvar(append.AppendBaseOffset);
+        assertbegin();
+        assert2var(buf.size(), append.AppendBaseOffset);
         assert(buf.size() >= append.AppendBaseOffset);
         assertflush();
 

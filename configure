@@ -72,11 +72,12 @@ cpu_check() {
   if grep flags /proc/cpuinfo |sed 's/.*://'|tr ' ' '\012'|grep -q '^'"$2"'$'; then
     if cc_check '<stdio.h>' "$3" 'puts("ok");'; then
       OPTIM="$OPTIM $3"
+      BEST_CPUFEATURE="$3"
       do_echo "Yes, using $3"
     else
       do_echo "Yes, but your compiler does not support $3"
       if [ ! "$4" = "" ]; then
-        do_echo "But using -D$4 anyway"
+        do_echo "- Using -D$4 anyway"
         OPTIM="$OPTIM -D$4"
       fi
     fi
@@ -107,7 +108,8 @@ else
 fi
 
 if [ "$CC" = icc ]; then
-  CPPFLAGS="$CPPFLAGS -w1 -inline-level=2"
+  CPPFLAGS="$CPPFLAGS -w1"
+  OPTIM="$OPTIM -inline-level=2"
   #do_echo -n "Checking if your compiler supports -ipo... "
   #if cc_check '<stdio.h>' '-ipo' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
   #  #do_echo Yes
@@ -125,20 +127,26 @@ EOF
   # Explicitly add ICC's libs to the LDFLAGS -- shouldn't be needed,
   #  but it is, at least when you're using ICC on a distribution that
   #  isn't supported by Intel, such as Debian on x86_64.
-  LDFLAGS="$LDFLAGS -L$ICC_PATH""/lib -lirc -lguide -lpthread -lstdc++"
+  LDFLAGS="$LDFLAGS -L$ICC_PATH""/lib -lirc -lstdc++"
 fi
 
+DISABLE_THREADS=""
+#DISABLE_THREADS=q
+
 HAS_OPENMP=0
-do_echo -n "Checking if your compiler supports -fopenmp... "
+do_echo -n "Checking if your compiler supports OpenMP... "
 if [ "$CC" = "icc" ] && \
-    cc_check '<stdio.h>' '-openmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+    cc_check '<'$DISABLE_THREADS'stdio.h>' '-openmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
   do_echo Yes
   do_echo "- Will use OpenMP (-openmp), not checking for -pthread"
   CPPFLAGS="$CPPFLAGS -openmp"
   LDFLAGS="$LDFLAGS -openmp"
   CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=0"
   HAS_OPENMP=1
-elif cc_check '<stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+
+  # Needed for openmp support:
+  LDFLAGS="$LDFLAGS -lguide -lpthread"
+elif cc_check '<'$DISABLE_THREADS'stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
   do_echo Yes
   do_echo "- Will use OpenMP, not checking for -pthread"
   CPPFLAGS="$CPPFLAGS -fopenmp"
@@ -147,8 +155,11 @@ elif cc_check '<stdio.h>' '-fopenmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; 
   HAS_OPENMP=1
 else
   do_echo No
+fi
+
+if [ "$HAS_OPENMP" = "0" ]; then
   do_echo -n "Checking if your compiler supports -pthread... "
-  if cc_check '"lib/threadfun.hh"' '-pthread' 'ThreadType t;JoinThread(t);'; then
+  if cc_check '"'$DISABLE_THREADS'lib/threadfun.hh"' '-pthread' 'ThreadType t;JoinThread(t);'; then
     do_echo Yes
     CPPFLAGS="$CPPFLAGS -DUSE_PTHREADS=1 -pthread"
     LDFLAGS="$LDFLAGS -pthread"
@@ -214,8 +225,61 @@ else
   FUSE_STATIC=0
 fi
 
+HAS_LZO2=""
+
+do_echo -n "Checking for liblzo2 (dynamic)... "
+if cc_check '<lzo/lzo1x.h>' "-llzo2" ''; then
+  do_echo Yes
+  HAS_LZO2="-llzo2"
+else
+  do_echo No
+fi
+
+do_echo -n "Checking for liblzo2 (static)... "
+if cc_check '<lzo/lzo1x.h>' "-Bstatic -llzo2 -Bdynamic" ''; then
+  do_echo Yes
+  HAS_LZO2="-Bstatic -llzo2 -Bdynamic"
+else
+  do_echo No
+fi
+
+if [ ! "$HAS_LZO2" = "" ]; then
+  CPPFLAGS="$CPPFLAGS -DHAS_LZO2=1"
+  MKCROMFS_LZO_OBJ=""
+  LDFLAGS="$LDFLAGS $HAS_LZO2"
+  
+  do_echo -n "Checking for assembler-optimized lzo2 functions... "
+  if cc_check '<lzo/lzo_asm.h>' "$HAS_LZO2" 'lzo1x_decompress_asm_fast_safe(0,0, 0,0, 0);'; then
+    do_echo Yes
+    CPPFLAGS="$CPPFLAGS -DHAS_ASM_LZO2=1"
+  else
+    do_echo No
+    CPPFLAGS="$CPPFLAGS -DHAS_ASM_LZO2=0"
+  fi
+else
+  do_echo "- In the absense of liblzo2, mkcromfs will use minilzo (shipped)"
+  CPPFLAGS="$CPPFLAGS -DHAS_LZO2=0"
+  MKCROMFS_LZO_OBJ="../lib/minilzo.o"
+fi
+
+do_echo -n "Checking for fuse (static)... "
+fusetry="`pkg-config --cflags --libs fuse`"
+if cc_check '<fuse_lowlevel.h>' "-static -DFUSE_USE_VERSION=25 $fusetry" ''; then
+  do_echo Yes
+  FUSE_STATIC=1
+else
+  do_echo No
+  do_echo "Note: cromfs-driver-static will not be built, because"
+  do_echo "your system does not have a statically linked Fuse library."
+  do_echo "You can still use the dynamically linked cromfs-driver."
+  FUSE_STATIC=0
+fi
+
+
+
+
 do_echo -n "Checking for vsnprintf... "
-if cc_check '<cstdio>' '' 'char Buf[10];using namespace std; vsnprintf(Buf,sizeof Buf,"gruu");'; then
+if cc_check '<cstdio>' '' 'char Buf[10];using namespace std; va_list ap;vsnprintf(Buf,sizeof Buf,ap,"gruu");'; then
   do_echo Yes
   OPTIM="$OPTIM -DHAS_VSNPRINTF"
 else
@@ -248,11 +312,11 @@ if func_check __uint16_t \
    '<stdint.h>' '' 'typedef _uint16_t x;'; \
    then OPTIM="$OPTIM -DHAS___UINT16_T"; fi
 
-if func_check __uint16_t \
+if func_check long\ long \
    '<stdint.h>' '' 'typedef long long x;'; \
    then OPTIM="$OPTIM -DHAS_LONG_LONG"; fi
 
-if func_check __uint16_t \
+if func_check sys/types.h \
    '<sys/types.h>' '' 'typedef int x;'; \
    then OPTIM="$OPTIM -DHAS_SYS_TYPES_H"; fi
 
@@ -268,6 +332,14 @@ if [ ! "$CC" = "icc" ]; then
   else
     do_echo No
   fi
+  do_echo -n "Checking if your compiler supports -minline-stringops-dynamically... "
+  if cc_check '<string.h>' '-minline-stringops-dynamically' 'char buf1[64],buf2[80]="kissa"; memcpy(buf1,buf2,sizeof(buf2)-strlen(buf2));'; then
+    do_echo Yes
+    OPTIM="$OPTIM -minline-stringops-dynamically"
+  else
+    do_echo No
+  fi
+  
   do_echo -n "Checking if your compiler supports -ffast-math... "
   if cc_check '<stdio.h>' '-ffast-math' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
     do_echo Yes
@@ -330,10 +402,26 @@ if [ ! "$CC" = "icc" ]; then
   done
 fi  
 
-cpu_check MMX   mmx   -mmmx   __MMX__
-cpu_check 3dnow 3dnow -m3dnow
-cpu_check SSE   sse   -msse   __SSE__
-cpu_check SSE2  sse2  -msse2  __SSE2__
+if [ ! "$CC" = "icc" ]; then
+  cpu_check MMX   mmx   -mmmx   __MMX__
+  cpu_check 3dnow 3dnow -m3dnow
+  cpu_check SSE   sse   -msse   __SSE__
+  cpu_check SSE2  sse2  -msse2  __SSE2__
+  cpu_check SSE3  sse3  -msse3  __SSE3__
+  cpu_check SSSE3 ssse3 -mssse3 __SSSE3__
+else
+  # ICC can only take one (1) cpu feature flag, so we test these options
+  # in age succession and choose the options from the last succeeding test.
+  # We use the -ax options rather than the -x options so that the code
+  # will still run on processors lacking those features.
+  BEST_CPUFEATURE=""
+  OPTIM_BACKUP="$OPTIM"
+  cpu_check SSE   sse   -axK            __SSE__
+  cpu_check SSE2  sse2  -axW            __SSE2__
+  cpu_check SSE3  sse3  "-axO -msse3"   __SSE3__
+  cpu_check SSSE3 ssse3 "-axT -mssse3"  __SSSE3__
+  OPTIM="$OPTIM_BACKUP $BEST_CPUFEATURE"
+fi
 
 do_echo "Updating Makefile.sets ..."
 
@@ -347,6 +435,8 @@ done
 
 sed "$sed_cmd" < Makefile.sets.in > Makefile.sets
 echo "FUSE_STATIC=$FUSE_STATIC"  >> Makefile.sets
+
+echo "MKCROMFS_LZO_OBJ=$MKCROMFS_LZO_OBJ" >> Makefile.sets
 
 cp -p Makefile.sets util/
 cp -p Makefile.sets  lib/

@@ -1,5 +1,6 @@
 #include "endian.hh"
 #include "cromfs-hashmap_lzo_sparse.hh"
+#include "assert++.hh"
 
 template<typename HashType, typename T>
 CompressedHashLayer_Sparse<HashType,T>::CompressedHashLayer_Sparse()
@@ -93,12 +94,21 @@ redo:;
             }
             // Here, will always merge these "prev" and its next.
             next = prev; ++next;
+            assertbegin();
+            assert4var(next->first, prev->first, prev->second->GetLength(), next->second->GetLength());
             assert(next->first > prev->first + prev->second->GetLength());
+            assertflush();
+
             prev->second->Merge(*next->second, next->first - prev->first);
+
+            assertbegin();
+            assert4var(next->first, prev->first, prev->second->GetLength(), next->second->GetLength());
             assert(prev->first + prev->second->GetLength()
                    >=
                    next->first + next->second->GetLength()
                   );
+            assertflush();
+
             delete next->second;
             data.erase(next);
             goto redo;
@@ -122,13 +132,20 @@ redo:;
 */
     if(merge_prev && merge_next)
     {
+        assertbegin();
+        assert4var(crc, next->first, prev_end, prev->first);
         assert(next->first > prev_end);
+        assertflush();
 
         prev->second->Merge(*next->second, next->first - prev->first);
 
         prev_end   = (uint_fast64_t)prev->first + prev->second->GetLength();
+
+        assertbegin();
+        assert4var(crc, next->first, prev_end, prev->first);
         assert(crc      < prev_end);
         assert(crc      > prev->first);
+        assertflush();
 
         prev->second->set(crc - prev->first, value);
         delete next->second;
@@ -137,14 +154,20 @@ redo:;
     }
     if(merge_prev)
     {
+        assertbegin();
+        assert5var(crc, new_begin, new_end, prev->first, prev_end);
         assert(new_begin > prev->first); assert(new_begin >= prev_end);
         assert(new_end   > prev->first); assert(new_end   > prev_end);
-        assert(crc       > prev->first); assert(crc       > prev_end);
+        assert(crc       > prev->first); assert(crc       >= prev_end);
+        assertflush();
 
         prev->second->Resize(new_end - prev->first);
 
         prev_end   = (uint_fast64_t)prev->first + prev->second->GetLength();
+        assertbegin();
+        assert2var(crc, prev_end);
         assert(crc < prev_end);
+        assertflush();
 
         prev->second->set(crc - prev->first, value);
         return;
@@ -157,7 +180,10 @@ redo:;
 
         new_end = new_begin + newarray->GetLength();
 
+        assertbegin();
+        assert2var(new_end, next_end);
         assert(new_end >= next_end);
+        assertflush();
 
         delete next->second;
         data.erase(next);

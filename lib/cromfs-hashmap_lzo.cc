@@ -1,5 +1,13 @@
 #include "endian.hh"
-#include "minilzo.h"
+
+#if HAS_LZO2
+# include <lzo/lzo1x.h>
+# if HAS_ASM_LZO2
+#  include <lzo/lzo_asm.h>
+# endif
+#else
+# include "minilzo.h"
+#endif
 
 #include "cromfs-hashmap_lzo.hh"
 
@@ -129,20 +137,31 @@ CompressedHashLayer<HashType,T>::~CompressedHashLayer()
     delete[] buckets;
 }
 
+namespace
+{
+  template<size_t bucketsize>
+  struct lzo_bufs
+  {
+        static unsigned char decombuf[ bucketsize+bucketsize/16+64+3 ];
+  };
+  template<size_t bucketsize>
+  unsigned char lzo_bufs<bucketsize>::decombuf[ bucketsize+bucketsize/16+64+3 ] = {0};
+
+  #if HAS_LZO2
+        static char wrkmem[LZO1X_1_15_MEM_COMPRESS] = {0};
+  #else
+        static char wrkmem[LZO1X_1_MEM_COMPRESS] = {0};
+  #endif
+}
 template<typename HashType, typename T>
 void CompressedHashLayer<HashType,T>::flushdirty()
 {
     if(dirtystate == rw)
     {
-        size_t actual_bucketsize = dirtybucket.size();
-#if 1
-        const size_t decom_max = bucketsize+bucketsize/16+64+3;
-        static unsigned char decombuf[decom_max];
-        lzo_uint destlen = decom_max;
-        char wrkmem[LZO1X_1_MEM_COMPRESS];
 
         /* FIXME:
-               This sometimes triggers two kinds of valgrind errors:
+             lzo1x_1_compress sometimes triggers
+             two kinds of valgrind errors:
 
 ==29018== Conditional jump or move depends on uninitialised value(s)
 ==29018==    at 0x410D78: _ZL20_lzo1x_1_do_compressPKhmPhPmPv (minilzo.c:2858)
@@ -157,14 +176,25 @@ void CompressedHashLayer<HashType,T>::flushdirty()
 ==29018==    by 0x406E61: CompressedHashLayer<unsigned, int>::load(unsigned long) (cromfs-hashmap_lzo.cc:181)
 
          */
+
+#if 1
+        lzo_uint actual_bucketsize = dirtybucket.size();
+  #if HAS_LZO2
+        lzo_uint destlen = sizeof lzo_bufs<bucketsize>::decombuf;
+        lzo1x_1_15_compress(&dirtybucket[0], actual_bucketsize,
+                            lzo_bufs<bucketsize>::decombuf, &destlen,
+                            wrkmem);
+  #else
+        lzo_uint destlen = sizeof lzo_bufs<bucketsize>::decombuf;
         lzo1x_1_compress(&dirtybucket[0], actual_bucketsize,
-                         decombuf, &destlen,
+                         lzo_bufs<bucketsize>::decombuf, &destlen,
                          wrkmem);
-
+  #endif
         {std::vector<unsigned char> replvec;
-        buckets[dirtybucketno].swap(replvec);}
+        buckets[dirtybucketno].swap(replvec);} // free the memory used by the bucket
 
-        {std::vector<unsigned char> replvec(decombuf, decombuf+destlen);
+        {std::vector<unsigned char> replvec(lzo_bufs<bucketsize>::decombuf,
+                                            lzo_bufs<bucketsize>::decombuf+destlen); // assign the bucket
         buckets[dirtybucketno].swap(replvec);}
 #else
         buckets[dirtybucketno] = dirtybucket;
@@ -184,11 +214,27 @@ void CompressedHashLayer<HashType,T>::load(size_t bucketno)
         if(!buckets[bucketno].empty())
         {
 #if 1
+  #if HAS_LZO2
+    #if HAS_ASM_LZO2
+            destlen = bucketsize;
+            dirtybucket.resize(bucketsize + 3); // prepare to receive maximum size
+            lzo1x_decompress_asm_fast(&buckets[bucketno][0], buckets[bucketno].size(),
+                             &dirtybucket[0], &destlen,
+                             0/*wrkmem*/);
+    #else
             destlen = bucketsize;
             dirtybucket.resize(bucketsize); // prepare to receive maximum size
             lzo1x_decompress(&buckets[bucketno][0], buckets[bucketno].size(),
                              &dirtybucket[0], &destlen,
-                             0);
+                             0/*wrkmem*/);
+    #endif
+  #else
+            destlen = bucketsize;
+            dirtybucket.resize(bucketsize); // prepare to receive maximum size
+            lzo1x_decompress(&buckets[bucketno][0], buckets[bucketno].size(),
+                             &dirtybucket[0], &destlen,
+                             0/*wrkmem*/);
+  #endif
 #else
             destlen = buckets[bucketno].size();
             dirtybucket = buckets[bucketno];
@@ -219,13 +265,15 @@ void CompressedHashLayer<HashType,T>::Resize(uint_fast64_t length)
     uint_fast64_t new_n_buckets = calc_n_buckets(length);
     if(new_n_buckets > n_buckets)
     {
-        std::vector<unsigned char>* new_buckets =
-            new std::vector<unsigned char> [new_n_buckets];
+        std::vector<unsigned char>* old_buckets = buckets;
+        buckets   = new std::vector<unsigned char> [new_n_buckets];
+
         for(size_t a=0; a<n_buckets; ++a)
-            new_buckets[a].swap(buckets[a]);
-        delete[] buckets;
-        buckets   = new_buckets;
+            buckets[a].swap(old_buckets[a]);
+
         n_buckets = new_n_buckets;
+
+        delete[] old_buckets;
     }
 }
 

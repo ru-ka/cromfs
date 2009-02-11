@@ -12,7 +12,7 @@
 if true; then
 	make -C ../util mkcromfs unmkcromfs -j4
 	rm -f tmp.cromfs
-	../util/mkcromfs a tmp.cromfs -B'*.hh:128' -b16384 -f65536 -e --threads 4 >/dev/null
+	../util/mkcromfs a tmp.cromfs -B'*.hh:128' -b16384 -f65536 -e --threads 1 >/dev/null
 	rm -rf b
 	../util/unmkcromfs tmp.cromfs b >/dev/null
 
@@ -32,7 +32,7 @@ fi
 if true; then
 	make -C ../util mkcromfs unmkcromfs -j4
 	rm -f tmp.cromfs
-	../util/mkcromfs a tmp.cromfs -b64 -f512 --threads 1 --blockindexmethod prepass -A1 >/dev/null
+	../util/mkcromfs a tmp.cromfs -b64 -f512 --threads 20 --blockindexmethod prepass -A1 >/dev/null
 	rm -rf b
 	../util/unmkcromfs tmp.cromfs b -s >/dev/null
 

@@ -173,7 +173,8 @@ private:
 
         bool CompareSchedulingOrder(const schedule_item& b) const
         {
-            return ((int)dataclass < (int)(b.dataclass));
+            if(dataclass != b.dataclass) return ((int)dataclass < (int)(b.dataclass));
+            return source->getname() < b.source->getname();
         }
 
         schedule_item(const schedule_item& b)

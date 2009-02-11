@@ -23,8 +23,8 @@
 # undef SIXTY_BIT_PLATFORM
 #endif
 
-#if defined(__GNUC__) && defined(__LP64__) && !defined(__ICC)
-//# define HUNDREDTWENTYEIGHTBIT_PLATFORM
+#if 0 && defined(__GNUC__) && defined(__LP64__) && !defined(__ICC)
+# define HUNDREDTWENTYEIGHTBIT_PLATFORM
 /*
  * 128-bit with SSE2 is not feasible, because SSE2 does not
  * have 128-bit add/sub ops. They cannot be even synthesized
@@ -33,10 +33,6 @@
  *
  * __attribute__((mode(TI))) can be used to created a 128-bit
  * integer type on GCC, however, it does not work on ICC.
- *
- * Most importantly though, we lack the following important
- * things:
- *   - mix128 algorithm. I don't know how to create it.
  */
 
 #ifdef __SSE2__
@@ -47,71 +43,69 @@
 # undef HUNDREDTWENTYEIGHTBIT_PLATFORM
 #endif
 
-/* Based on Robert J. Jenkins Jr.'s hash code
+/* Based on Robert J. Jenkins Jr.'s "zobra" hash code
  * References:
  *   http://www.burtleburtle.net/bob/hash/evahash.html
  *   http://www.cris.com/~Ttwang/tech/inthash.htm
  *
- * Copyright (C) 2008 Joel Yliluoma (http://iki.fi/bisqwit/)
+ * Copyright (C) 2009 Joel Yliluoma (http://iki.fi/bisqwit/)
  */
 
+template<typename T>
+static inline T rol(T v, int n) { return (v<<n) | (v>>( sizeof(T)*8 - n)); }
+
 /* The mixing step */
-#define mix32(a,b,c)  \
+#define mix32z(a,b,c)  \
 do{ \
-  a=(a-b-c) ^ (c>> 5); \
-  b=(b-c-a) ^ (a<<15); \
-  c=(c-a-b) ^ (b>>13); \
-  \
-  a=(a-b-c) ^ (c>>11); \
-  b=(b-c-a) ^ (a<< 7); \
-  c=(c-a-b) ^ (b>> 5); \
-  \
-  a=(a-b-c) ^ (c>> 3); \
-  b=(b-c-a) ^ (a<<13); \
-  c=(c-a-b) ^ (b>>15); \
+  a=(a-c) ^ rol(c,16); c += b; \
+  b=(b-a) ^ rol(a,23); a += c; \
+  c=(c-b) ^ rol(b,29); b += a; \
+  a=(a-c) ^ rol(c,16); c += b; \
+  b=(b-a) ^ rol(a,19); a += c; \
+  c=(c-b) ^ rol(b,17); b += a; \
+}while(0)
+#define final32z(a,b,c)  \
+do{ \
+  c=(c^b) - rol(b, 5); \
+  a=(a^c) - rol(c,10); \
+  b=(b^a) - rol(a, 6); \
+  c=(c^b) - rol(b, 9); \
 }while(0)
 
-#define mix64(a,b,c)  \
+#define mix64z(a,b,c)  \
 do{ \
-  a=(a-b-c) ^ (c>>26); \
-  b=(b-c-a) ^ (a<<38); \
-  c=(c-a-b) ^ (b>> 8); \
-  \
-  a=(a-b-c) ^ (c>>12); \
-  b=(b-c-a) ^ (a<<31); \
-  c=(c-a-b) ^ (b>>19); \
-  \
-  a=(a-b-c) ^ (c>>30); \
-  b=(b-c-a) ^ (a<<15); \
-  c=(c-a-b) ^ (b>>13); \
-  \
-  a=(a-b-c) ^ (c>>10); \
-  b=(b-c-a) ^ (a<<24); \
-  c=(c-a-b) ^ (b>>25), \
+  a=(a-c) ^ rol(c, 2); c += b; \
+  b=(b-a) ^ rol(a,22); a += c; \
+  c=(c-b) ^ rol(b, 3); b += a; \
+  a=(a-c) ^ rol(c,36); c += b; \
+  b=(b-a) ^ rol(a,48); a += c; \
+  c=(c-b) ^ rol(b,42); b += a; \
+}while(0)
+#define final64z(a,b,c)  \
+do{ \
+  c=(c^b) - rol(b,22); \
+  a=(a^c) - rol(c, 3); \
+  b=(b^a) - rol(a,58); \
+  c=(c^b) - rol(b,48); \
 }while(0)
 
-#define mix128(a,b,c) \
+#define mix128z(a,b,c)  \
 do{ \
-  a=(a-b-c) ^ (c>> 56 ); \
-  b=(b-c-a) ^ (a<< 77 ); \
-  c=(c-a-b) ^ (b>> 60 ); \
-  \
-  a=(a-b-c) ^ (c>> 75 ); \
-  b=(b-c-a) ^ (a<< 30 ); \
-  c=(c-a-b) ^ (b>> 33 ); \
-  \
-  a=(a-b-c) ^ (c>> 38 ); \
-  b=(b-c-a) ^ (a<< 58 ); \
-  c=(c-a-b) ^ (b>> 71 ); \
-  \
-  a=(a-b-c) ^ (c>> 88 ); \
-  b=(b-c-a) ^ (a<< 65 ); \
-  c=(c-a-b) ^ (b>> 23 ); \
-  \
-  a=(a-b-c) ^ (c>> 15 ); \
-  b=(b-c-a) ^ (a<< 101); \
-  c=(c-a-b) ^ (b>> 71 ); \
+  a=(a-c) ^ rol(c, 79); c += b; \
+  b=(b-a) ^ rol(a,124); a += c; \
+  c=(c-b) ^ rol(b, 60); b += a; \
+  a=(a-c) ^ rol(c, 74); c += b; \
+  b=(b-a) ^ rol(a,115); a += c; \
+  c=(c-b) ^ rol(b,101); b += a; \
 }while(0)
+#define final128z(a,b,c)  \
+do{ \
+  c=(c^b) - rol(b, 60); \
+  a=(a^c) - rol(c, 20); \
+  b=(b^a) - rol(a, 91); \
+  c=(c^b) - rol(b,106); \
+}while(0)
+
 
 #ifdef HUNDREDTWENTYEIGHTBIT_PLATFORM
 typedef unsigned int uint128_t __attribute__((mode(TI)));
@@ -241,54 +235,52 @@ newhash_t newhash_calc(const unsigned char* buf, unsigned long size)
 newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long size)
 {
 #ifdef HUNDREDTWENTYEIGHTBIT_PLATFORM
-    c128 c_cast = c; { c128 c = c_cast;
+    c128 c_cast = c; {
     unsigned long len = size;
     c128 a(UINT64_C(0x9e3779b97f4a7c15),UINT64_C(0xf39cc0605cedc834)); // 2^128 / ((1+sqrt(5))/2)
-    c128 b(a);
+    a += c_cast + size;
+    c128 b(a), c(a);
     while(len >= 16*3)
     {
         a += (c128)R128(buf+0);
         b += (c128)R128(buf+16);
         c += (c128)R128(buf+32);
-        mix128(a,b,c);
+        mix128z(a,b,c);
         buf += 48; len -= 48;
     }
     /*------------------------------------- handle the last 47 bytes */
-    c = c + uint64_t(size);
-    if(len >32)       { c += (c128)Rn(buf+31, len-31) & ~c128(0xFFu);
-                        b += (c128)R128(buf+16);
-                        a += (c128)R128(buf); }
-    else if(len > 16) { b += (c128)Rn(buf+16,  std::min(16UL, len-16));
-                        a += (c128)R128(buf); }
-    else                a += (c128)Rn(buf, std::min(16UL, len));
-    /* the first byte of c is reserved for the length */
-    mix128(a,b,c);
+    if(len > 0)
+    {
+        if(len >= 32)      { a += (c128)R128(buf); b += (c128)R128(buf+16); c += (c128)Rn(buf+32,len-32); }
+        else if(len >= 16) { a += (c128)R128(buf); b += (c128)Rn(buf+16, len-16); }
+        else               { a += (c128)Rn(buf, len); }
+        final128z(a,b,c);
+    }
     /*-------------------------------------------- report the result */
     return c.value; /* Note: this returns just the lowest 32 bits of the hash */
    }
 #elif defined(SIXTY_BIT_PLATFORM)
-    c64 c_cast = (uint64_t)c; { c64 c = c_cast;
+    c64 c_cast = (uint_fast64_t)c; {
     unsigned long len = size;
     c64 a(UINT64_C(0x9e3779b97f4a7c13)); // 2^64 / ((1+sqrt(5))/2)
-    c64 b(a);
+    a += c_cast + size;
+    c64 b(a), c(a);
     while(len >= 8*3)
     {
         a += (c64)R64(buf+0);
         b += (c64)R64(buf+8);
         c += (c64)R64(buf+16);
-        mix64(a,b,c);
+        mix64z(a,b,c);
         buf += 24; len -= 24;
     }
     /*------------------------------------- handle the last 23 bytes */
-    c = c + uint64_t(size);
-    if(len >16)      { c += (c64)Rn(buf+15, len-15) & ~UINT64_C(0xFF);
-                       b += (c64)R64(buf+8);
-                       a += (c64)R64(buf); }
-    else if(len > 8) { b += (c64)Rn(buf+8,  std::min(8UL, len-8));
-                       a += (c64)R64(buf); }
-    else               a += (c64)Rn(buf, std::min(8UL, len));
-    /* the first byte of c is reserved for the length */
-    mix64(a,b,c);
+    if(len > 0)
+    {
+        if(len >= 16)     { a += (c64)R64(buf); b += (c64)R64(buf+8); c += (c64)Rn(buf+16,len-16); }
+        else if(len >= 8) { a += (c64)R64(buf); b += (c64)Rn(buf+8, len-8); }
+        else              { a += (c64)Rn(buf, len); }
+        final64z(a,b,c);
+    }
     /*-------------------------------------------- report the result */
   #ifdef USE_MMX
     newhash_t result = R32(&c.value); /* Note: this returns just the lowest 32 bits of the hash */
@@ -301,25 +293,24 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
 #else
     uint_least32_t a,b;
     unsigned long len = size;
-    a = b = UINT32_C(0x9e3779b9); // 2^32 / ((1+sqrt(5))/2
+    c += size + UINT32_C(0x9e3779b9); // 2^32 / ((1+sqrt(5))/2
+    a = b = c;
     while(len >= 4*3)
     {
         a += R32(buf+0);
         b += R32(buf+4);
         c += R32(buf+8);
-        mix32(a,b,c);
+        mix32z(a,b,c);
         buf += 12; len -= 12;
     }
     /*------------------------------------- handle the last 11 bytes */
-    c = c+size;
-    if(len >8)       { c += Rn(buf+7, len-7) & ~UINT32_C(0xFF);
-                       b += R32(buf+8);
-                       a += R32(buf); }
-    else if(len > 4) { b += Rn(buf+4,  std::min(4UL, len-4));
-                       a += R32(buf); }
-    else               a += Rn(buf, std::min(4UL, len));
-    /* the first byte of c is reserved for the length */
-    mix32(a,b,c);
+    if(len > 0)
+    {
+        if(len >= 8)      { a += (c32)R32(buf); b += (c32)R32(buf+4); c += (c32)Rn(buf+8,len-8); }
+        else if(len >= 4) { a += (c32)R32(buf); b += (c32)Rn(buf+4, len-4); }
+        else              { a += (c32)Rn(buf, len); }
+        final32z(a,b,c);
+    }
     /*-------------------------------------------- report the result */
     return c;
 #endif

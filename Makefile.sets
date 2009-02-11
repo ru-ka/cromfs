@@ -24,19 +24,20 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Fri Feb  6 16:08:32 EET 2009
+# at Tue Feb 10 23:30:51 EET 2009
 # for Linux chii 2.6.27.10 #1 SMP Tue Dec 23 10:36:45 EET 2008 x86_64 GNU/Linux
 # To change, run ./configure again.
 #
 CC=icc
 CPP=icc
 CXX=icc
-OPTIM +=  -DHAS_STDINT_H -DHAS_INTTYPES_H -DHAS_READDIR_R -DHAS_UINT16_T -DHAS_LONG_LONG -DHAS_SYS_TYPES_H -mmmx -msse -msse2
-CPPFLAGS +=  -w1 -inline-level=2 -openmp -DUSE_PTHREADS=0 -DHASH_MAP=0
-LDFLAGS +=  -L/opt/intel/Compiler/11.0/074/bin/intel64/lib -lirc -lguide -lpthread -lstdc++ -openmp
+OPTIM +=  -inline-level=2 -DHAS_STDINT_H -DHAS_INTTYPES_H -DHAS_READDIR_R -DHAS_UINT16_T -DHAS_LONG_LONG -DHAS_SYS_TYPES_H -axT -mssse3
+CPPFLAGS +=  -w1 -openmp -DUSE_PTHREADS=0 -DHASH_MAP=0 -DHAS_LZO2=1 -DHAS_ASM_LZO2=0
+LDFLAGS +=  -L/opt/intel/Compiler/11.0/074/bin/intel64/lib -lirc -lstdc++ -openmp -lguide -lpthread -Bstatic -llzo2 -Bdynamic
 WARNINGS += 
 CWARNINGS += 
 CXXWARNINGS += 
 
 
 FUSE_STATIC=1
+MKCROMFS_LZO_OBJ=

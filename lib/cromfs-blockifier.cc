@@ -12,6 +12,7 @@
 #include "cromfs-inodefun.hh"    // for CalcSizeInBlocks
 #include "append.hh"
 #include "newhash.h"
+#include "assert++.hh"
 
 #include <algorithm>
 #ifdef HAS_GCC_PARALLEL_ALGORITHMS
@@ -777,11 +778,12 @@ public:
     {
         std::memset(&data, 0, sizeof(data));
     }
-    bool test(uint_fast32_t p) const { return data[p/rbits] & getmask(p); }
-    void set(uint_fast32_t p){ data[p/rbits] |= getmask(p); }
-    void unset(uint_fast32_t p){ data[p/rbits] &= ~getmask(p); }
+    bool  test(uint_fast32_t p) const { return data[getpos(p)] & getmask(p); }
+    void   set(uint_fast32_t p)              { data[getpos(p)] |= getmask(p); }
+    void unset(uint_fast32_t p)              { data[getpos(p)] &= ~getmask(p); }
 private:
     r getmask(uint_fast32_t p) const { return r(1) << r(p % rbits); }
+    r getpos(uint_fast32_t p)  const { return p / rbits; }
 };
 
 template<typename schedule_item, size_t max_open>
@@ -875,7 +877,11 @@ public:
 
     void Add(size_t schedno, uint_fast32_t blocknum)
     {
+        assertbegin();
+        assert2var(schedno, block_list.size());
         assert(schedno == block_list.size());
+        assertflush();
+
         block_list.push_back(blocknum);
     }
 private:
@@ -922,7 +928,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         enum { n_hashlocks = 4096 };
         MutexType hashlock[n_hashlocks+1], displaylock;
 
-        #pragma omp parallel for schedule(guided)
+        DataReadBuffer buf;
+        #pragma omp parallel for schedule(guided) private(buf) shared(n_unique,n_collisions)
         for(size_t a=0; a < schedule.size(); ++a)
         {
             schedule_item& s = schedule[a];
@@ -955,16 +962,18 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 uint_fast64_t eat = blocksize;
                 if(offset+eat > nbytes) eat = nbytes-offset;
 
-                DataReadBuffer buf;
                 source->read(buf, eat, offset);
-                newhash_t hash = newhash_calc(buf.Buffer, eat);
+                const newhash_t hash = newhash_calc(buf.Buffer, eat);
 
                 hashlock[hash / (UINT64_C(0x100000000) / n_hashlocks)].Lock();
                 if(hash_seen->test(hash))
                 {
-                    hash_duplicate->set(hash);
-                    #pragma omp atomic
-                    ++n_collisions;
+                    if(!hash_duplicate->test(hash))
+                    {
+                        hash_duplicate->set(hash);
+                        #pragma omp atomic
+                        ++n_collisions;
+                    }
                 }
                 else
                 {
@@ -985,8 +994,13 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         std::printf("%lu recurring hashes found. %lu unique. Prepass helped skip about %.1f%% of work.\n",
             (unsigned long) n_collisions,
             (unsigned long) n_unique,
-            n_unique ? (n_unique - n_collisions) / (double)n_unique : 0.0
+            n_unique
+              ? (n_unique - n_collisions) * 100.0 / n_unique
+              : 0.0
                    );
+
+        delete hash_seen;
+        hash_seen = 0;
     }
 
     BlockWhereList where_list;
@@ -998,7 +1012,10 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
     if(true)
     {
         schedule_cache<schedule_item, 32> schedule_cache(schedule);
-        static const char label[] = "Finding identical blocks";
+        const char* const label =
+            (BlockHashing_Method != BlockHashing_None)
+            ? "Finding identical blocks"
+            : "Calculating the number of blocks";
 
         fprintf(stderr, "Beginning task for %s: %s\n", purpose, label);
 
@@ -1106,7 +1123,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                                  that were marked in bitmask_2.
                         */
 
-                    #pragma omp parallel
+                      DataReadBuffer buf2;
+                    #pragma omp parallel private(buf2)
                       {
                         while(!identical_found)
                         {
@@ -1123,10 +1141,14 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                             uint_fast64_t nbytes2  = source2->size();
                             uint_fast64_t blocksize2 = s2->GetBlockSize();
 
+                            assertbegin();
+                            assert2var(other, blocks_done);
+                            assert(other < blocks_done);
+                            assertflush();
+
                             if(blocksize > blocksize2) continue;
                             if(filepos + eat > nbytes2) continue;
 
-                            DataReadBuffer buf2;
                             source2->read(buf2, eat, filepos);
 
                             if(!std::memcmp(buf.Buffer, buf2.Buffer, eat))
@@ -1145,7 +1167,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
                         if(!identical_found)
                         {
-                            blockhashlist.Add(hash, blocks_done);
+                            blockhashlist.Add(hash, blocks_done); // <- This is not thread-safe, so don't run it in a thread context.
                             //hashbitmap[hash / (8*sizeof(size_t))] |= size_t(1) << size_t(hash % (8*sizeof(size_t)));
                         }
 
@@ -1165,6 +1187,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             }
         }
         DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+
+        delete hash_duplicate;
+        hash_duplicate = 0;
     }
 
     if(true)
@@ -1179,6 +1204,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
         size_t identical_list_pos=0;
 
+        DataReadBuffer buf;
         for(size_t a=0; a < schedule.size(); ++a)
         {
             schedule_item& s = schedule_cache.Get(a);
@@ -1194,8 +1220,6 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     (unsigned long long)nbytes,
                     (unsigned long long)blocksize);
             }
-
-            DataReadBuffer buf;
 
             for(uint_fast64_t offset=0; offset<nbytes; offset += blocksize)
             {
@@ -1237,6 +1261,12 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     uint_fast64_t blocknum = Rn(target2 + blockindex2 * BLOCKNUM_SIZE_BYTES(), BLOCKNUM_SIZE_BYTES());
                     // Write the blocknumber here
                     Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
+
+                    assertbegin();
+                    assert8var(blocknum, blocks_done,other, blocks.size(), filepos, blocksize2, blocksize, blockindex2);
+                    assert(other    < blocks_done);
+                    assert(blocknum < blocks.size());
+                    assertflush();
 
                     if(DisplayBlockSelections)
                     {

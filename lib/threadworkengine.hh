@@ -21,7 +21,7 @@ template<typename WorkType>
 class ThreadWorkEngine
 {
 public:
-#if !(defined(_OPENMP) || !USE_PTHREADS)
+#if !(defined(_OPENMP) || USE_PTHREADS==0)
     ThreadWorkEngine() : threads(), params()
     {
     }
@@ -36,7 +36,7 @@ public:
     );
 
 private:
-#if !(defined(_OPENMP) || !USE_PTHREADS)
+#if !(defined(_OPENMP) || USE_PTHREADS==0)
     std::vector<ThreadType> threads;
 
     struct workerparam

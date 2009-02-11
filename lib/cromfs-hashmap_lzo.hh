@@ -28,10 +28,8 @@ public:
 
 public:
     struct NotCopiableError { };
-    CompressedHashLayer(const CompressedHashLayer&)
-        { throw NotCopiableError(); }
-    void operator=(const CompressedHashLayer&)
-        { throw NotCopiableError(); }
+    CompressedHashLayer(const CompressedHashLayer&) { throw NotCopiableError(); }
+    void operator=(const CompressedHashLayer&)      { throw NotCopiableError(); }
 private:
     unsigned n_buckets;
     static const unsigned n_per_bucket = 0x2000;

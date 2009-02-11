@@ -974,6 +974,9 @@ to this package.
   module and the userspace programs before mounting Cromfs volumes.
   You need Fuse version 2.5.2 or newer.
  </li>
+ <li>liblzo2-dev is recommended. If it is missing, mkcromfs will use a minilzo version
+  shipped in the package, but liblzo2 provides better optimization for the sparse
+  array that is used for block index during the building of the file system.</li>
 </ul>
 
 ", 'links:1. Links' => "

@@ -8,14 +8,17 @@ include Makefile.sets
 
 #OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
+#OPTIM += -O2 -g -fno-inline -inline-level=0 -debug extended
 #OPTIM += -O3 -g -fno-inline 
-#OPTIM += -O3 -g -debug extended
+#OPTIM += -O0 -g -debug all -inline-level=0
 #OPTIM += -O0 -g -fno-inline
 # -ftree-vectorize 
 
 #OPTIM += -O1 -pg -g
 #LDOPTS += -pg
+
+LDOPTS += $(OPTIM)
+
 
 CPPFLAGS += -I../lib -I..
 
@@ -46,7 +49,7 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/cromfs-hashmap_lzo_sparse.o \
 	   ../lib/cromfs-hashmap_googlesparse.o \
 	   ../lib/cromfs-hashmap_sparsefile.o \
-	   ../lib/minilzo.o \
+	   $(MKCROMFS_LZO_OBJ) \
 	   ../lib/boyermoore.o
 
 OBJS_UN += unmkcromfs.o ../cromfs.o \
