@@ -1,8 +1,8 @@
-#define _LARGEFILE64_SOURCE
 #define __STDC_CONSTANT_MACROS
 
 #include "cromfs-defs.hh"
 #include "threadfun.hh"
+#include "assert++.hh"
 
 #include <vector>
 #include <cstdio>
@@ -128,7 +128,7 @@ static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
     compressed_total   += fblock_lzma.size();
 }
 
-static long CalcBSIZEfor(const std::string& pathfn)
+long CalcBSIZEfor(const std::string& pathfn)
 {
     long result = BSIZE;
 
@@ -164,21 +164,21 @@ namespace cromfs_creator
         char sortkey;
         */
 
-        size_t             num_blocks; // Number of blocks (for determining inode number)
+        uint_fast64_t      bytesize;   // Size in bytes (in case of a file or symlink)
         cromfs_inodenum_t* inonum;     // Where inode number will be written when known
 
         cromfs_dirinfo* dirinfo; // In case of a directory
         bool needs_blockify;
 
         direntry() : pathname(),name(), st()/*,sortkey()*/, // -Weffc++
-            num_blocks(0),inonum(0), dirinfo(0), needs_blockify()
+            bytesize(0),inonum(0), dirinfo(0), needs_blockify()
         {
         }
 
         direntry(const direntry& b)
             : pathname(b.pathname), name(b.name),
               st(b.st), /*sortkey(b.sortkey),*/
-              num_blocks(b.num_blocks),
+              bytesize(b.bytesize),
               inonum(b.inonum), dirinfo(b.dirinfo),
               needs_blockify(b.needs_blockify) // -Weffc++
         {
@@ -194,7 +194,7 @@ namespace cromfs_creator
             {
                 pathname=b.pathname; name=b.name;
                 st=b.st; /*sortkey=b.sortkey;*/
-                num_blocks=b.num_blocks;
+                bytesize=b.bytesize;
                 inonum=b.inonum; dirinfo=b.dirinfo;
                 needs_blockify=b.needs_blockify;
             }
@@ -237,7 +237,7 @@ namespace cromfs_creator
     };
 
     /* Reads the contents of one directory. Put rudimentary dircollection
-     * entries into collection. Notably, num_blocks won't be filled yet.
+     * entries into collection.
      */
     static void CollectOneDir(const std::string& path, dircollection& collection)
     {
@@ -265,7 +265,7 @@ namespace cromfs_creator
         direntry ent;
         /* Fields common in all entries: */
         ent.inonum     = 0;
-        ent.num_blocks = 0;
+        ent.bytesize   = 0;
         ent.dirinfo    = 0;
         /* These fields will be set:
          * - pathname
@@ -274,7 +274,6 @@ namespace cromfs_creator
          * - sortkey
          */
         /* And these won't just yet:
-         * - num_blocks
          * - needs_blockify
          */
 
@@ -309,7 +308,7 @@ namespace cromfs_creator
 
     /* Reads the contents of a subtree. It will fill in just
      * one field that CollectOneDir() did not do:
-     * - num_blocks
+     * - bytesize
      *
      * It is done here because for directories, it cannot
      * be done before scanning the subdirectory contents.
@@ -399,10 +398,11 @@ namespace cromfs_creator
                     // Note: If you use OpenMP 3.0 "task" here, you will
                     //       have to change readdir() into readdir_r().
                     WalkDir_Recursive(path_copy, collection, subdir);
-
+                  /*
                     // If it was a directory, take the file size from
                     // the calculated cromfs directory size instead.
                     bytesize = calc_encoded_directory_size(subdir);
+                  */
                 }
             }
             // After the recursive call to WalkDir_Recursive(), the
@@ -416,7 +416,7 @@ namespace cromfs_creator
             #endif
 
                 direntry& ent = collection[p];
-                ent.num_blocks = CalcSizeInBlocks(bytesize, CalcBSIZEfor(ent.pathname));
+                ent.bytesize   = bytesize;
                 /* This inserts the entry in the directory
                  * listing, assigns it a dummy inode number (which
                  * will be filled later), and remembers the pointer
@@ -492,6 +492,7 @@ namespace cromfs_creator
         if(true) /* scope for hardlink_map */
         {
             hardlinkmap_t hardlink_map;
+            // this is a non-threading context.
             for(size_t p=0; p<collection.size(); ++p)
             {
                 direntry& ent = collection[p];
@@ -520,9 +521,13 @@ namespace cromfs_creator
                 // Although the inode was not yet really created, we will
                 // simulate that it was, in order to be able to create new
                 // inode numbers
-                inotab_size += INODE_SIZE_BYTES(ent.num_blocks);
+                if(S_ISDIR(ent.st.st_mode))
+                    ent.bytesize = calc_encoded_directory_size(*ent.dirinfo);
+                uint_fast64_t num_blocks = CalcSizeInBlocks(ent.bytesize, CalcBSIZEfor(ent.pathname));
+
+                inotab_size += INODE_SIZE_BYTES(num_blocks);
                 // Ensure the inotab tail is 4-aligned.
-                inotab_size = (inotab_size + 3) & ~3;
+                inotab_size = (inotab_size + 3UL) & ~3UL;
             }
         }
 
@@ -558,14 +563,24 @@ namespace cromfs_creator
                 continue;
             }
 
+            /* Inode offset in inotab */
+            const uint_fast32_t block_size = CalcBSIZEfor(ent.pathname);
+            const uint_fast64_t inotab_offset = GetInodeOffset(inonum);
+            const uint_fast32_t num_blocks = CalcSizeInBlocks(ent.bytesize, block_size);
+
             if(DisplayFiles)
             {
-                std::printf("%s ... inode %ld\n", pathname.c_str(),
-                    (long)inonum);
+                std::printf("%s ... inode %ld. Size %llu, Spans from %p..%p\n",
+                    pathname.c_str(),
+                    (long)inonum,
+                    (unsigned long long) ent.bytesize,
+
+                    &inotab[inotab_offset],
+                    &inotab[inotab_offset + INODE_SIZE_BYTES(num_blocks)]
+                );
+                std::fflush(stdout);
             }
 
-            /* Inode offset in inotab */
-            const uint_fast64_t inotab_offset = GetInodeOffset(inonum);
 
             /* Create inode */
             cromfs_inode_internal inode;
@@ -577,7 +592,7 @@ namespace cromfs_creator
             inode.rdev     = 0;
             inode.uid      = st.st_uid;
             inode.gid      = st.st_gid;
-            inode.blocksize = CalcBSIZEfor(pathname);
+            inode.blocksize = block_size;
 
             if(S_ISDIR(st.st_mode))
             {
@@ -646,12 +661,11 @@ namespace cromfs_creator
                 inode.rdev = st.st_rdev;
             }
 
-            /*
-            size_t n_blocks = CalcSizeInBlocks(inode.bytesize, inode.blocksize);
-            inode.blocklist.resize(n_blocks);
-            for(size_t a=0; a<n_blocks; ++a)
-                inode.blocklist[a] = ~cromfs_blocknum_t(0);
-            */
+            assertbegin();
+            assert4var(num_blocks, inode.blocklist.size(), ent.bytesize, inode.bytesize);
+            assert(num_blocks   == inode.blocklist.size());
+            assert(ent.bytesize == inode.bytesize);
+            assertflush();
 
             put_inode(&inotab[inotab_offset], inode, storage_opts);
         }
@@ -786,7 +800,7 @@ namespace cromfs_creator
                  */
 
                 datasource_t* datasrc =
-                    new datasource_vector_ref(inotab, "inotab");
+                    new datasource_vector_ref(inotab, "INOTAB");
 
                 PutInodeSize(inotab_inode, datasrc->size());
 

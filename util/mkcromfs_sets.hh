@@ -2,6 +2,7 @@
 #define bqtMkCromfsSetsHH
 
 #include <vector>
+#include <string>
 #include <utility>
 
 extern int LZMA_HeavyCompress;
@@ -36,4 +37,7 @@ enum BlockHashingMethods
       BlockHashing_None
     };
 extern BlockHashingMethods BlockHashing_Method;
+
+long CalcBSIZEfor(const std::string& pathfn); // from mkcromfs.cc
+
 #endif

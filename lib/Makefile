@@ -8,7 +8,7 @@ include Makefile.sets
 
 OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-CPPFLAGS += -pthread -I.. -I../lib
+CPPFLAGS += -I.. -I../lib -I../lib/lzo
 #OPTIM += -O1 -g
 # -ftree-vectorize 
 
@@ -22,4 +22,4 @@ CPPFLAGS += -pthread -I.. -I../lib
 include depfun.mak
 
 clean:
-	find -type d | while read d;do rm -f "$$d"/*.o;done
+	find -type d | while read d;do rm -f  "$$d"/*.pchi "$$d"/*.o;done

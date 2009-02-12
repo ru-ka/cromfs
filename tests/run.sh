@@ -12,8 +12,12 @@
 if true; then
 	make -C ../util mkcromfs unmkcromfs -j4
 	rm -f tmp.cromfs
+	echo "Packing..."
+	valgrind --leak-check=full \
 	../util/mkcromfs a tmp.cromfs -B'*.hh:128' -b16384 -f65536 -e --threads 1 >/dev/null
 	rm -rf b
+	echo "Unpacking..."
+	valgrind --leak-check=full \
 	../util/unmkcromfs tmp.cromfs b >/dev/null
 
 	( cd a && tar cf - *) | tar tvvf - | sort > a.listing
@@ -32,8 +36,12 @@ fi
 if true; then
 	make -C ../util mkcromfs unmkcromfs -j4
 	rm -f tmp.cromfs
+	echo "Packing..."
+	valgrind --leak-check=full \
 	../util/mkcromfs a tmp.cromfs -b64 -f512 --threads 20 --blockindexmethod prepass -A1 >/dev/null
 	rm -rf b
+	echo "Unpacking..."
+	valgrind --leak-check=full \
 	../util/unmkcromfs tmp.cromfs b -s >/dev/null
 
 	( cd a && tar cf - *) | tar tvvf - | sort > a.listing
@@ -69,7 +77,10 @@ fi
 
 ## TEST 5: Hashmaps
 if true; then
-	$CXX -o test-hashmaps -O3 test-hashmaps.cc ../lib/minilzo.c ../lib/newhash.cc -g -Wall -W -ftree-vectorize -I../lib
+	$CXX -o test-hashmaps -O3 test-hashmaps.cc \
+		../lib/assert++.cc \
+		../lib/newhash.cc -g -Wall -W -ftree-vectorize \
+		-I../lib -I../lib/lzo -DHAS_LZO2=1 -DHAS_ASM_LZO2=0
 	echo "Testing Hashmaps..."
 	./test-hashmaps
 	rm -f test-hashmaps

@@ -112,6 +112,7 @@ namespace assertprivate
 #define assertset() (static_cast<void>(assertflag=false))
 #define asserttest() (assertflag)
 #else
+#define assertbegin() {}
 /* If we don't have glibc.. Or have NDEBUG */
 #define assertflush() {}
 #define assertvar(expr) {}

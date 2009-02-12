@@ -122,10 +122,6 @@ private:
         uint_fast32_t blocksize);
 
 
-    bool block_is(const cromfs_block_internal& block,
-                  const unsigned char* data,
-                  uint_fast32_t data_size) const;
-
     cromfs_blocknum_t CreateNewBlock(const cromfs_block_internal& block)
     {
         cromfs_blocknum_t blocknum = blocks.size();

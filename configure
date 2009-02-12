@@ -225,8 +225,8 @@ else
   FUSE_STATIC=0
 fi
 
+MKCROMFS_LZO_OBJ=""
 HAS_LZO2=""
-
 do_echo -n "Checking for liblzo2 (dynamic)... "
 if cc_check '<lzo/lzo1x.h>' "-llzo2" ''; then
   do_echo Yes
@@ -244,22 +244,21 @@ else
 fi
 
 if [ ! "$HAS_LZO2" = "" ]; then
-  CPPFLAGS="$CPPFLAGS -DHAS_LZO2=1"
-  MKCROMFS_LZO_OBJ=""
-  LDFLAGS="$LDFLAGS $HAS_LZO2"
-  
   do_echo -n "Checking for assembler-optimized lzo2 functions... "
   if cc_check '<lzo/lzo_asm.h>' "$HAS_LZO2" 'lzo1x_decompress_asm_fast_safe(0,0, 0,0, 0);'; then
     do_echo Yes
-    CPPFLAGS="$CPPFLAGS -DHAS_ASM_LZO2=1"
+    CPPFLAGS="$CPPFLAGS -DHAS_LZO2=1 -DHAS_ASM_LZO2=1"
+    LDFLAGS="$LDFLAGS $HAS_LZO2"
   else
     do_echo No
-    CPPFLAGS="$CPPFLAGS -DHAS_ASM_LZO2=0"
+    HAS_LZO2=""
   fi
-else
-  do_echo "- In the absense of liblzo2, mkcromfs will use minilzo (shipped)"
-  CPPFLAGS="$CPPFLAGS -DHAS_LZO2=0"
-  MKCROMFS_LZO_OBJ="../lib/minilzo.o"
+fi
+
+if [ "$HAS_LZO2" = "" ]; then
+  do_echo "- In the absense of assembler-optimized liblzo2, mkcromfs will use lzo1x_1_15 (shipped)"
+  CPPFLAGS="$CPPFLAGS -DHAS_LZO2=1 -DHAS_ASM_LZO2=0"
+  #MKCROMFS_LZO_OBJ="../lib/lzo/lzo1x_1o.o ../lib/lzo/lzo1x_d1.o"
 fi
 
 do_echo -n "Checking for fuse (static)... "
@@ -324,7 +323,16 @@ WARNINGS=""
 CWARNINGS=""
 CXXWARNINGS=""
 
-if [ ! "$CC" = "icc" ]; then
+if [ "$CC" = "icc" ]; then
+  #do_echo -n "Checking if your compiler supports -pch... "
+  #if cc_check '<stdio.h>' '-pch' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+  #  do_echo Yes
+  #  OPTIM="$OPTIM -pch"
+  #else
+  #  do_echo No
+  #fi
+  true
+else
   do_echo -n "Checking if your compiler supports -ftree-vectorize... "
   if cc_check '<stdio.h>' '-ftree-vectorize' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
     do_echo Yes
@@ -416,10 +424,10 @@ else
   # will still run on processors lacking those features.
   BEST_CPUFEATURE=""
   OPTIM_BACKUP="$OPTIM"
-  cpu_check SSE   sse   -axK            __SSE__
-  cpu_check SSE2  sse2  -axW            __SSE2__
-  cpu_check SSE3  sse3  "-axO -msse3"   __SSE3__
-  cpu_check SSSE3 ssse3 "-axT -mssse3"  __SSSE3__
+  cpu_check SSE   sse   -xK            __SSE__
+  cpu_check SSE2  sse2  -xW            __SSE2__
+  cpu_check SSE3  sse3  "-xO -msse3"   __SSE3__
+  cpu_check SSSE3 ssse3 "-xT -mssse3"  __SSSE3__
   OPTIM="$OPTIM_BACKUP $BEST_CPUFEATURE"
 fi
 

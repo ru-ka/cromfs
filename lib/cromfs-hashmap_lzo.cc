@@ -1,9 +1,17 @@
 #include "endian.hh"
 
 #if HAS_LZO2
-# include <lzo/lzo1x.h>
 # if HAS_ASM_LZO2
+#  include <lzo/lzo1x.h>
 #  include <lzo/lzo_asm.h>
+# else
+   /* Bring lzo1x_1_15_compress() and lzo1x_decompress()
+    * to the scope of inline compilation.
+    */
+#  define LZO_EXTERN(x) static x
+#  define LZO_PUBLIC(x) static x
+#  include "lzo/lzo1x_1o.c"
+#  include "lzo/lzo1x_d1.c"
 # endif
 #else
 # include "minilzo.h"

@@ -31,13 +31,15 @@ template<typename Key, typename Value>
 class block_index_stack
 {
     class layer;
+    // Vector items are made pointers so that
+    // index resizing will not cause copying.
+    // It is not a std::list because we still
+    // want random access.
     std::vector<layer*> index;
 public:
     size_t size, deleted;
 public:
     block_index_stack();
-    block_index_stack(const block_index_stack&);
-    block_index_stack& operator= (const block_index_stack& b);
     ~block_index_stack() { Close(); }
     void clear();
 
@@ -46,8 +48,12 @@ public:
     void Del(Key crc, const Value& value);
 
 private:
+    block_index_stack(const block_index_stack&);
+    block_index_stack& operator= (const block_index_stack& b);
+
+private:
     void Close();
-    void Clone();
+    //void Clone();
 };
 
 #endif

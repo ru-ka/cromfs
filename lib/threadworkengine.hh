@@ -29,9 +29,19 @@ public:
 
     void RunTasks(
         size_t num_threads,
-        ssize_t num_workunits,
+        size_t num_workunits,
         WorkType& workparams,
         bool (*DoWork)(size_t index, WorkType& )
+        /* DoWork returns bool if it wants to cancel its siblings */
+    );
+
+    template<typename T>
+    void RunUntil(
+        size_t num_threads,
+        WorkType& workparams,
+        bool (*NextTask_lock)    (WorkType&, T& ), // true=do this iteration
+        bool (*NextTask_unlocked)(WorkType&, T& ), // true=do this iteration
+        bool (*DoWork)(WorkType&, const T& )
         /* DoWork returns bool if it wants to cancel its siblings */
     );
 

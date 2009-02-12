@@ -234,7 +234,7 @@ namespace assertprivate
                     //if(k == vars.end())continue;
 
                     if(first) { first=false;
-                         errormsg <<    "\t\t(With ";}
+                         errormsg <<    "\t(With ";}
                     else errormsg << ", ";
                     errormsg << s << '=';
                     j->second->dump(errormsg);

@@ -171,7 +171,7 @@ util/cvcromfs: FORCE
 	make -C util cvcromfs
 
 clean:
-	rm -rf $(OBJS) $(PROGS) install
+	rm -rf $(OBJS) $(PROGS) install *.pchi
 	rm -f cromfs-driver-static.??? configure.log
 	make -C util clean
 

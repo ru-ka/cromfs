@@ -35,7 +35,7 @@ private:
 
 namespace StaticAllocatorImplementation
 {
-    static const unsigned MaxAllocatorBytes = 1024ULL*1024*8;
+    static const unsigned MaxAllocatorBytes = 1024UL*1024*8;
     /* Defragmentation seems to actually cause a performance
      * hit AFTER the defragmentation! A fragmented FreeInfo
      * seems to be a good thing.

@@ -752,7 +752,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
 
     #pragma omp barrier
 
-    #pragma omp single
+    #pragma omp single /* implicit barrier after this statement */
     lp_finder.GotResult(lp, bestresult.size());
 
     /* step 2: find best value in lp axis */
@@ -762,7 +762,7 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
 
     #pragma omp barrier
 
-    #pragma omp single
+    #pragma omp single /* implicit barrier after this statement */
     lc_finder.GotResult(lc, bestresult.size());
 
     /* step 3: find best value in lc axis */

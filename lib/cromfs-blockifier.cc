@@ -67,115 +67,98 @@ static void DisplayProgress(
     return result;
 }*/
 
+struct AutoIndexFinderParams
+{
+    // ref ok
+    const mkcromfs_fblockset& fblocks;
+    const block_index_stack<BlockIndexHashType, cromfs_block_internal>& autoindex;
+
+    bool                  auto_found;
+    cromfs_block_internal which_auto_found;
+    MutexType             auto_index_lock;
+    MutexType             auto_which_lock;
+    size_t                auto_which_index;
+
+    const unsigned char* data;
+    uint_fast32_t        size;
+    BlockIndexHashType    crc;
+
+    AutoIndexFinderParams(
+        const mkcromfs_fblockset& f,
+        const block_index_stack<BlockIndexHashType, cromfs_block_internal>& a,
+        const unsigned char* d,
+        uint_fast32_t        s,
+        BlockIndexHashType   c)
+            : fblocks(f), autoindex(a),
+              auto_found(false), which_auto_found(),
+              auto_index_lock(), auto_which_lock(),
+              auto_which_index(0),
+              data(d), size(s), crc(c)
+    {
+    }
+};
+
+static bool FindAutoIndexNext_lock(AutoIndexFinderParams& params, cromfs_block_internal& auto_match)
+{
+    ScopedLock lck(params.auto_index_lock);
+    return params.autoindex.Find(params.crc, auto_match, params.auto_which_index++);
+}
+static bool FindAutoIndexNext_unlocked(AutoIndexFinderParams& params, cromfs_block_internal& auto_match)
+{
+    return params.autoindex.Find(params.crc, auto_match, params.auto_which_index++);
+}
+
+static bool TestAutoIndexMatch(AutoIndexFinderParams& params, const cromfs_block_internal& auto_match)
+{
+    const mkcromfs_fblock& fblock = params.fblocks[auto_match.get_fblocknum(BSIZE,FSIZE)];
+    const uint_fast32_t my_offs = auto_match.get_startoffs(BSIZE,FSIZE);
+
+    /* Notice: my_offs + data_size may be larger than the fblock size.
+     * This can happen if there is a collision in the checksum index. A smaller
+     * block might have been indexed, and it matches to a larger request.
+     * We must check for that case, and reject if it is so.
+     */
+
+    DataReadBuffer Buffer; uint_fast32_t BufSize;
+  {
+    ScopedLock lck(fblock.GetMutex());
+    fblock.InitDataReadBuffer(Buffer, BufSize, my_offs, params.size);
+  }
+
+    if(BufSize >= my_offs + params.size
+    && std::memcmp(Buffer.Buffer, &params.data[0], params.size) == 0)
+    {
+        if(params.auto_which_lock.TryLock())
+        {
+            params.auto_found       = true;
+            params.which_auto_found = auto_match;
+            params.auto_which_lock.Unlock();
+        }
+    }
+    return params.auto_found;
+}
+
 const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
     const unsigned char* data, uint_fast32_t size,
     const BlockIndexHashType crc)
 {
     /* Use hashing to find candidate identical blocks. */
 
-    /*
-    Information on threadability:
-    The functions called in this section are:
-      autoindex.Find()
-        - does no changes to data structures
-      block_is()
-        - This accesses fblocks:
-            fblocks[]
-            fblock.InitDataReadBuffer()
-            std::memcmp()
-          For safety, that is put into a critical block.
-    */
- //{ RemapReadonly ro_marker;
-
-    /*if(crc != BlockIndexHashCalc(data, size))
+    if(crc != BlockIndexHashCalc(data, size))
     {
         throw "Wrong hash";
-    }*/
-
-#if !defined(_OPENMP) || (_OPENMP >= 200805)
-    /* OPENMP 3.0 VERSION and NO OPENMP version */
-    /* Goals: Search for an autoindex match. */
-    /* The same code is also used for No-OPENMP case.
-     * In that case, the #pragma constructs are simply ignored. */
-    bool auto_found = false;
-    cromfs_block_internal which_auto_found; MutexType AutoWhichLock;
-    #pragma omp parallel default(shared)
-    {
-      #pragma omp single
-      {
-        cromfs_block_internal auto_match;
-        for(size_t matchno=0;
-               !auto_found
-            && autoindex.Find(crc, auto_match, matchno);
-            ++matchno)
-        {
-          #pragma omp task shared(auto_found,which_auto_found,AutoWhichLock) \
-                           firstprivate(auto_match) shared(data,size)
-          {
-            if(block_is(auto_match, data, size) && AutoWhichLock.TryLock())
-            {
-              auto_found = true;
-              which_auto_found = auto_match;
-              AutoWhichLock.Unlock();
-            }
-          }
-        }
-      }
-    }
-    /* Match? */
-    if(auto_found) return ReusingPlan(crc, which_auto_found);
-#else
-    /* OPENMP 2.5 VERSION */
-    /* Goals: The same functionality as above. */
-
-    cromfs_block_internal which_auto_found;
-    bool auto_done=false, auto_found=false;
-    size_t auto_matchno=0; MutexType auto_matchno_lock, auto_which_lock;
-
-    #pragma omp parallel default(shared)
-    {
-        for(;;) // AutoIndex tests
-        {
-            // AutoIndex testing end conditions:
-            //  - No more AutoIndex slots to test
-            //  - Found RealIndex solution
-            //  - Found AutoIndex solution
-            #pragma omp flush(auto_done,auto_found)
-            if(auto_found || auto_done) break;
-
-            auto_matchno_lock.Lock();
-            size_t matchno;
-            #pragma omp flush(auto_matchno)
-            matchno = auto_matchno++;
-            #pragma omp flush(auto_matchno)
-            auto_matchno_lock.Unlock();
-
-            cromfs_block_internal auto_match;
-            if(!autoindex.Find(crc, auto_match, matchno))
-            {
-                auto_done = true;
-                #pragma omp flush(auto_done)
-                break;
-            }
-
-            const mkcromfs_fblock& fblock = fblocks[auto_match.get_fblocknum(BSIZE,FSIZE)];
-            if(block_is(auto_match, data, size))
-            {
-                if(auto_which_lock.TryLock())
-                {
-                    which_auto_found=auto_match;
-                    auto_found=true;
-                    #pragma omp flush(auto_found,which_auto_found)
-                    auto_which_lock.Unlock();
-                }
-                break;
-            }
-        }
     }
 
+    AutoIndexFinderParams params(fblocks, autoindex, data, size, crc);
+
+    static ThreadWorkEngine<AutoIndexFinderParams> engine;
+    engine.RunUntil(UseThreads, params,
+                    FindAutoIndexNext_lock,
+                    FindAutoIndexNext_unlocked,
+                    TestAutoIndexMatch);
+
     /* Match? */
-    if(auto_found) return ReusingPlan(crc, which_auto_found);
-#endif
+    if(params.auto_found) return ReusingPlan(crc, params.which_auto_found);
 
     /* Didn't find match. */
     return ReusingPlan(false);
@@ -473,6 +456,11 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
             (unsigned)startoffs);
     }
 
+    // TODO: Figure out whether calling Del() is worthwhile.
+    //    Pros: Reduces memory usage and improves search times
+    //    Cons: Requires writing data into autoindex, which can be an expense
+    autoindex.Del(plan.crc, block); // reduce the autoindex size
+
     /* Autoindex the block right after this, just in case we get a match */
     PredictiveAutoIndex(fblocknum, startoffs+blocksize, blocksize);
 
@@ -623,31 +611,6 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
 
 ///////////////////////////////////////////////
 
-bool cromfs_blockifier::block_is(
-    const cromfs_block_internal& block,
-    const unsigned char* data,
-    uint_fast32_t data_size) const
-{
-    const mkcromfs_fblock& fblock = fblocks[block.get_fblocknum(BSIZE,FSIZE)];
-    const uint_fast32_t my_offs = block.get_startoffs(BSIZE,FSIZE);
-
-    ScopedLock lck(fblock.GetMutex());
-
-    /* Notice: my_offs + data_size may be larger than the fblock size.
-     * This can happen if there is a collision in the checksum index. A smaller
-     * block might have been indexed, and it matches to a larger request.
-     * We must check for that case, and reject if it is so.
-     */
-
-    DataReadBuffer Buffer; uint_fast32_t BufSize;
-    fblock.InitDataReadBuffer(Buffer, BufSize, my_offs, data_size);
-
-    lck.Unlock();
-
-    return BufSize >= my_offs + data_size
-          && std::memcmp(Buffer.Buffer, &data[0], data_size) == 0;
-}
-
 /* How many automatic indexes can be done in this amount of data? */
 static int CalcAutoIndexCount(int_fast32_t raw_size, uint_fast32_t bsize)
 {
@@ -678,6 +641,8 @@ void cromfs_blockifier::TryAutoIndex(
     /* Add it to the index */
     cromfs_block_internal match;
     match.define(fblocknum, startoffs);
+
+    // Add to the index. (We just checked, it is not already there.)
     autoindex.Add(crc, match);
 }
 
@@ -888,6 +853,39 @@ private:
     std::vector<uint_least32_t/*blocknum*/> block_list/*scheduleno*/;
 };
 
+#ifndef NDEBUG
+static void VerifyInodeIntact(
+    const unsigned char* blockdata_begin,
+    uint_fast64_t nbytes,
+    uint_fast64_t blocksize,
+    const std::string& name)
+{
+    /* target is assumed to always point to the beginning
+     * of an inode's block list. Calculate the address
+     * of the inode header, and check whether it's sane.
+     */
+    bool has_variable_blocksizes = storage_opts & CROMFS_OPT_VARIABLE_BLOCKSIZES;
+
+    const unsigned char* inodeheader = blockdata_begin - INODE_HEADER_SIZE();
+    const uint_fast32_t inomode    = R32(inodeheader+0x00);
+    const uint_fast64_t inolength  = R64(inodeheader+0x10);
+    const uint_fast32_t inoblksize = has_variable_blocksizes ? R32(inodeheader+0x18) : blocksize;
+    const long calc_bsize = CalcBSIZEfor(name);
+
+    const void* inodehdr = (const void*)inodeheader;
+    assertbegin();
+    assert8var(nbytes, blocksize, inolength, inomode, inoblksize, name, calc_bsize, inodehdr);
+    assert(nbytes == inolength);
+    assert(inoblksize == blocksize);
+    assert(blocksize = calc_bsize);
+    if(name != "INOTAB")
+    {
+        assert(S_ISDIR(inomode) || S_ISREG(inomode) || (S_ISLNK(inomode) && nbytes < 1000));
+    }
+    assertflush();
+}
+#endif
+
 void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 {
     // Note: using __gnu_parallel in this sort() will crash the program.
@@ -904,19 +902,18 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         blocks_total += CalcSizeInBlocks(size, blocksize);
     }
 
-    bitset1p32* hash_seen = 0;
     bitset1p32* hash_duplicate = 0;
-    autodealloc<bitset1p32> hash_seen_dealloc(hash_seen);
     autodealloc<bitset1p32> hash_dupl_dealloc(hash_duplicate);
 
     if(BlockHashing_Method == BlockHashing_All_Prepass)
     {
         static const char label[] = "Finding identical hashes";
 
-        fprintf(stderr, "Beginning task for %s: %s\n", purpose, label);
+        std::printf("Beginning task for %s: %s\n", purpose, label);
 
         // Precollect list of duplicate hashes
-        hash_seen      = new bitset1p32;
+        bitset1p32* hash_seen = new bitset1p32;
+        autodealloc<bitset1p32> hash_seen_dealloc(hash_seen);
         hash_duplicate = new bitset1p32;
 
         uint_fast64_t total_done  = 0;
@@ -999,8 +996,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
               : 0.0
                    );
 
-        delete hash_seen;
-        hash_seen = 0;
+        //delete hash_seen;
+        //hash_seen = 0;
+        // ^autodealloc deals with this
     }
 
     BlockWhereList where_list;
@@ -1011,13 +1009,13 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
     if(true)
     {
-        schedule_cache<schedule_item, 32> schedule_cache(schedule);
+        schedule_cache<schedule_item, 10> schedule_cache(schedule);
         const char* const label =
             (BlockHashing_Method != BlockHashing_None)
             ? "Finding identical blocks"
-            : "Calculating the number of blocks";
+            : "Mapping the block list";
 
-        fprintf(stderr, "Beginning task for %s: %s\n", purpose, label);
+        std::printf("Beginning task for %s: %s\n", purpose, label);
 
         uint_fast64_t total_done = 0, blocks_done  = 0;
         uint_fast64_t last_report_pos = 0;
@@ -1030,7 +1028,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         {
             where_list.Add(a, blocks_done);
 
-            schedule_item& s = schedule_cache.Get(a);
+            const schedule_item& s = schedule_cache.Get(a);
             datasource_t* source  = s.GetDataSource();
             //unsigned char* target = s.GetBlockTarget();
             uint_fast64_t nbytes  = source->size();
@@ -1043,6 +1041,13 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     (unsigned long long)nbytes,
                     (unsigned long long)blocksize);
             }
+
+            if(BlockHashing_Method == BlockHashing_None)
+            {
+                blocks_done += CalcSizeInBlocks(nbytes, blocksize);
+                continue;
+            }
+
 
             DataReadBuffer buf;
             for(uint_fast64_t offset=0; offset<nbytes; offset += blocksize)
@@ -1060,121 +1065,133 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 uint_fast64_t eat = blocksize;
                 if(offset+eat > nbytes) eat = nbytes-offset;
 
-                if(BlockHashing_Method != BlockHashing_None) // Hash the block?
+                /*
+                std::printf("Eating %llu bytes @ %llu",
+                    (unsigned long long) eat,
+                    (unsigned long long) offset);
+                */
+                source->read(buf, eat, offset);
+                newhash_t hash = 0;
+                /*
+                std::printf("... hash %08X\n", (unsigned) hash);
+                */
+
+                bool do_checkhash = false;
+
+                switch(BlockHashing_Method)
                 {
-                    /*
-                    fprintf(stderr, "Eating %llu bytes @ %llu",
-                        (unsigned long long) eat,
-                        (unsigned long long) offset);
-                    */
-                    source->read(buf, eat, offset);
-                    newhash_t hash = 0;
-                    /*
-                    fprintf(stderr, "... hash %08X\n", (unsigned) hash);
-                    */
-
-                    bool do_checkhash = false;
-
-                    switch(BlockHashing_Method)
-                    {
-                        case BlockHashing_None:
-                            break;
-                        case BlockHashing_BlanksOnly:
-                            if(!is_zero_block(buf.Buffer, eat))
-                                do_checkhash = false;
-                            else
-                                hash = newhash_calc(buf.Buffer, eat);
-                            break;
-                        case BlockHashing_All_Prepass:
+                    case BlockHashing_None:
+                        break;
+                    case BlockHashing_BlanksOnly:
+                        if(!is_zero_block(buf.Buffer, eat))
+                            do_checkhash = false;
+                        else
                             hash = newhash_calc(buf.Buffer, eat);
-                            do_checkhash = hash_duplicate->test(hash);
-                            break;
-                        case BlockHashing_All:
-                            hash = newhash_calc(buf.Buffer, eat);
-                            do_checkhash = true;
-                            break;
-                    }
-                    if(do_checkhash) // Check the hash contents?
+                        break;
+                    case BlockHashing_All_Prepass:
+                        hash = newhash_calc(buf.Buffer, eat);
+                        do_checkhash = hash_duplicate->test(hash);
+                        break;
+                    case BlockHashing_All:
+                        hash = newhash_calc(buf.Buffer, eat);
+                        do_checkhash = true;
+                        break;
+                }
+                if(do_checkhash) // Check the hash contents?
+                {
+                    schedule_cache.can_close = false;
+                    // ^ Ensure that the handle to source, and s,
+                    //   will not surprisingly become invalid in
+                    //   the identical_found loop that follows.
+
+                    size_t         index = 0;
+                    MutexType      index_lock;
+                    bool           identical_found = false;
+                    MutexType      identical_lock;
+
+                    /*
+                      The identical block selection is configurable.
+                         Options:
+                          all:
+                              Always run identical block check (default)
+                          blanks:
+                              Only run it for blocks consisting entirely
+                              of some particular byte value
+                          none:
+                              Never run it (fastest, no block-merging benefits whatsoever)
+                          prepass:
+                              Run a pre-pass to find out which hashes might overlap
+                              at all. Maintain two bitmasks:
+                                bitmask_1: This hash has been sighted.
+                                bitmask_2: This hash was already sighted when it was
+                                           sighted again, so it must be an overlap.
+                             In the actual pass, add to the hashmap only those hashes
+                             that were marked in bitmask_2.
+                    */
+
+                  DataReadBuffer buf2;
+                #pragma omp parallel private(buf2)
+                  {
+                    for(;;)
                     {
-                        schedule_cache.can_close = false;
+                        #pragma omp flush(identical_found)
+                        if(identical_found) break;
 
-                        size_t         index = 0;
-                        MutexType      index_lock;
-                        volatile bool  identical_found = false;
-                        MutexType      identical_lock;
+                        uint_least32_t other;
+                        #pragma omp flush(index)
+                        { ScopedLock lck(index_lock);
+                          if(!blockhashlist.Find(hash, other, index)) break;
+                          ++index; }
+                        #pragma omp flush(index)
 
-                        /*
-                          The identical block selection is configurable.
-                             Options:
-                              all:
-                                  Always run identical block check (default)
-                              blanks:
-                                  Only run it for blocks consisting entirely
-                                  of some particular byte value
-                              none:
-                                  Never run it (fastest, no block-merging benefits whatsoever)
-                              prepass:
-                                  Run a pre-pass to find out which hashes might overlap
-                                  at all. Maintain two bitmasks:
-                                    bitmask_1: This hash has been sighted.
-                                    bitmask_2: This hash was already sighted when it was
-                                               sighted again, so it must be an overlap.
-                                 In the actual pass, add to the hashmap only those hashes
-                                 that were marked in bitmask_2.
-                        */
+                        uint_fast64_t filepos;
+                        schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
+                        datasource_t* source2  = s2->GetDataSource();
+                        uint_fast64_t nbytes2  = source2->size();
+                        uint_fast64_t blocksize2 = s2->GetBlockSize();
 
-                      DataReadBuffer buf2;
-                    #pragma omp parallel private(buf2)
-                      {
-                        while(!identical_found)
+                        assertbegin();
+                        assert2var(other, blocks_done);
+                        assert(other < blocks_done);
+                        assertflush();
+
+                        if(blocksize > blocksize2) continue;
+                        if(filepos + eat > nbytes2) continue;
+
+                        source2->read(buf2, eat, filepos);
+
+                        if(!std::memcmp(buf.Buffer, buf2.Buffer, eat))
                         {
-                            uint_least32_t other;
-                            #pragma omp flush(index)
-                            { ScopedLock lck(index_lock);
-                              if(!blockhashlist.Find(hash, other, index)) break;
-                              ++index; }
-                            #pragma omp flush(index)
-
-                            uint_fast64_t filepos;
-                            schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
-                            datasource_t* source2  = s2->GetDataSource();
-                            uint_fast64_t nbytes2  = source2->size();
-                            uint_fast64_t blocksize2 = s2->GetBlockSize();
-
-                            assertbegin();
-                            assert2var(other, blocks_done);
-                            assert(other < blocks_done);
-                            assertflush();
-
-                            if(blocksize > blocksize2) continue;
-                            if(filepos + eat > nbytes2) continue;
-
-                            source2->read(buf2, eat, filepos);
-
-                            if(!std::memcmp(buf.Buffer, buf2.Buffer, eat))
+                            // It is an exact match.
+                            if(identical_lock.TryLock())
                             {
-                                if(identical_lock.TryLock())
+                                //std::printf("... matches block %llu\n", (unsigned long long)other);
+                                #pragma omp flush(identical_found)
+                                if(!identical_found)
                                 {
-                                    //fprintf(stderr, "... matches block %llu\n", (unsigned long long)other);
                                     identical_list.push_back( std::make_pair(blocks_done, other) );
                                     identical_found = true;
-                                    identical_lock.Unlock();
+                                    #pragma omp flush(identical_found)
                                 }
-                                break;
+                                identical_lock.Unlock();
                             }
+                            break;
                         }
-                      } // end of scope for omp parallel
+                    }
+                  } // end of scope for omp parallel
 
-                        if(!identical_found)
-                        {
-                            blockhashlist.Add(hash, blocks_done); // <- This is not thread-safe, so don't run it in a thread context.
-                            //hashbitmap[hash / (8*sizeof(size_t))] |= size_t(1) << size_t(hash % (8*sizeof(size_t)));
-                        }
+                    if(!identical_found)
+                    {
+                        // Add to the blockhashlist. It cannot already be there,
+                        // because this is the first time that this particular
+                        // value of blocks_done is handled.
+                        blockhashlist.Add(hash, blocks_done);
+                        // ^ This is not thread-safe, so don't run it in a thread context.
+                    }
 
-                        schedule_cache.can_close = true;
-                        schedule_item& s2 = schedule_cache.Get(a); // ensure it's not locked
-                    } // check hash contents
-                } // read and hash the block
+                    schedule_cache.can_close = true;
+                    schedule_item& s2 = schedule_cache.Get(a); // ensure it's not unloaded
+                } // check hash contents
 
                 /*
                 where_all[blocks_done].first  = a;
@@ -1187,6 +1204,11 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             }
         }
         DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+        std::printf("%lu reuse opportunities found. %lu unique blocks. Block table will be %.1f%% smaller than without the index search.\n",
+            (unsigned long) identical_list.size(),
+            (unsigned long) (blocks_done - identical_list.size()),
+            blocks_done * 100.0 / (blocks_done - identical_list.size())
+                   );
 
         delete hash_duplicate;
         hash_duplicate = 0;
@@ -1194,10 +1216,10 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
     if(true)
     {
-        schedule_cache<schedule_item, 32> schedule_cache(schedule);
+        schedule_cache<schedule_item, 10> schedule_cache(schedule);
         static const char label[] = "Blockifying";
 
-        fprintf(stderr, "Beginning task for %s: %s\n", purpose, label);
+        std::printf("Beginning task for %s: %s\n", purpose, label);
 
         uint_fast64_t total_done=0, blocks_done=0;
         uint_fast64_t last_report_pos = 0;
@@ -1212,6 +1234,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             unsigned char* target = s.GetBlockTarget();
             uint_fast64_t nbytes  = source->size();
             uint_fast64_t blocksize = s.GetBlockSize();
+            unsigned char* target_end =
+                target + BLOCKNUM_SIZE_BYTES() * ((nbytes + blocksize-1) / blocksize);
 
             if(DisplayBlockSelections)
             {
@@ -1220,9 +1244,20 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     (unsigned long long)nbytes,
                     (unsigned long long)blocksize);
             }
+        #ifndef NDEBUG
+            VerifyInodeIntact(target, nbytes, blocksize, source->getname());
+        #endif
 
+            //printf("rangebegin %p\nrange  end %p...\n", target, target_end);
             for(uint_fast64_t offset=0; offset<nbytes; offset += blocksize)
             {
+                assertbegin();
+                const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
+                const void* tgt_end  = (const void*)target_end;
+                assert2var(tgt_next, tgt_end);
+                assert(tgt_next <= tgt_end);
+                assertflush();
+
                 if(DisplayBlockSelections
                 || total_done - last_report_pos >= 1048576*4) // at 4 MB intervals
                 {
@@ -1233,7 +1268,6 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         last_report_pos = total_done;
                     //}
                 }
-
                 uint_fast64_t eat = blocksize;
                 if(offset+eat > nbytes) eat = nbytes-offset;
 
@@ -1256,10 +1290,14 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     datasource_t* source2  = s2->GetDataSource();
                     unsigned char* target2 = s2->GetBlockTarget();
                     uint_fast64_t blocksize2 = s2->GetBlockSize();
+        #ifndef NDEBUG
+                    VerifyInodeIntact(target2, source2->size(), blocksize2, source2->getname());
+        #endif
                     // Find the blocknumber
                     uint_fast64_t blockindex2 = filepos / blocksize2;
                     uint_fast64_t blocknum = Rn(target2 + blockindex2 * BLOCKNUM_SIZE_BYTES(), BLOCKNUM_SIZE_BYTES());
                     // Write the blocknumber here
+                    //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
                     Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
 
                     assertbegin();
@@ -1295,6 +1333,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     if(ReusingPlan reuse = CreateReusingPlan(buf.Buffer, eat, hash))
                     {
                         cromfs_blocknum_t blocknum = Execute(reuse, eat);
+                        //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
                         Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
                     }
                     else
@@ -1304,6 +1343,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         WritePlan write = CreateWritePlan(needle, hash, hist);
                         cromfs_blocknum_t blocknum = Execute(write);
 
+                        //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
                         Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
                     }
                 }
@@ -1354,6 +1394,11 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
                 "mkcromfs: Automatically enabling --packedblocks because it is possible for this filesystem.\n");
         }
     }
+
+    /* Only check the possibility of -2, -3 and -4.
+     * Do not change anything, because doing so will
+     * invalidate all already encoded inodes.
+     */
     if(blocks.size() < 0x10000UL)
     {
         if(!(storage_opts & CROMFS_OPT_16BIT_BLOCKNUMS))

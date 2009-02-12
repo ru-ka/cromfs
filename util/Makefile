@@ -8,8 +8,8 @@ include Makefile.sets
 
 #OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-#OPTIM += -O2 -g -fno-inline -inline-level=0 -debug extended
-#OPTIM += -O3 -g -fno-inline 
+#OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
+OPTIM += -O3 -g 
 #OPTIM += -O0 -g -debug all -inline-level=0
 #OPTIM += -O0 -g -fno-inline
 # -ftree-vectorize 
@@ -20,7 +20,7 @@ include Makefile.sets
 LDOPTS += $(OPTIM)
 
 
-CPPFLAGS += -I../lib -I..
+CPPFLAGS += -I../lib -I.. -I../lib/lzo
 
 # multithread versions of lzma -- Windows only
 #CPPFLAGS += -DCOMPRESS_MF_MT
@@ -86,5 +86,5 @@ include depfun.mak
 include .libdepend
 
 clean:
-	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV)
+	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV) *.pchi
 	rm -f mkcromfs unmkcromfs cvcromfs

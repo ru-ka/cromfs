@@ -1089,7 +1089,16 @@ private:
 
             std::set<cromfs_fblocknum_t> fblist;
             for(unsigned a=0; a<ino.blocklist.size(); ++a)
-                fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                if(ino.blocklist[a] < blktab.size())
+                    fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                else
+                {
+                    fprintf(stderr, "Inode %llu (%s) is corrupt. It refers to block %u which does not exist (%u blocks exist).\n",
+                        (unsigned long long)inonum, entname.c_str(),
+                        (unsigned) ino.blocklist[a],
+                        (unsigned) blktab.size());
+                    break;
+                }
 
             bool namematch = MatchFile(entname);
 

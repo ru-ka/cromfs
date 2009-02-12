@@ -883,6 +883,9 @@ version 3 (GPL3).
 The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
 The SparseTable code from Google embedded within is licensed under
 conditions specified therein.
+ <br/>
+The LZO code from liblzo2.03 embedded within is licensed
+under GPL version 2 or later.
  <p/>
 Patches and other related material can be submitted to the
 author
@@ -974,9 +977,8 @@ to this package.
   module and the userspace programs before mounting Cromfs volumes.
   You need Fuse version 2.5.2 or newer.
  </li>
- <li>liblzo2-dev is recommended. If it is missing, mkcromfs will use a minilzo version
-  shipped in the package, but liblzo2 provides better optimization for the sparse
-  array that is used for block index during the building of the file system.</li>
+ <li>liblzo2-dev is recommended on i386 platforms.
+  If it is missing, mkcromfs will use a version shipped in the package.</li>
 </ul>
 
 ", 'links:1. Links' => "

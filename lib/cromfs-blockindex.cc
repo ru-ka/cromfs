@@ -39,7 +39,11 @@ void block_index_stack<Key,Value>::Add(Key crc, const Value& value)
             lay.set(crc, value);
             ++size;
             return;
-        }/*
+        }
+
+        // Removed: Assume the caller knows not to add
+        //          something that already exists.
+        /*
         Value tmp;
         lay.extract(crc, tmp);
         if(tmp == value) return;*/
@@ -79,12 +83,12 @@ bool block_index_type::EmergencyFreeSpace(bool Auto, bool Real)
 }
 */
 
-template<typename Key, typename Value>
+/*template<typename Key, typename Value>
 void block_index_stack<Key,Value>::Clone()
 {
     for(size_t a=0; a<index.size(); ++a)
         index[a] = new layer(*index[a]);
-}
+}*/
 
 template<typename Key, typename Value>
 void block_index_stack<Key,Value>::Close()
@@ -99,6 +103,7 @@ block_index_stack<Key,Value>::block_index_stack()
 {
 }
 
+/*
 template<typename Key, typename Value>
 block_index_stack<Key,Value>::block_index_stack(const block_index_stack<Key,Value>& b)
     : index(b.index),
@@ -122,6 +127,7 @@ block_index_stack<Key,Value>::operator= (const block_index_stack<Key,Value>& b)
     }
     return *this;
 }
+*/
 
 template<typename Key, typename Value>
 void block_index_stack<Key,Value>::clear()
@@ -173,22 +179,22 @@ block_index_type* block_index_global = 0;
 
 typedef block_index_stack<unsigned,uint_least32_t> si;
 template si::block_index_stack();
-template si& si::operator=(const si&);
-template si::block_index_stack(const si&);
+//template si& si::operator=(const si&);
+//template si::block_index_stack(const si&);
 template void si::clear();
 template bool si::Find(unsigned crc, uint_least32_t& result, size_t find_index) const;
 template void si::Add(unsigned crc, const uint_least32_t& value);
 template void si::Del(unsigned crc, const uint_least32_t& value);
 template void si::Close();
-template void si::Clone();
+//template void si::Clone();
 
 typedef block_index_stack<BlockIndexHashType,cromfs_block_internal> ai;
 template ai::block_index_stack();
-template ai& ai::operator=(const ai&);
-template ai::block_index_stack(const ai&);
+//template ai& ai::operator=(const ai&);
+//template ai::block_index_stack(const ai&);
 template void ai::clear();
 template bool ai::Find(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const;
 template void ai::Add(BlockIndexHashType crc, const cromfs_block_internal& value);
 template void ai::Del(BlockIndexHashType crc, const cromfs_block_internal& value);
 template void ai::Close();
-template void ai::Clone();
+//template void ai::Clone();
