@@ -905,7 +905,42 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
     bitset1p32* hash_duplicate = 0;
     autodealloc<bitset1p32> hash_dupl_dealloc(hash_duplicate);
 
-    if(BlockHashing_Method == BlockHashing_All_Prepass)
+    std::vector<std::pair<uint_least32_t/* current whereinfo index */,
+                          uint_least32_t/* previous whereinfo index, match */
+                         > >
+        identical_list;
+
+    std::string ReuseListFileName;
+    if(!ReuseListFile.empty())
+        ReuseListFileName = ReuseListFile + "[" + purpose + "].bin";
+
+    bool reuselist_already_loaded = false;
+    if(!ReuseListFileName.empty())
+    {
+        FILE* fp = std::fopen(ReuseListFileName.c_str(), "rb");
+        if(fp)
+        {
+            std::fseek(fp, 0, SEEK_END);
+            uint_fast64_t size = std::ftell(fp);
+            std::fseek(fp, 0, SEEK_SET);
+
+            uint_fast64_t nrecords = size / sizeof(identical_list[0]);
+
+            std::printf("Loading identical_list from %s (%llu records)\n",
+                ReuseListFileName.c_str(), (unsigned long long) nrecords);
+
+            identical_list.resize(nrecords);
+            std::fread(&identical_list[0], sizeof(identical_list[0]),
+                       identical_list.size(), fp);
+            std::fclose(fp);
+
+            std::printf("Identical_list loaded from %s\n", ReuseListFileName.c_str());
+            reuselist_already_loaded = true;
+        }
+    }
+
+    if(BlockHashing_Method == BlockHashing_All_Prepass
+    && !reuselist_already_loaded)
     {
         static const char label[] = "Finding identical hashes";
 
@@ -1002,11 +1037,6 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
     }
 
     BlockWhereList where_list;
-    std::vector<std::pair<uint_least32_t/* current whereinfo index */,
-                          uint_least32_t/* previous whereinfo index, match */
-                         > >
-        identical_list;
-
     if(true)
     {
         schedule_cache<schedule_item, 10> schedule_cache(schedule);
@@ -1042,7 +1072,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     (unsigned long long)blocksize);
             }
 
-            if(BlockHashing_Method == BlockHashing_None)
+            if(BlockHashing_Method == BlockHashing_None || reuselist_already_loaded)
             {
                 blocks_done += CalcSizeInBlocks(nbytes, blocksize);
                 continue;
@@ -1210,6 +1240,19 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             blocks_done * 100.0 / (blocks_done - identical_list.size())
                    );
 
+        if(!reuselist_already_loaded && !ReuseListFileName.empty())
+        {
+            FILE* fp = std::fopen(ReuseListFileName.c_str(), "wb");
+            if(!fp) std::perror(ReuseListFileName.c_str());
+            else
+            {
+                std::fwrite(&identical_list[0], sizeof(identical_list[0]),
+                            identical_list.size(), fp);
+                std::fclose(fp);
+                std::printf("Identical_list saved to %s\n", ReuseListFileName.c_str());
+            }
+        }
+
         delete hash_duplicate;
         hash_duplicate = 0;
     }
@@ -1353,7 +1396,6 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             }
         }
     }
-
     schedule.clear();
 }
 

@@ -58,8 +58,9 @@ uint_fast32_t OverlapGranularity = 1;
 bool MayPackBlocks = true;
 bool MayAutochooseBlocknumSize = true;
 bool MaySuggestDecompression = true;
+std::string ReuseListFile;
 
-BlockHashingMethods BlockHashing_Method = BlockHashing_All; // TODO: Add commandline option
+BlockHashingMethods BlockHashing_Method = BlockHashing_All;
 
 
 long FSIZE = 2097152;
@@ -1466,6 +1467,7 @@ int main(int argc, char** argv)
             {"overlapgranularity",      1,0,'g'},
 
             {"finish-interrupted",      1,0,7001},
+            {"resume-blockify",         1,0,7002},
             {0,0,0,0}
         };
         int c = getopt_long(argc, argv, "hVvf:b:B:er:s:a:A:c:qx:X:lS:432g:", long_options, &option_index);
@@ -1527,7 +1529,13 @@ int main(int argc, char** argv)
                     "     reason mkcromfs was interrupted during the final phase of\n"
                     "     LZMA-compressing fblocks (due to blackout for example).\n"
                     "     Example:\n"
-                    "       mkcromfs --finish-interrupted '/path/to/fblock_6207-' out.cromfs\n"
+                    "       mkcromfs --finish-interrupted '/path/to/fblock_6207-' out.cromfs files...\n"
+                    " --resume-blockify <resumefile_prefix>\n"
+                    "     Use this option if you want the possibility to save the\n"
+                    "     progress after the \"finding identical blocks\" phase\n"
+                    "     or to load a previously saved progress.\n"
+                    "     Example:\n"
+                    "       mkcromfs --resume-blockify '/path/to/resume-' out.cromfs files...\n"
                     "\n"
                     "Filesystem parameters:\n"
                     " --fsize, -f <size>\n"
@@ -2072,6 +2080,12 @@ int main(int argc, char** argv)
             {
                 char* arg = optarg;
                 resume_file_selection = arg;
+                break;
+            }
+            case 7002: // resume-blockify
+            {
+                char* arg = optarg;
+                ReuseListFile = arg;
                 break;
             }
         }

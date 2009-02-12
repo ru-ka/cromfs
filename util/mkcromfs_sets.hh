@@ -37,6 +37,7 @@ enum BlockHashingMethods
       BlockHashing_None
     };
 extern BlockHashingMethods BlockHashing_Method;
+extern std::string ReuseListFile;
 
 long CalcBSIZEfor(const std::string& pathfn); // from mkcromfs.cc
 
