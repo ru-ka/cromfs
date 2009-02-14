@@ -1,0 +1,21 @@
+This document describes a way to monitor the progress of mkcromfs
+in a way that should be descriptive and neat even over slow SSH links.
+
+To build, you need:
+	g++, make
+	
+	Issue the command: make
+	
+To run, you need:
+	bc
+	lsof
+	pidof (from sysvinit-utils)
+	watch
+	
+	Issue the command: watch -n3 ./watch_keep ./run-lsof.sh
+	The -n parameter describes the update interval. If your
+	terminal is faster, try -n1.
+	If you're on a slow SSH link, try -n5.
+	
+	Note: It will create a temporary file in the current
+	working directory, named: .watch_keep.state

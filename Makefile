@@ -121,6 +121,23 @@ ARCHFILES=\
 	tests/a/sparse.bin \
 	tests/test-boyermoore.cc \
 	tests/test-hashmaps.cc
+	\
+	doc/examples/pack_rom_images/README \
+	doc/examples/pack_rom_images/make-spc-set-dir.sh \
+	doc/examples/pack_rom_images/pack-a2600.sh \
+	doc/examples/pack_rom_images/pack-gb.sh \
+	doc/examples/pack_rom_images/pack-gba.sh \
+	doc/examples/pack_rom_images/pack-gens.sh \
+	doc/examples/pack_rom_images/pack-n64.sh \
+	doc/examples/pack_rom_images/pack-nes.sh \
+	doc/examples/pack_rom_images/pack-sms.sh \
+	doc/examples/pack_rom_images/pack-snes.sh \
+	doc/examples/pack_rom_images/pack-spc.sh \
+	doc/examples/pack_rom_images/reconstruct-interrupted.sh \
+	doc/examples/progress_monitor/Makefile \
+	doc/examples/progress_monitor/README \
+	doc/examples/progress_monitor/main.cc \
+	doc/examples/progress_monitor/run-lsof.sh
 
 include Makefile.sets
 
