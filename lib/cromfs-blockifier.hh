@@ -2,8 +2,11 @@
 #include "datasource.hh"
 #include "cromfs-blockindex.hh"
 #include "cromfs-fblockfun.hh"
+#include "fsballocator.hh"
+#include "newhash.h"
 #include "autoptr"
 
+#include <map>
 #include <list>
 #include <deque>
 
@@ -49,11 +52,11 @@ private:
     public:
         bool success;
         cromfs_block_internal block;
-        BlockIndexHashType crc;
+        newhash_t crc;
     public:
         ReusingPlan(bool) : success(false),block(),crc(0) { }
 
-        ReusingPlan(BlockIndexHashType c, const cromfs_block_internal& b)
+        ReusingPlan(newhash_t c, const cromfs_block_internal& b)
             : success(true),block(b),crc(c) { }
 
         operator bool() const { return success; }
@@ -65,7 +68,7 @@ private:
      */
     const ReusingPlan CreateReusingPlan(
         const unsigned char* data, uint_fast32_t size,
-        const BlockIndexHashType crc);
+        const newhash_t crc);
 
     /* Execute a reusing plan */
     cromfs_blocknum_t Execute(const ReusingPlan& plan, uint_fast32_t blocksize);
@@ -79,16 +82,16 @@ private:
         cromfs_fblocknum_t fblocknum;
         AppendInfo         appended;
         const BoyerMooreNeedleWithAppend& data;
-        BlockIndexHashType                crc;
+        newhash_t                crc;
 
         WritePlan(cromfs_fblocknum_t f, const AppendInfo& a,
-                  const BoyerMooreNeedleWithAppend& d, BlockIndexHashType c)
+                  const BoyerMooreNeedleWithAppend& d, newhash_t c)
             : fblocknum(f), appended(a), data(d), crc(c) { }
     };
 
     /* Create a plan on appending to a fblock. It will always work. */
     /* But which fblock to append to? */
-    const WritePlan CreateWritePlan(const BoyerMooreNeedleWithAppend& data, BlockIndexHashType crc,
+    const WritePlan CreateWritePlan(const BoyerMooreNeedleWithAppend& data, newhash_t crc,
         overlaptest_history_t& history) const;
 
     /* Execute an appension plan */
@@ -209,10 +212,68 @@ public:
     mkcromfs_fblockset fblocks;
 
     /* For each bsize differently. */
-    std::vector< std::map<long,size_t> > last_autoindex_length;
+    std::map<cromfs_fblocknum_t,
+             std::map<long,size_t,
+                      std::less<long>,
+                      FSBAllocator<std::pair<const long,size_t> >
+                     >,
+             std::less<cromfs_fblocknum_t>,
+             FSBAllocator<int> > last_autoindex_length;
 
     // The autoindex
-    block_index_stack<BlockIndexHashType, cromfs_block_internal> autoindex;
+    typedef std::multimap<newhash_t, cromfs_block_internal, std::less<newhash_t>,
+                          FSBAllocator<std::pair<const newhash_t, cromfs_block_internal> >
+                         > autoindex_base;
+    class autoindex_t : public
+            std::multimap<newhash_t, cromfs_block_internal, std::less<newhash_t>,
+                          FSBAllocator<std::pair<const newhash_t, cromfs_block_internal> >
+                         >
+    {
+    public:
+        struct find_index_t
+        {
+            autoindex_base::const_iterator i;
+            bool first, last;
+
+            find_index_t() : i(), first(true), last(false) { }
+
+            find_index_t& operator++() { if(!last) ++i; first=false; return *this; }
+            find_index_t operator++(int) const { find_index_t res(*this); ++res; return res; }
+        };
+    public:
+        autoindex_t() : autoindex_base(), added(0), deleted(0) { }
+
+        void Del(newhash_t index, const cromfs_block_internal& b)
+        {
+            for(autoindex_base::iterator i = lower_bound(index);
+                i != end() && i->first == index;
+                ++i)
+            {
+                if(i->second == b) { erase(i); ++deleted; break; }
+            }
+        }
+        void Add(newhash_t index, const cromfs_block_internal& b)
+        {
+            insert(std::make_pair(index, b));
+            ++added;
+        }
+        bool Find(newhash_t index, cromfs_block_internal& res, find_index_t& nmatch) const
+        {
+            if(nmatch.first)
+            {
+                nmatch.i     = lower_bound(index);
+                nmatch.first = false;
+            }
+            if(nmatch.i == end()) { nmatch.last = true; return false; }
+            if(nmatch.i->first != index) { nmatch.last = true; return false; }
+            res = nmatch.i->second;
+            return true;
+        }
+        const std::string GetStatistics() const;
+    private:
+        size_t added, deleted;
+    };
+    autoindex_t autoindex;
 
 private:
     cromfs_blockifier(const cromfs_blockifier& );

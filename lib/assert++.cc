@@ -15,6 +15,7 @@
  */
 
 bool assertflag;
+#if defined(__ASSERT_FUNCTION) && !defined(NDEBUG)
 MutexType assert_mutex;
 
 struct parec
@@ -251,3 +252,4 @@ namespace assertprivate
         assert_mutex.Unlock();
     }
 }
+#endif

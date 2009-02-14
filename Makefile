@@ -36,7 +36,7 @@ ARCHFILES=\
 	lib/cromfs-inodefun.cc lib/cromfs-inodefun.hh \
 	lib/cromfs-directoryfun.cc lib/cromfs-directoryfun.hh \
 	lib/cromfs-fblockfun.cc lib/cromfs-fblockfun.hh \
-	lib/cromfs-blockindex.cc lib/cromfs-blockindex.hh \
+	lib/cromfs-blockindex.tcc lib/cromfs-blockindex.hh \
 	lib/cromfs-blockifier.cc lib/cromfs-blockifier.hh \
 	\
 	lib/endian.hh \
@@ -70,6 +70,7 @@ ARCHFILES=\
 	lib/boyermooreneedle.hh \
 	lib/boyermoore.hh lib/boyermoore.cc \
 	lib/fsballocator.hh \
+	lib/autodealloc.hh \
 	lib/autoptr \
 	\
 	lib/range.hh lib/range.tcc \
@@ -87,6 +88,7 @@ ARCHFILES=\
 	lib/cromfs-hashmap_googlesparse.cc \
 	lib/cromfs-hashmap_lzo_sparse.hh \
 	lib/cromfs-hashmap_lzo_sparse.cc \
+	lib/cromfs-hashmap_trivial.hh \
 	\
 	lib/google/dense_hash_map \
 	lib/google/dense_hash_set \

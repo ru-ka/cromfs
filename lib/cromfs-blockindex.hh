@@ -8,15 +8,10 @@
 
 #define NO_BLOCK   ((cromfs_blocknum_t)~UINT64_C(0))
 
-/* Methods for calculating the block hash (used to be CRC-32) */
-typedef uint_least32_t BlockIndexHashType;
-extern BlockIndexHashType
-    BlockIndexHashCalc(const unsigned char* buf, unsigned long size);
-
 /* Block index may contain two different types of things:
- *   crc32 -> cromfs_blocknum_t
+ *   index32 -> cromfs_blocknum_t
  *            (real index)
- *   crc32 -> cromfs_block_internal
+ *   index32 -> cromfs_block_internal
  *            (autoindex)
  *
  * The same data structure may serve both of these purposes.
@@ -27,15 +22,14 @@ extern BlockIndexHashType
  * However, we now use two separate indexes to conserve resources.
  */
 
-template<typename Key, typename Value>
+template<typename Key, typename Value, typename layer>
 class block_index_stack
 {
-    class layer;
     // Vector items are made pointers so that
     // index resizing will not cause copying.
     // It is not a std::list because we still
     // want random access.
-    std::vector<layer*> index;
+    std::vector<layer*> layers;
 public:
     size_t size, deleted;
 public:
@@ -43,9 +37,12 @@ public:
     ~block_index_stack() { Close(); }
     void clear();
 
-    bool Find(Key crc, Value& result, size_t find_index) const;
-    void Add(Key crc, const Value& value);
-    void Del(Key crc, const Value& value);
+    typedef size_t find_index_t;
+    bool Find(Key index, Value& result, find_index_t find_index) const;
+    void Add(Key index, const Value& value);
+    void Del(Key index, const Value& value);
+
+    std::string GetStatistics() const;
 
 private:
     block_index_stack(const block_index_stack&);
@@ -55,5 +52,7 @@ private:
     void Close();
     //void Clone();
 };
+
+#include "cromfs-blockindex.tcc"
 
 #endif

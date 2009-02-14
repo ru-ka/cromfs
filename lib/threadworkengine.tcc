@@ -24,8 +24,11 @@ void ThreadWorkEngine<WorkType>::RunTasks(
      */
     bool cancel = false;
 
- #if !defined(_OPENMP) || (_OPENMP >= 200805)
+ #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805)
     /* OPENMP 3.0 VERSION and NO OPENMP version */
+    /* However, ICC's implementation of omp tasks leaks memory,
+     * so it is disabled here if ICC is used.
+     */
   #pragma omp parallel firstprivate(num_workunits) shared(cancel,workparams)
   {
    #pragma omp single
@@ -53,42 +56,15 @@ void ThreadWorkEngine<WorkType>::RunTasks(
   }
  #else
     /* OPENMP 2.5 VERSION */
-    /*if(num_workunits == ~size_t(0))
+    ssize_t num_workunits_signed = num_workunits;
+  #pragma omp parallel for schedule(guided,1) shared(cancel)
+    for(ssize_t a=0; a<num_workunits_signed; ++a)
     {
-        MutexType wu_lock;
-        size_t    wu_index = 0;
-        #pragma omp parallel
+      #pragma omp flush(cancel)
+        if(!cancel && DoWork(a, workparams))
         {
-            for(;;)
-            {
-                wu_lock.Lock();
-                size_t get_index = wu_index++;
-                wu_lock.Unlock();
-
-                #pragma omp flush(cancel)
-                if(cancel) break;
-
-                if(DoWork(get_index, workparams))
-                    cancel = true;
-
-                #pragma omp flush(cancel)
-                if(cancel) break;
-            }
-        }
-    }
-    else
-    */
-    {
-        ssize_t num_workunits_signed = num_workunits;
-      #pragma omp parallel for schedule(guided,1) shared(cancel)
-        for(ssize_t a=0; a<num_workunits_signed; ++a)
-        {
-          #pragma omp flush(cancel)
-            if(!cancel && DoWork(a, workparams))
-            {
-                cancel = true;
-                //#pragma omp flush(cancel) -- is this needed here?
-            }
+            cancel = true;
+            //#pragma omp flush(cancel) -- is this needed here?
         }
     }
  #endif
@@ -322,8 +298,11 @@ void ThreadWorkEngine<WorkType>::RunUntil(
    *
    * TODO: Create a pthread version
    */
-  #if !defined(_OPENMP) || (_OPENMP >= 200805)
+  #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805)
     /* OPENMP 3.0 and no OPENMP versions */
+    /* However, ICC's implementation of omp tasks leaks memory,
+     * so it is disabled here if ICC is used.
+     */
     #pragma omp parallel
     {
      #pragma omp single

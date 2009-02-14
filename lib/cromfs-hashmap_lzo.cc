@@ -1,5 +1,15 @@
 #include "endian.hh"
 
+#ifdef __GNUC__
+# define likely(x)       __builtin_expect(!!(x), 1)
+# define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+# define likely(x)   (x)
+# define unlikely(x) (x)
+#endif
+
+#define DO_COMPRESSION 1
+
 #if HAS_LZO2
 # if HAS_ASM_LZO2
 #  include <lzo/lzo1x.h>
@@ -47,16 +57,16 @@ struct IsZeroAt<sizeof(uint_least64_t)>
     bool operator() (const unsigned char* p) const { return !*(const uint_least64_t*)p; }
 };
 
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::extract(HashType crc, T& result) const
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::extract(IndexType index, T& result) const
 {
     const
-    size_t bucket = crc / n_per_bucket,
-           bucketpos = (crc % n_per_bucket) * sizeof(T);
+    size_t bucket = index / n_per_bucket,
+           bucketpos = (index % n_per_bucket) * sizeof(T);
 
     lock.Lock();
 
-    (const_cast<CompressedHashLayer<HashType,T>*> (this))->
+    (const_cast<CompressedHashLayer<IndexType,T>*> (this))->
     load(bucket);
 
     if(likely(bucketpos < dirtybucket.size()))
@@ -67,19 +77,19 @@ void CompressedHashLayer<HashType,T>::extract(HashType crc, T& result) const
     lock.Unlock();
 }
 
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::set(HashType crc, const T& result)
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::set(IndexType index, const T& result)
 {
-    set_no_update_hashbits(crc, result);
-    hashbits.set(crc, crc+1);
+    set_no_update_hashbits(index, result);
+    hashbits.set(index, index+1);
 }
 
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::set_no_update_hashbits(HashType crc, const T& result)
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::set_no_update_hashbits(IndexType index, const T& result)
 {
     const
-    size_t bucket = crc / n_per_bucket,
-           bucketpos = (crc % n_per_bucket) * sizeof(T);
+    size_t bucket = index / n_per_bucket,
+           bucketpos = (index % n_per_bucket) * sizeof(T);
 
     load(bucket);
 
@@ -90,18 +100,21 @@ void CompressedHashLayer<HashType,T>::set_no_update_hashbits(HashType crc, const
     dirtystate = rw;
 }
 
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::unset(HashType crc)
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::unset(IndexType index)
 {
     // It is not really necessary to do this for the hashmap
     // to function properly, but it is nice, because it shrinks
     // the memory usage.
     { // blot the deleted spot with zero-bytes, shrink the bucket if possible.
         const
-        size_t bucket = crc / n_per_bucket,
-               bucketpos = (crc % n_per_bucket) * sizeof(T);
+        size_t bucket = index / n_per_bucket,
+               bucketpos = (index % n_per_bucket) * sizeof(T);
 
         load(bucket);
+
+        // If the deleted position is at the end of the bucket,
+        // shrink the bucket until the last item is not zero
 
         if(unlikely(bucketpos + sizeof(T) >= dirtybucket.size()))
         {
@@ -112,23 +125,27 @@ void CompressedHashLayer<HashType,T>::unset(HashType crc)
             while(tpos > 0 && IsZeroAt<sizeof(T)>() (&dirtybucket[(tpos-1)*sizeof(T)]))
                 --tpos;
 
+            // Resize the bucket if it could be resized
             if(tpos * sizeof(T) != dirtybucket.size())
             {
                 dirtybucket.resize(tpos * sizeof(T));
                 dirtystate = rw;
             }
+            else
+                goto BlotItOut;
         }
-        else
+        else BlotItOut: if(bucketpos+sizeof(T) <= dirtybucket.size())
         {
+            // Zero the slot contents
             std::memset(&dirtybucket[bucketpos], 0, sizeof(T));
             dirtystate = rw;
         }
     }
-    hashbits.erase(crc);
+    hashbits.erase(index);
 }
 
-template<typename HashType, typename T>
-CompressedHashLayer<HashType,T>::CompressedHashLayer(uint_fast64_t max)
+template<typename IndexType, typename T>
+CompressedHashLayer<IndexType,T>::CompressedHashLayer(uint_fast64_t max)
 : n_buckets( calc_n_buckets(max) ),
   hashbits(),
   buckets(new std::vector<unsigned char> [n_buckets]),
@@ -139,8 +156,8 @@ CompressedHashLayer<HashType,T>::CompressedHashLayer(uint_fast64_t max)
 {
 }
 
-template<typename HashType, typename T>
-CompressedHashLayer<HashType,T>::~CompressedHashLayer()
+template<typename IndexType, typename T>
+CompressedHashLayer<IndexType,T>::~CompressedHashLayer()
 {
     delete[] buckets;
 }
@@ -161,12 +178,19 @@ namespace
         static char wrkmem[LZO1X_1_MEM_COMPRESS] = {0};
   #endif
 }
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::flushdirty()
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::flushdirty()
 {
     if(dirtystate == rw)
     {
-
+#if DO_COMPRESSION
+        lzo_uint actual_bucketsize = dirtybucket.size();
+  #if HAS_LZO2
+        lzo_uint destlen = sizeof lzo_bufs<bucketsize>::decombuf;
+        lzo1x_1_15_compress(&dirtybucket[0], actual_bucketsize,
+                            lzo_bufs<bucketsize>::decombuf, &destlen,
+                            wrkmem);
+  #else
         /* FIXME:
              lzo1x_1_compress sometimes triggers
              two kinds of valgrind errors:
@@ -185,14 +209,6 @@ void CompressedHashLayer<HashType,T>::flushdirty()
 
          */
 
-#if 1
-        lzo_uint actual_bucketsize = dirtybucket.size();
-  #if HAS_LZO2
-        lzo_uint destlen = sizeof lzo_bufs<bucketsize>::decombuf;
-        lzo1x_1_15_compress(&dirtybucket[0], actual_bucketsize,
-                            lzo_bufs<bucketsize>::decombuf, &destlen,
-                            wrkmem);
-  #else
         lzo_uint destlen = sizeof lzo_bufs<bucketsize>::decombuf;
         lzo1x_1_compress(&dirtybucket[0], actual_bucketsize,
                          lzo_bufs<bucketsize>::decombuf, &destlen,
@@ -205,14 +221,20 @@ void CompressedHashLayer<HashType,T>::flushdirty()
                                             lzo_bufs<bucketsize>::decombuf+destlen); // assign the bucket
         buckets[dirtybucketno].swap(replvec);}
 #else
-        buckets[dirtybucketno] = dirtybucket;
+        buckets[dirtybucketno].swap(dirtybucket);
 #endif
         dirtystate = ro;
     }
+#if !DO_COMPRESSION
+    else if(dirtystate == ro)
+    {
+        buckets[dirtybucketno].swap(dirtybucket);
+    }
+#endif
 }
 
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::load(size_t bucketno)
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::load(size_t bucketno)
 {
     if(dirtystate == none || dirtybucketno != bucketno)
     {
@@ -221,7 +243,7 @@ void CompressedHashLayer<HashType,T>::load(size_t bucketno)
         lzo_uint destlen = 0;
         if(!buckets[bucketno].empty())
         {
-#if 1
+#if DO_COMPRESSION
   #if HAS_LZO2
     #if HAS_ASM_LZO2
             destlen = bucketsize;
@@ -245,30 +267,29 @@ void CompressedHashLayer<HashType,T>::load(size_t bucketno)
   #endif
 #else
             destlen = buckets[bucketno].size();
-            dirtybucket = buckets[bucketno];
+            dirtybucket.swap(buckets[bucketno]);
 #endif
         }
-
         dirtybucket.resize(destlen); // shrink to the actual length
         dirtybucketno = bucketno;
         dirtystate = ro;
     }
 }
 
-template<typename HashType, typename T>
-bool CompressedHashLayer<HashType,T>::has(HashType crc) const
+template<typename IndexType, typename T>
+bool CompressedHashLayer<IndexType,T>::has(IndexType index) const
 {
-    return hashbits.find(crc) != hashbits.end();
+    return hashbits.find(index) != hashbits.end();
 }
 
-template<typename HashType, typename T>
-uint_fast64_t CompressedHashLayer<HashType,T>::GetLength() const
+template<typename IndexType, typename T>
+uint_fast64_t CompressedHashLayer<IndexType,T>::GetLength() const
 {
     return n_buckets * uint_fast64_t(n_per_bucket);
 }
 
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::Resize(uint_fast64_t length)
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::Resize(uint_fast64_t length)
 {
     uint_fast64_t new_n_buckets = calc_n_buckets(length);
     if(new_n_buckets > n_buckets)
@@ -285,8 +306,8 @@ void CompressedHashLayer<HashType,T>::Resize(uint_fast64_t length)
     }
 }
 
-template<typename HashType, typename T>
-void CompressedHashLayer<HashType,T>::Merge
+template<typename IndexType, typename T>
+void CompressedHashLayer<IndexType,T>::Merge
     (const CompressedHashLayer& b,
      uint_fast32_t target_offset)
 {
@@ -299,7 +320,7 @@ void CompressedHashLayer<HashType,T>::Merge
     {
         hashbits.set( i->lower + target_offset,
                       i->upper + target_offset);
-        for(HashType pos = i->lower; pos != i->upper; ++pos)
+        for(IndexType pos = i->lower; pos != i->upper; ++pos)
         {
             b.extract(pos, tmp);
             set_no_update_hashbits(target_offset + pos, tmp);
@@ -311,36 +332,39 @@ void CompressedHashLayer<HashType,T>::Merge
 #define ri lzo_ri
 #define ai lzo_ai
 #define si lzo_si
+
+#include "newhash.h"
 /*
-typedef CompressedHashLayer<BlockIndexHashType,cromfs_blocknum_t> ri;
+typedef CompressedHashLayer<newhash_t,cromfs_blocknum_t> ri;
 template ri::CompressedHashLayer(uint_fast64_t);
 template ri::~CompressedHashLayer();
-template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
-template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
-template void ri::unset(BlockIndexHashType);
-template bool ri::has(BlockIndexHashType)const;
+template void ri::extract(newhash_t,cromfs_blocknum_t&) const;
+template void ri::set(newhash_t,const cromfs_blocknum_t&);
+template void ri::unset(newhash_t);
+template bool ri::has(newhash_t)const;
 template uint_fast64_t ri::GetLength()const;
 template void ri::Merge(const ri&, uint_fast32_t);
-*/
-typedef CompressedHashLayer<BlockIndexHashType,cromfs_block_internal> ai;
+
+typedef CompressedHashLayer<newhash_t,cromfs_block_internal> ai;
 template ai::CompressedHashLayer(uint_fast64_t);
 template ai::~CompressedHashLayer();
-template void ai::extract(BlockIndexHashType,cromfs_block_internal&) const;
-template void ai::set(BlockIndexHashType,const cromfs_block_internal&);
-template void ai::unset(BlockIndexHashType);
-template bool ai::has(BlockIndexHashType)const;
+template void ai::extract(newhash_t,cromfs_block_internal&) const;
+template void ai::set(newhash_t,const cromfs_block_internal&);
+template void ai::unset(newhash_t);
+template bool ai::has(newhash_t)const;
 template uint_fast64_t ai::GetLength()const;
 template void ai::Merge(const ai&, uint_fast32_t);
-
-typedef CompressedHashLayer<unsigned,uint_least32_t> si;
+*/
+typedef CompressedHashLayer<newhash_t,uint_least32_t> si;
 template si::CompressedHashLayer(uint_fast64_t);
 template si::~CompressedHashLayer();
-template void si::extract(unsigned,uint_least32_t&) const;
-template void si::set(unsigned,const uint_least32_t&);
-template void si::unset(unsigned);
-template bool si::has(unsigned)const;
+template void si::extract(newhash_t,uint_least32_t&) const;
+template void si::set(newhash_t,const uint_least32_t&);
+template void si::unset(newhash_t);
+template bool si::has(newhash_t)const;
 template uint_fast64_t si::GetLength()const;
 template void si::Merge(const si&, uint_fast32_t);
+
 #undef ri
 #undef ai
 #undef si

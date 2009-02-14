@@ -1,3 +1,4 @@
+#include <cstdio> // for stderr
 #include "rangeset.hh"
 
 template<typename Key,typename Allocator>

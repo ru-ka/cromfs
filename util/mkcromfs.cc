@@ -106,25 +106,25 @@ static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
     uint_fast64_t& compressed_total,
     uint_fast64_t& uncompressed_total)
 {
-    std::vector<unsigned char> fblock_lzma, fblock_raw;
-
-    fblock_raw = fblock_lzma = fblock.get_raw();
+    DataReadBuffer buf; uint_fast32_t fblock_rawlength;
+    fblock.InitDataReadBuffer(buf, fblock_rawlength);
 
     char why[512];std::sprintf(why,"fblock %u", (unsigned)fblocknum);
-    fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, fblock_lzma, why);
+    std::vector<unsigned char>
+        fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, buf.Buffer,fblock_rawlength, why);
     fblock.put_compressed(fblock_lzma);
 
     if(DisplayEndProcess)
     {
         std::printf(" [%d] %u -> %u\n",
             (int)fblocknum,
-            (unsigned)fblock_raw.size(),
+            (unsigned)fblock_rawlength,
             (unsigned)fblock_lzma.size());
         std::fflush(stdout);
     }
 
   #pragma omp atomic
-    uncompressed_total += fblock_raw.size();
+    uncompressed_total += fblock_rawlength;
   #pragma omp atomic
     compressed_total   += fblock_lzma.size();
 }
@@ -1090,7 +1090,7 @@ namespace cromfs_creator
         /* Note: This loop cannot be made parallel, because each loop
          * iteration requires knowing the value of fblock_pos, and that
          * value is updated on the previous loop.
-         * Not even the "ordered" OpenMP clause helps this.
+         * Not even the "ordered" OpenMP clause can help this.
          */
         for(size_t fblocknum=0; /*fblocknum<max_num_fblocks*/; ++fblocknum)
         {

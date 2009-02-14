@@ -41,10 +41,10 @@ void CacheFile<HashType,T>::Clone()
 */
 
 template<typename HashType, typename T>
-void CacheFile<HashType,T>::GetPos(HashType crc, int& fd, uint_fast64_t& pos) const
+void CacheFile<HashType,T>::GetPos(HashType index, int& fd, uint_fast64_t& pos) const
 {
     /* Const version */
-    pos = crc;
+    pos = index;
     pos *= RecSize;
     if(LargeFileOk)
     {
@@ -59,10 +59,10 @@ void CacheFile<HashType,T>::GetPos(HashType crc, int& fd, uint_fast64_t& pos) co
 }
 
 template<typename HashType, typename T>
-void CacheFile<HashType,T>::GetPos(HashType crc, int& fd, uint_fast64_t& pos)
+void CacheFile<HashType,T>::GetPos(HashType index, int& fd, uint_fast64_t& pos)
 {
     /* Nonconst version */
-    pos = crc;
+    pos = index;
     pos *= RecSize;
     if(LargeFileOk)
     {
@@ -143,11 +143,11 @@ uint_fast64_t CacheFile<HashType,T>::GetDiskSize() const
 
 template<typename HashType, typename T>
 void
-    CacheFile<HashType,T>::extract(HashType crc, T& result) const
+    CacheFile<HashType,T>::extract(HashType index, T& result) const
 {
     char* Packet = (char*)&result;
     errno=0;
-    int fd; uint_fast64_t pos; GetPos(crc, fd, pos);
+    int fd; uint_fast64_t pos; GetPos(index, fd, pos);
     ssize_t res = pread64(fd, Packet, RecSize, pos);
     if(res != RecSize)
     {
@@ -159,11 +159,11 @@ void
 
 template<typename HashType, typename T>
 void
-    CacheFile<HashType,T>::set(HashType crc, const T& result)
+    CacheFile<HashType,T>::set(HashType index, const T& result)
 {
     const char* Packet = (const char*)&result;
     errno=0;
-    int fd; uint_fast64_t pos; GetPos(crc, fd, pos);
+    int fd; uint_fast64_t pos; GetPos(index, fd, pos);
     ssize_t res = pwrite64(fd, Packet, RecSize, pos);
     if(res != RecSize)
     {
@@ -176,12 +176,12 @@ void
 
 template<typename HashType, typename T>
 void
-    CacheFile<HashType,T>::unset(HashType crc)
+    CacheFile<HashType,T>::unset(HashType index)
 {
     char Packet[RecSize] = { 0 };
 
     errno=0;
-    int fd; uint_fast64_t pos; GetPos(crc, fd, pos);
+    int fd; uint_fast64_t pos; GetPos(index, fd, pos);
     ssize_t res = pwrite64(fd, Packet, RecSize, pos);
     if(res != RecSize)
     {
@@ -193,15 +193,15 @@ void
 
 template<typename HashType, typename T>
 bool
-    CacheFile<HashType,T>::has(HashType crc) const
+    CacheFile<HashType,T>::has(HashType index) const
 {
     char Packet[RecSize] = { 0 };
     errno=0;
-    int fd; uint_fast64_t pos; GetPos(crc, fd, pos);
+    int fd; uint_fast64_t pos; GetPos(index, fd, pos);
     ssize_t res = pread64(fd, Packet, RecSize, pos);
     if(res != RecSize) return false;
 
-    /*printf("has test %08X: ", crc);
+    /*printf("has test %08X: ", index);
     for(unsigned a=0; a<RecSize; ++a) printf(" %02X", (unsigned char)Packet[a]);
     printf("\n");*/
 
@@ -222,27 +222,28 @@ bool
 }
 
 #include "cromfs-blockindex.hh" // for BlockIndexhashType, blocknum etc.
+#include "newhash.h"
 #define ri spfile_ri
 #define ai spfile_ai
 #define si spfile_si
 /*
-typedef CacheFile<BlockIndexHashType,cromfs_blocknum_t> ri;
+typedef CacheFile<newhash_t,cromfs_blocknum_t> ri;
 template ri::CacheFile();
 template ri::~CacheFile();
-template void ri::extract(BlockIndexHashType,cromfs_blocknum_t&) const;
-template void ri::set(BlockIndexHashType,const cromfs_blocknum_t&);
-template void ri::unset(BlockIndexHashType);
-template bool ri::has(BlockIndexHashType)const;
+template void ri::extract(newhash_t,cromfs_blocknum_t&) const;
+template void ri::set(newhash_t,const cromfs_blocknum_t&);
+template void ri::unset(newhash_t);
+template bool ri::has(newhash_t)const;
 //template void ri::Close();
 //template void ri::Clone();
 */
-typedef CacheFile<BlockIndexHashType,cromfs_block_internal> ai;
+typedef CacheFile<newhash_t,cromfs_block_internal> ai;
 template ai::CacheFile();
 template ai::~CacheFile();
-template void ai::extract(BlockIndexHashType,cromfs_block_internal&) const;
-template void ai::set(BlockIndexHashType,const cromfs_block_internal&);
-template void ai::unset(BlockIndexHashType);
-template bool ai::has(BlockIndexHashType)const;
+template void ai::extract(newhash_t,cromfs_block_internal&) const;
+template void ai::set(newhash_t,const cromfs_block_internal&);
+template void ai::unset(newhash_t);
+template bool ai::has(newhash_t)const;
 //template void ai::Close();
 //template void ai::Clone();
 

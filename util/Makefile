@@ -2,6 +2,8 @@ VERSION=1.5.7
 
 include Makefile.sets
 
+CPPDEBUG=-pipe -DNDEBUG
+
 #OPTIM += -O0 -fno-inline -g
 # -fmudflap
 #LDOPTS += -fmudflap -lmudflap
@@ -9,7 +11,7 @@ include Makefile.sets
 #OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
 #OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
-OPTIM += -O3 -g 
+#OPTIM += -O3 -g 
 #OPTIM += -O0 -g -debug all -inline-level=0
 #OPTIM += -O0 -g -fno-inline
 # -ftree-vectorize 
@@ -44,7 +46,6 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/cromfs-directoryfun.o \
 	   ../lib/cromfs-fblockfun.o \
 	   ../lib/cromfs-blockifier.o \
-	   ../lib/cromfs-blockindex.o \
 	   ../lib/cromfs-hashmap_lzo.o \
 	   ../lib/cromfs-hashmap_lzo_sparse.o \
 	   ../lib/cromfs-hashmap_googlesparse.o \

@@ -17,10 +17,10 @@ public:
     GoogleSparseMap();
     ~GoogleSparseMap();
 
-    void extract(HashType crc, T& result)       const;
-    void     set(HashType crc, const T& value);
-    void   unset(HashType crc);
-    bool     has(HashType crc) const;
+    void extract(HashType index, T& result)       const;
+    void     set(HashType index, const T& value);
+    void   unset(HashType index);
+    bool     has(HashType index) const;
 
 private:
 #ifdef OPTIMAL_GOOGLE_SPARSETABLE
@@ -34,7 +34,7 @@ private:
         FSBAllocator<T>
     > index_type;
 #endif
-    index_type index;
+    index_type data;
 };
 
 #endif

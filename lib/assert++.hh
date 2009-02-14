@@ -115,7 +115,7 @@ namespace assertprivate
 #define assertbegin() {}
 /* If we don't have glibc.. Or have NDEBUG */
 #define assertflush() {}
-#define assertvar(expr) {}
+#define assertvar(expr) 0
 #define assertset()
 #define asserttest() (0)
 #endif

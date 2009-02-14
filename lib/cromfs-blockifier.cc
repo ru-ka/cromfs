@@ -8,11 +8,17 @@
 #include "cromfs-blockindex.hh"
 #include "threadworkengine.hh"
 
+#include "longfileread.hh"
+#include "longfilewrite.hh"
+
+#include "cromfs-hashmap_lzo_sparse.hh"
+
 #include "cromfs-blockifier.hh"
 #include "cromfs-inodefun.hh"    // for CalcSizeInBlocks
 #include "append.hh"
 #include "newhash.h"
 #include "assert++.hh"
+#include "autodealloc.hh"
 
 #include <algorithm>
 #ifdef HAS_GCC_PARALLEL_ALGORITHMS
@@ -20,7 +26,7 @@
 #endif
 #include <functional>
 #include <stdexcept>
-#include <deque>
+#include <list>
 #include <set>
 
 ///////////////////////////////////////////////
@@ -62,7 +68,7 @@ static void DisplayProgress(
         result += Buf;
     }
     char Buf[32];
-    std::sprintf(Buf, " - %08X", BlockIndexHashCalc(data, size));
+    std::sprintf(Buf, " - %08X", newhash_calc(data, size));
     result += Buf;
     return result;
 }*/
@@ -71,28 +77,29 @@ struct AutoIndexFinderParams
 {
     // ref ok
     const mkcromfs_fblockset& fblocks;
-    const block_index_stack<BlockIndexHashType, cromfs_block_internal>& autoindex;
+    const cromfs_blockifier::autoindex_t& autoindex;
 
     bool                  auto_found;
     cromfs_block_internal which_auto_found;
     MutexType             auto_index_lock;
     MutexType             auto_which_lock;
-    size_t                auto_which_index;
+    cromfs_blockifier::autoindex_t::find_index_t
+                          auto_which_index;
 
     const unsigned char* data;
     uint_fast32_t        size;
-    BlockIndexHashType    crc;
+    newhash_t    crc;
 
     AutoIndexFinderParams(
         const mkcromfs_fblockset& f,
-        const block_index_stack<BlockIndexHashType, cromfs_block_internal>& a,
+        const cromfs_blockifier::autoindex_t& a,
         const unsigned char* d,
         uint_fast32_t        s,
-        BlockIndexHashType   c)
+        newhash_t   c)
             : fblocks(f), autoindex(a),
               auto_found(false), which_auto_found(),
               auto_index_lock(), auto_which_lock(),
-              auto_which_index(0),
+              auto_which_index(),
               data(d), size(s), crc(c)
     {
     }
@@ -101,11 +108,15 @@ struct AutoIndexFinderParams
 static bool FindAutoIndexNext_lock(AutoIndexFinderParams& params, cromfs_block_internal& auto_match)
 {
     ScopedLock lck(params.auto_index_lock);
-    return params.autoindex.Find(params.crc, auto_match, params.auto_which_index++);
+    bool res = params.autoindex.Find(params.crc, auto_match, params.auto_which_index);
+    ++params.auto_which_index;
+    return res;
 }
 static bool FindAutoIndexNext_unlocked(AutoIndexFinderParams& params, cromfs_block_internal& auto_match)
 {
-    return params.autoindex.Find(params.crc, auto_match, params.auto_which_index++);
+    bool res = params.autoindex.Find(params.crc, auto_match, params.auto_which_index);
+    ++params.auto_which_index;
+    return res;
 }
 
 static bool TestAutoIndexMatch(AutoIndexFinderParams& params, const cromfs_block_internal& auto_match)
@@ -140,22 +151,28 @@ static bool TestAutoIndexMatch(AutoIndexFinderParams& params, const cromfs_block
 
 const cromfs_blockifier::ReusingPlan cromfs_blockifier::CreateReusingPlan(
     const unsigned char* data, uint_fast32_t size,
-    const BlockIndexHashType crc)
+    const newhash_t crc)
 {
     /* Use hashing to find candidate identical blocks. */
 
-    if(crc != BlockIndexHashCalc(data, size))
-    {
-        throw "Wrong hash";
-    }
+    assertbegin();
+    assert(crc == newhash_calc(data, size));
+    assertflush();
 
     AutoIndexFinderParams params(fblocks, autoindex, data, size, crc);
 
+#if 0
+    cromfs_block_internal tmp;
+    while(FindAutoIndexNext_unlocked(params, tmp))
+        if(TestAutoIndexMatch(params, tmp)) break;
+
+#else
     static ThreadWorkEngine<AutoIndexFinderParams> engine;
     engine.RunUntil(UseThreads, params,
                     FindAutoIndexNext_lock,
                     FindAutoIndexNext_unlocked,
                     TestAutoIndexMatch);
+#endif
 
     /* Match? */
     if(params.auto_found) return ReusingPlan(crc, params.which_auto_found);
@@ -338,9 +355,25 @@ static bool OverlapFindWorker(size_t a, OverlapFinderParameter& params)
 }
 
 const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
-    const BoyerMooreNeedleWithAppend& data, BlockIndexHashType crc,
+    const BoyerMooreNeedleWithAppend& data, newhash_t crc,
     overlaptest_history_t& minimum_tested_positions) const
 {
+#if 0
+  {
+    int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
+    if(i >= 0)
+    {
+        AppendInfo appended;
+        appended.SetAppendPos(fblocks[i].size(), data.size());
+        return WritePlan(i, appended, data, crc);
+    }
+    /* Our plan is then, create a new fblock just for this block! */
+    AppendInfo appended;
+    appended.SetAppendPos(0, data.size());
+    return WritePlan(fblocks.size(), appended, data, crc);
+  }
+#endif
+
     /* First check if we can write into an existing fblock. */
     if(true)
     {
@@ -456,9 +489,6 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
             (unsigned)startoffs);
     }
 
-    // TODO: Figure out whether calling Del() is worthwhile.
-    //    Pros: Reduces memory usage and improves search times
-    //    Cons: Requires writing data into autoindex, which can be an expense
     autoindex.Del(plan.crc, block); // reduce the autoindex size
 
     /* Autoindex the block right after this, just in case we get a match */
@@ -510,16 +540,27 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     /* Note: This line may automatically create a new fblock. */
     mkcromfs_fblock& fblock = fblocks[fblocknum];
 
+#if 0
+  {
+    fblock.put_appended_raw(appended, &plan.data[0], plan.data.size());
+    cromfs_block_internal block;
+    block.define(fblocknum, appended.AppendBaseOffset);
+    fblocks.UpdateFreeSpaceIndex(fblocknum, std::max(0l, (long)FSIZE - (long)appended.AppendedSize));
+    fblocks.FreeSomeResources();
+    return CreateNewBlock(block);
+  }
+#endif
+
     const uint_fast32_t new_data_offset = appended.AppendBaseOffset;
     const uint_fast32_t new_raw_size = appended.AppendedSize;
     const uint_fast32_t old_raw_size = appended.OldSize;
 
     const int_fast32_t new_remaining_room = FSIZE - new_raw_size;
 
+    const uint_fast32_t after_block = new_data_offset + plan.data.size();
+
     if(DisplayBlockSelections)
     {
-        uint_fast32_t after_block = new_data_offset + plan.data.size();
-
         if(after_block <= old_raw_size)
         {
             std::printf("block %u => (%u) [%u @ %u] (overlap fully)",
@@ -548,34 +589,44 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
             std::printf(" (OVERUSE)");
         }
         std::printf("\n");
-
-        if(after_block <= old_raw_size)
-        {
-            /* In case of a full overlap,
-             * also autoindex the block right after this, just in case we get a match */
-            PredictiveAutoIndex(fblocknum, after_block, plan.data.size());
-        }
     }
 
-    fblock.put_appended_raw(appended, plan.data);
+#if 1
+    if(after_block <= old_raw_size)
+    {
+        /* In case of a full overlap,
+         * also autoindex the block right after this, just in case we get a match */
+        PredictiveAutoIndex(fblocknum, after_block, plan.data.size());
+    }
+#endif
 
+    fblock.put_appended_raw(appended, &plan.data[0], plan.data.size());
+
+/**/
+#if 1
     if(true) //DoUpdateBlockIndex
     {
-        if(last_autoindex_length.size() <= fblocknum)
-            last_autoindex_length.resize(fblocknum+1);
-
-        std::set<long> different_bsizes;
-        different_bsizes.insert(BSIZE);
-        for(std::vector<std::pair<std::string, long> >::const_iterator
-            i = BSIZE_FOR.begin(); i != BSIZE_FOR.end(); ++i)
+        static const struct different_bsizes: public std::vector<long>
         {
-            different_bsizes.insert(i->second);
-        }
+            different_bsizes()
+            {
+                #define bins(v) do { \
+                    std::vector<long>::iterator vi = std::lower_bound(begin(), end(), v); \
+                    if(vi == (*this).end() || *vi != v) (*this).insert(vi, v); \
+                } while(0)
+                bins(BSIZE);
+                for(std::vector<std::pair<std::string, long> >::const_iterator
+                    i = BSIZE_FOR.begin(); i != BSIZE_FOR.end(); ++i)
+                {
+                    bins(i->second);
+                }
+                #undef bins
+            }
+        } different_bsizes;
 
-        for(std::set<long>::const_iterator
-            i = different_bsizes.begin(); i != different_bsizes.end(); ++i)
+        for(size_t a=0; a<different_bsizes.size(); ++a)
         {
-            const long bsize = *i;
+            const long bsize = different_bsizes[a];
 
             size_t& last_raw_size = last_autoindex_length[fblocknum][bsize];
 
@@ -587,16 +638,12 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
             }
         }
     }
+/**/
+#endif
 
     cromfs_block_internal block;
     block.define(fblocknum, new_data_offset);
 
-    /* If the block is uncompressed, preserve it fblock_index
-     * so that CompressOneRandomly() may pick it some day.
-     *
-     * Otherwise, store it in the index only if it is still a candidate
-     * for crunching more bytes into it.
-     */
     fblocks.UpdateFreeSpaceIndex(fblocknum,
         new_remaining_room >= (int)MinimumFreeSpace
             ? new_remaining_room
@@ -626,18 +673,17 @@ void cromfs_blockifier::TryAutoIndex(
     uint_fast32_t bsize,
     uint_fast32_t startoffs)
 {
-    const BlockIndexHashType crc = BlockIndexHashCalc(ptr, bsize);
+    const newhash_t crc = newhash_calc(ptr, bsize);
 
     /* Check whether the block has already been indexed
-     * (don't care whether we get a RealIndex or AutoIndex result,
-     *  just see if it's indexed at all)
      */
+#if 1
     if(CreateReusingPlan(ptr, bsize, crc))
     {
         /* Already indexed, don't autoindex */
         return;
     }
-
+#endif
     /* Add it to the index */
     cromfs_block_internal match;
     match.define(fblocknum, startoffs);
@@ -717,24 +763,15 @@ void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
 
 ///////////////////////////////////////////////
 
-template<typename T>
-class autodealloc_array
-{
-    T* p;
-public:
-    autodealloc_array(T*q): p(q) { }
-    ~autodealloc_array() { delete[] p; }
-};
-template<typename T>
-class autodealloc
-{
-    T* p;
-public:
-    autodealloc(T*q): p(q) { }
-    ~autodealloc() { delete p; }
-};
 class bitset1p32
 {
+    /* Don't implement this in terms of lzo-map. It will completely
+     * kill the performance, especially due to the number of lockings
+     * needed.
+     *
+     * Implementing it through rangeset is also probably a bad idea,
+     * considering that the access patterns are completely random.
+     */
     typedef size_t r;
     enum { rbits = 8 * sizeof(r) };
     r data[UINT64_C(0x100000000) / rbits];
@@ -755,61 +792,67 @@ template<typename schedule_item, size_t max_open>
 class schedule_cache
 {
     std::vector<schedule_item>& schedule;
-    std::deque<size_t> open_list;
+    std::list<size_t, FSBAllocator<size_t> > open_list;
+    size_t n_open;
     MutexType lock;
 public:
     bool can_close;
     typedef schedule_item sched_item_t;
 public:
     schedule_cache(std::vector<schedule_item>& s)
-        : schedule(s), open_list(), can_close(true), lock()
+        : schedule(s), open_list(), can_close(true), n_open(0), lock()
     {
     }
     ~schedule_cache()
     {
-        for(size_t a=0; a<open_list.size(); ++a)
-            schedule[open_list[a]].GetDataSource()->close();
+        for(std::list<size_t>::const_iterator
+            i = open_list.begin(); i != open_list.end(); ++i)
+                schedule[*i].GetDataSource()->close();
     }
 
     schedule_item& Get(size_t pos)
     {
         ScopedLock lck(lock);
 
-        for(size_t a=0; a<open_list.size(); ++a)
-            if(open_list[a] == pos)
-            {
-                if(a > 0)
-                {
-                    do {
-                        open_list[a] = open_list[a-1];
-                        --a;
-                    } while(a > 0);
-                    open_list[0] = pos;
-                }
+        //printf("Get(%lu): %lu are open\n", (unsigned long)pos, (unsigned long)n_open);
 
+        for(std::list<size_t>::iterator
+            i = open_list.begin(); i != open_list.end(); ++i)
+        {
+            if(*i == pos)
+            {
+                if(i != open_list.begin())
+                {
+                    // todo: use splice or something
+                    open_list.erase(i);
+                    open_list.push_front(pos);
+                }
                 if(can_close)
                 {
-                    while(open_list.size() > max_open)
+                    while(n_open > max_open)
                     {
                         schedule[open_list.back()].GetDataSource()->close();
                         open_list.pop_back();
+                        --n_open;
                     }
                 }
-
                 return schedule[pos];
             }
+        }
 
         if(can_close)
         {
-            while(open_list.size() >= max_open)
+            while(n_open >= max_open)
             {
                 schedule[open_list.back()].GetDataSource()->close();
                 open_list.pop_back();
+                --n_open;
             }
         }
 
         open_list.push_front(pos);
         schedule[pos].GetDataSource()->open();
+        ++n_open;
 
         return schedule[pos];
     }
@@ -886,6 +929,118 @@ static void VerifyInodeIntact(
 }
 #endif
 
+typedef std::pair<uint_least32_t/* current whereinfo index */,
+                  uint_least32_t/* previous whereinfo index, match */
+                 > identical_item;
+class identical_list
+{
+private:
+    std::vector<identical_item> data;
+    uint_fast64_t fsize, dontneed_cap;
+    LongFileRead* rd;
+    LongFileWrite* wt;
+    int fd;
+public:
+    identical_list() : data(), rd(0), fsize(0), dontneed_cap(0), wt(0), fd(-1) { }
+    ~identical_list()
+    {
+        delete rd;
+        delete wt;
+        if(fd >= 0) close(fd);
+    }
+
+    bool Load(const std::string& fn)
+    {
+        if(fn.empty()) return false;
+
+        fd = open(fn.c_str(), O_RDONLY | O_LARGEFILE);
+        if(fd >= 0)
+        {
+            fsize = lseek64(fd, 0, SEEK_END);
+            rd = new LongFileRead(fd, 0, fsize);
+            MadviseSequential(rd->GetAddr(), fsize);
+            std::printf("Identical_list loaded from %s\n", fn.c_str());
+            return true;
+        }
+        return false;
+    }
+
+    void BeginSaving(const std::string& fn)
+    {
+        if(!rd)
+        {
+            fsize = 0;
+            if(!fn.empty())
+            {
+                std::printf("Identical_list will be saved to %s\n", fn.c_str());
+                fd = open(fn.c_str(), O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE, 0644);
+                wt = new LongFileWrite(fd, 0);
+            }
+        }
+    }
+
+    void EndSaving()
+    {
+        if(wt) { delete wt; wt = 0; }
+        if(fd >= 0)
+        {
+            fsync(fd);
+            fdatasync(fd);
+            if(rd) { delete rd; rd = 0; }
+        }
+    }
+
+    void BeginAccessing()
+    {
+        if(fd >= 0)
+        {
+            if(!rd) rd = new LongFileRead(fd, 0, fsize);
+            MadviseSequential(rd->GetAddr(), fsize);
+            close(fd);
+            fd = -1;
+        }
+        else
+            MadviseSequential(&data[0], data.size() * (uint_fast64_t)sizeof(identical_item));
+
+        dontneed_cap = 0;
+    }
+
+    size_t size() const { if(fd >= 0) return fsize / sizeof(identical_item); else return data.size(); }
+
+    const identical_item& operator[] (size_t index) const
+    {
+        if(rd)
+            return *(const identical_item*) (rd->GetAddr() + index * (uint_fast64_t)sizeof(identical_item));
+        return data[index];
+    }
+
+    void Append(const identical_item& item)
+    {
+        if(wt)
+            wt->write( (const unsigned char*)&item, sizeof(item), fsize, false);
+        else
+            data.push_back(item);
+        fsize += sizeof(item);
+    }
+
+    void DoneWithUntil(size_t index)
+    {
+        uint_fast64_t pos = index * (uint_fast64_t)sizeof(identical_item);
+        pos &= ~4095;
+
+        if(pos <= dontneed_cap) return;
+        dontneed_cap = pos;
+
+        if(rd)
+            MadviseDontNeed(rd->GetAddr(), pos);
+        else
+            MadviseDontNeed(&data[0], pos);
+    }
+private:
+    identical_list(const identical_list&);
+    void operator=(const identical_list&);
+};
+
 void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 {
     // Note: using __gnu_parallel in this sort() will crash the program.
@@ -905,38 +1060,16 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
     bitset1p32* hash_duplicate = 0;
     autodealloc<bitset1p32> hash_dupl_dealloc(hash_duplicate);
 
-    std::vector<std::pair<uint_least32_t/* current whereinfo index */,
-                          uint_least32_t/* previous whereinfo index, match */
-                         > >
-        identical_list;
+    identical_list identical_list;
 
     std::string ReuseListFileName;
     if(!ReuseListFile.empty())
         ReuseListFileName = ReuseListFile + "[" + purpose + "].bin";
 
-    bool reuselist_already_loaded = false;
-    if(!ReuseListFileName.empty())
+    bool reuselist_already_loaded = identical_list.Load(ReuseListFileName);
+    if(!reuselist_already_loaded && BlockHashing_Method != BlockHashing_None)
     {
-        FILE* fp = std::fopen(ReuseListFileName.c_str(), "rb");
-        if(fp)
-        {
-            std::fseek(fp, 0, SEEK_END);
-            uint_fast64_t size = std::ftell(fp);
-            std::fseek(fp, 0, SEEK_SET);
-
-            uint_fast64_t nrecords = size / sizeof(identical_list[0]);
-
-            std::printf("Loading identical_list from %s (%llu records)\n",
-                ReuseListFileName.c_str(), (unsigned long long) nrecords);
-
-            identical_list.resize(nrecords);
-            std::fread(&identical_list[0], sizeof(identical_list[0]),
-                       identical_list.size(), fp);
-            std::fclose(fp);
-
-            std::printf("Identical_list loaded from %s\n", ReuseListFileName.c_str());
-            reuselist_already_loaded = true;
-        }
+        identical_list.BeginSaving(ReuseListFileName);
     }
 
     if(BlockHashing_Method == BlockHashing_All_Prepass
@@ -1041,7 +1174,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
     {
         schedule_cache<schedule_item, 10> schedule_cache(schedule);
         const char* const label =
-            (BlockHashing_Method != BlockHashing_None)
+            (BlockHashing_Method != BlockHashing_None && !reuselist_already_loaded)
             ? "Finding identical blocks"
             : "Mapping the block list";
 
@@ -1050,10 +1183,12 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         uint_fast64_t total_done = 0, blocks_done  = 0;
         uint_fast64_t last_report_pos = 0;
 
-        typedef block_index_stack<newhash_t, uint_least32_t> blocks_list;
+        typedef block_index_stack
+            <newhash_t, uint_least32_t,
+             CompressedHashLayer_Sparse<newhash_t, uint_least32_t>
+            > blocks_list;
         blocks_list blockhashlist;
 
-        size_t identical_list_pos = 0;
         for(size_t a=0; a < schedule.size(); ++a)
         {
             where_list.Add(a, blocks_done);
@@ -1170,9 +1305,13 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         uint_least32_t other;
                         #pragma omp flush(index)
                         { ScopedLock lck(index_lock);
+                          #pragma omp flush(identical_found)
+                          if(identical_found) break;
+                          // ^Check again because acquiring the lock could have taken time
                           if(!blockhashlist.Find(hash, other, index)) break;
-                          ++index; }
-                        #pragma omp flush(index)
+                          ++index;
+                          #pragma omp flush(index)
+                        }
 
                         uint_fast64_t filepos;
                         schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
@@ -1199,7 +1338,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                                 #pragma omp flush(identical_found)
                                 if(!identical_found)
                                 {
-                                    identical_list.push_back( std::make_pair(blocks_done, other) );
+                                    identical_list.Append( identical_item(blocks_done, other) );
                                     identical_found = true;
                                     #pragma omp flush(identical_found)
                                 }
@@ -1233,25 +1372,19 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 ++blocks_done;
             }
         }
+
+        if(!reuselist_already_loaded)
+            identical_list.EndSaving();
+
         DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
         std::printf("%lu reuse opportunities found. %lu unique blocks. Block table will be %.1f%% smaller than without the index search.\n",
             (unsigned long) identical_list.size(),
             (unsigned long) (blocks_done - identical_list.size()),
-            blocks_done * 100.0 / (blocks_done - identical_list.size())
+            100.0 - (blocks_done - identical_list.size()) * 100.0 / blocks_done
                    );
+        std::fflush(stdout);
 
-        if(!reuselist_already_loaded && !ReuseListFileName.empty())
-        {
-            FILE* fp = std::fopen(ReuseListFileName.c_str(), "wb");
-            if(!fp) std::perror(ReuseListFileName.c_str());
-            else
-            {
-                std::fwrite(&identical_list[0], sizeof(identical_list[0]),
-                            identical_list.size(), fp);
-                std::fclose(fp);
-                std::printf("Identical_list saved to %s\n", ReuseListFileName.c_str());
-            }
-        }
+        blocks.reserve(blocks.size() + blocks_done - identical_list.size());
 
         delete hash_duplicate;
         hash_duplicate = 0;
@@ -1266,6 +1399,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
         uint_fast64_t total_done=0, blocks_done=0;
         uint_fast64_t last_report_pos = 0;
+
+        identical_list.BeginAccessing();
 
         size_t identical_list_pos=0;
 
@@ -1306,7 +1441,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 {
                     //if(displaylock.TryLock())
                     //{
-                        DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+                        DisplayProgress(label, total_done, total_size, blocks_done, blocks_total,
+                                        (" autoindex("+autoindex.GetStatistics()+")").c_str());
                         //displaylock.Unlock();
                         last_report_pos = total_done;
                     //}
@@ -1342,12 +1478,13 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     // Write the blocknumber here
                     //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
                     Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
-
+                #if 0
                     assertbegin();
                     assert8var(blocknum, blocks_done,other, blocks.size(), filepos, blocksize2, blocksize, blockindex2);
                     assert(other    < blocks_done);
                     assert(blocknum < blocks.size());
                     assertflush();
+                #endif
 
                     if(DisplayBlockSelections)
                     {
@@ -1372,7 +1509,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     //       3. Append
                     // In any case, a new block number is created.
 
-                    const BlockIndexHashType hash = BlockIndexHashCalc(buf.Buffer, eat);
+                    const newhash_t hash = newhash_calc(buf.Buffer, eat);
                     if(ReusingPlan reuse = CreateReusingPlan(buf.Buffer, eat, hash))
                     {
                         cromfs_blocknum_t blocknum = Execute(reuse, eat);
@@ -1384,6 +1521,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         overlaptest_history_t hist;
                         BoyerMooreNeedleWithAppend needle(buf.Buffer, eat);
                         WritePlan write = CreateWritePlan(needle, hash, hist);
+
                         cromfs_blocknum_t blocknum = Execute(write);
 
                         //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
@@ -1394,6 +1532,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 total_done += eat;
                 ++blocks_done;
             }
+
+            identical_list.DoneWithUntil(identical_list_pos);
         }
     }
     schedule.clear();
@@ -1474,4 +1614,12 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
     {
         std::printf( "mkcromfs: You used --24bitblocknums. However, only --32bitblocknums was possible for this filesystem. Your filesystem is likely corrupt.\n");
     }
+}
+
+#include <sstream>
+const std::string cromfs_blockifier::autoindex_t::GetStatistics() const
+{
+    std::stringstream out;
+    out << "size=" << added << ",del=" << deleted;
+    return out.str();
 }

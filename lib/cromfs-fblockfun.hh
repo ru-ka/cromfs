@@ -5,7 +5,6 @@
 #include "../cromfs-defs.hh"
 
 #include "mmapping.hh"
-#include "boyermooreneedle.hh"
 #include "datareadbuf.hh"
 #include "append.hh"
 
@@ -18,242 +17,68 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/time.h>
 
-namespace fblock_private
-{
-    class fblock_storage
-    {
-    private:
-        int fblock_disk_id;
-        bool is_compressed;
-        uint_fast32_t filesize;
-        time_t last_access;
-        MemMappingType<false> mmapped;
-        int fd; bool fd_writable;
-    public:
-        fblock_storage()
-            : fblock_disk_id(),
-              is_compressed(false),
-              filesize(0),
-              last_access(0),
-              mmapped(),
-              fd(-1), fd_writable()
-        {
-            static int disk_id = 0;
-            fblock_disk_id = disk_id++;
-            mmapped.Unmap();
-        }
-        fblock_storage(int disk_id)
-            : fblock_disk_id(disk_id),
-              is_compressed(false),
-              filesize(0),
-              last_access(0),
-              mmapped(),
-              fd(-1), fd_writable()
-        {
-            mmapped.Unmap();
-            Check_Existing_File();
-        }
-
-        void Check_Existing_File();
-
-        bool is_uncompressed() const { return !is_compressed; }
-        bool is_mmapped()      const { return mmapped; }
-        uint_fast64_t getfilesize() const { return filesize; }
-
-        const std::string getfn() const;
-
-        void Delete()
-        {
-            Unmap();
-            Close(false);
-            ::unlink(getfn().c_str());
-            filesize = 0;
-        }
-
-        void get(std::vector<unsigned char>& raw,
-                 std::vector<unsigned char>& compressed)
-        {
-            get(&raw, &compressed);
-        }
-
-        const std::vector<unsigned char> get_raw()
-        {
-            std::vector<unsigned char> raw;
-            get(&raw, NULL);
-            return raw;
-        }
-
-        const std::vector<unsigned char> get_compressed()
-        {
-            std::vector<unsigned char> compressed;
-            get(NULL, &compressed);
-            return compressed;
-        }
-
-        void put_raw(const std::vector<unsigned char>& raw);
-
-        void put_compressed(const std::vector<unsigned char>& compressed);
-
-        void put(const std::vector<unsigned char>& /*raw*/,
-                 const std::vector<unsigned char>& compressed)
-        {
-            /* This method can choose freely whether to store
-             * in compressed or uncompressed format. We choose
-             * compressed, because recompression would take a
-             * lot of time, but decompression is fast.
-             * It would be waste to discard the compression already done.
-             */
-            put_compressed(compressed);
-            /*
-            if(is_compressed)
-                put_compressed(compressed);
-            else
-                put_raw(raw);
-            */
-        }
-
-        void put_appended_raw(const AppendInfo& append, const std::vector<unsigned char>& data)
-        {
-            put_appended_raw(append, &data[0], data.size());
-        }
-        void put_appended_raw(const AppendInfo& append, const BoyerMooreNeedle& data)
-        {
-            put_appended_raw(append, &data[0], data.size());
-        }
-
-        void put_appended_raw(
-            const AppendInfo& append,
-            const unsigned char* data, const uint_fast32_t datasize);
-
-    private:
-        void get(std::vector<unsigned char>* raw,
-                 std::vector<unsigned char>* compressed);
-
-    public:
-        void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size);
-        void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size,
-                                uint_fast32_t req_offset,
-                                uint_fast32_t req_size);
-
-        void EnsureMMapped()
-        {
-            if(is_compressed) put_raw(get_raw());
-            if(!mmapped) Remap();
-        }
-
-        void Unmap() { mmapped.Unmap(); }
-        void Remap()
-        {
-            EnsureOpenFor(true);
-
-            if(fd >= 0 && !is_compressed)
-            {
-                Unmap();
-                RemapFd(fd);
-            }
-        }
-        uint_fast32_t size()
-        {
-            if(is_compressed) return get_raw().size();
-            return filesize;
-        }
-
-        time_t get_last_access() const { return last_access; }
-
-        bool Close(bool may_mmap = true)
-        {
-            if(fd >= 0)
-            {
-                if(may_mmap)
-                    EnsureProperlyMapped();
-                close(fd);
-                return fd = -1;
-            }
-            return false;
-        }
-
-    private:
-        void RemapFd(int fd) { mmapped.SetMap(fd, 0, filesize); }
-
-        void EnsureOpenFor(bool writing, bool create_if_absent = false);
-
-        bool EnsureProperlyMapped();
-
-    public:
-        typedef uint_fast32_t undo_t;
-        undo_t create_backup() const
-        {
-            fblock_storage& t = const_cast<fblock_storage&> (*this);
-            return t.size();
-        }
-        void restore_backup(undo_t b)
-        {
-            if(!is_compressed)
-            {
-                /* should be rather simple */
-                Unmap();
-                ::truncate(getfn().c_str(), filesize = b);
-                return;
-            }
-            std::vector<unsigned char> data = get_raw();
-            data.erase(data.begin() + b, data.end());
-            put_raw(data);
-        }
-    };
-}
+class mkcromfs_fblockset;
 
 class mkcromfs_fblock
 {
-private:
-    mutable fblock_private::fblock_storage storage;
-    mutable MutexType lock;
-
 public:
-    mkcromfs_fblock()            : storage()       , lock() { }
-    mkcromfs_fblock(int disk_id) : storage(disk_id), lock() { }
+    explicit mkcromfs_fblock(int id);
+    ~mkcromfs_fblock();
 
-    mkcromfs_fblock(const mkcromfs_fblock& b) : storage(b.storage), lock() { }
-    mkcromfs_fblock& operator=(const mkcromfs_fblock& b) { storage = b.storage; return *this; }
+    MutexType& GetMutex() const { return lock; }
+    size_t size() const { Decompress(); return filesize; }
 
-    void EnsureMMapped() const { storage.EnsureMMapped(); }
+    void EnsureMMapped() const; // For efficient InitDataReadBuffer access
+    void EnsureMMapped();
 
-    bool is_uncompressed() const { return storage.is_uncompressed(); }
-    uint_fast64_t getfilesize() const { return storage.getfilesize(); }
-
-    void Unmap() { storage.Unmap(); }
-    void Remap() { storage.Remap(); }
-    void Delete() { storage.Delete(); }
-    bool Close()  { return storage.Close(); }
-
-    MutexType& GetMutex() const { return lock; } // For use with ScopedLocks.
-
-    const std::vector<unsigned char> get_raw() const { return storage.get_raw(); }
-    const std::vector<unsigned char> get_compressed() const { return storage.get_compressed(); }
-    void put_raw(const std::vector<unsigned char>& raw)
-        { storage.put_raw(raw); }
-    void put_compressed(const std::vector<unsigned char>& compressed)
-        { storage.put_compressed(compressed); }
-    void put_appended_raw(const AppendInfo& append, const BoyerMooreNeedle& data)
-        { storage.put_appended_raw(append, data); }
-    void get(std::vector<unsigned char>& raw,
-             std::vector<unsigned char>& compressed) const
-        { storage.get(raw, compressed); }
-
-    void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size) const
-        { storage.InitDataReadBuffer(Buffer,size); }
     void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size,
                             uint_fast32_t req_offset,
-                            uint_fast32_t req_size) const
-        { storage.InitDataReadBuffer(Buffer,size,req_offset,req_size); }
+                            uint_fast32_t req_size) const;
+    void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size,
+                            uint_fast32_t req_offset,
+                            uint_fast32_t req_size);
 
-    time_t get_last_access() const { return storage.get_last_access(); }
+    void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size) const
+        { InitDataReadBuffer(Buffer, size, 0, ~(uint_fast32_t)0); }
 
-    typedef fblock_private::fblock_storage::undo_t undo_t;
-    undo_t create_backup() const { return storage.create_backup(); }
-    void restore_backup(undo_t b) { storage.restore_backup(b); }
+    void put_appended_raw(const AppendInfo& append,
+                          const unsigned char* data,
+                          size_t               length);
 
-    size_t size() const { return storage.size(); }
+    void put_compressed(const std::vector<unsigned char>& data);
+    std::vector<unsigned char> get_compressed();
+
+    void Delete();
+
+    uint_fast32_t getfilesize() const { return filesize; }
+    bool          is_uncompressed() const { return !is_compressed; }
+
+private:
+    std::string getfn() const;
+    void Decompress() const
+        { (const_cast<mkcromfs_fblock*> (this))->Decompress(); }
+    void Decompress();
+    void EnsureOpen();
+
+protected:
+    friend class mkcromfs_fblockset;
+    bool Close();
+    void Compress();
+    void Unmap();
+
+private:
+    mkcromfs_fblock(const mkcromfs_fblock&);
+    void operator=(const mkcromfs_fblock&);
+private:
+    mutable MutexType lock;
+
+    int                  fblock_disk_id;
+    uint_fast32_t        filesize; // either compressed or raw size
+    MemMappingType<true> mapped;
+    int                  fd;
+    bool                 is_compressed;
 };
 
 /* This is the actual front end for fblocks in mkcromfs.
@@ -262,54 +87,35 @@ public:
 class mkcromfs_fblockset
 {
 public:
-    mkcromfs_fblockset(): index(), fblocks() { }
+    mkcromfs_fblockset();
     ~mkcromfs_fblockset();
 
-    inline size_t size() const { return fblocks.size(); }
+    size_t size() const { return fblocks.size(); }
 
-    const mkcromfs_fblock& operator[] (size_t index) const
-        { return fblocks[index]; }
-
+    const mkcromfs_fblock& operator[] (size_t index) const { return *fblocks[index].ptr; }
     mkcromfs_fblock& operator[] (size_t index);
 
-public:
-    int FindFblockThatHasAtleastNbytesSpace(size_t howmuch) const
-        { return index.FindAtleastNbytesSpace(howmuch); }
-    void UpdateFreeSpaceIndex(cromfs_fblocknum_t fnum, size_t howmuch)
-        { index.Update(fnum, howmuch); }
-
-private:
-    struct index_type
-    {
-        typedef std::multimap<size_t/*room*/, cromfs_fblocknum_t> room_index_t;
-        room_index_t room_index;
-        typedef std::map<cromfs_fblocknum_t, room_index_t::iterator> block_index_t;
-        block_index_t block_index;
-
-        int FindAtleastNbytesSpace(size_t howmuch) const;
-        void Update(cromfs_fblocknum_t index, size_t howmuch);
-
-        index_type(): room_index(), block_index() { }
-    } index;
-
-public:
-    struct undo_t
-    {
-        size_t n_fblocks;
-        std::vector<mkcromfs_fblock::undo_t> fblock_state;
-        index_type fblock_index;
-
-        undo_t() : n_fblocks(),fblock_state(),fblock_index() { } // -Weffc++
-    };
-
-    undo_t create_backup() const;
-    void restore_backup(const undo_t& e);
+    int FindFblockThatHasAtleastNbytesSpace(size_t howmuch) const;
+    void UpdateFreeSpaceIndex(cromfs_fblocknum_t fnum, size_t howmuch);
 
     void FreeSomeResources();
+
+protected:
+    friend class mkcromfs_fblock;
     bool CloseSome();
 
 private:
-    std::vector<mkcromfs_fblock> fblocks;
+    mkcromfs_fblockset(const mkcromfs_fblockset&);
+    void operator=(const mkcromfs_fblockset&);
+public:
+    struct fblock_rec
+    {
+        mkcromfs_fblock* ptr;
+        time_t           last_access;
+        size_t           space;
+    };
+private:
+    std::vector<fblock_rec> fblocks;
 };
 
 extern void set_fblock_name_pattern(const std::string& pat);
