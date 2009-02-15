@@ -77,9 +77,6 @@ ARCHFILES=\
 	lib/rangeset.hh lib/rangeset.tcc \
 	lib/rangemultimap.hh lib/rangemultimap.tcc \
 	\
-	lib/lzoconf.h lib/lzodefs.h \
-	lib/minilzo.c lib/minilzo.h \
-	\
 	lib/cromfs-hashmap_lzo.hh \
 	lib/cromfs-hashmap_lzo.cc \
 	lib/cromfs-hashmap_sparsefile.hh \
@@ -99,6 +96,20 @@ ARCHFILES=\
 	lib/google/sparsehash/sparsehashtable.h \
 	lib/google/sparsetable \
 	lib/google/type_traits.h \
+	\
+	lib/lzo/config1x.h \
+	lib/lzo/lzo1_d.ch \
+	lib/lzo/lzo1x_1o.c \
+	lib/lzo/lzo1x_c.ch \
+	lib/lzo/lzo1x_d1.c \
+	lib/lzo/lzo1x_d.ch \
+	lib/lzo/lzo1x.h \
+	lib/lzo/lzo_conf.h \
+	lib/lzo/lzoconf.h \
+	lib/lzo/lzodefs.h \
+	lib/lzo/lzo_dict.h \
+	lib/lzo/lzo_ptr.h \
+	lib/lzo/miniacc.h \
 	\
 	lib/lzma/C/LzmaDec.c \
 	lib/lzma/C/LzmaDec.h \
@@ -120,7 +131,7 @@ ARCHFILES=\
 	tests/a/dir2/util.hh \
 	tests/a/sparse.bin \
 	tests/test-boyermoore.cc \
-	tests/test-hashmaps.cc
+	tests/test-hashmaps.cc \
 	\
 	doc/examples/pack_rom_images/README \
 	doc/examples/pack_rom_images/make-spc-set-dir.sh \
