@@ -51,6 +51,12 @@ mkcromfs_fblock& mkcromfs_fblockset::operator[] (size_t index)
     return *fblocks[index].ptr;
 }
 
+const mkcromfs_fblock& mkcromfs_fblockset::operator[] (size_t index) const
+{
+    (const_cast<fblock_rec&> (fblocks[index])).last_access = std::time(0);
+    return *fblocks[index].ptr;
+}
+
 int mkcromfs_fblockset::FindFblockThatHasAtleastNbytesSpace(size_t howmuch) const
 {
     bool first = true; size_t tightest = 0;

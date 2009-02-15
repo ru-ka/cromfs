@@ -92,7 +92,7 @@ public:
 
     size_t size() const { return fblocks.size(); }
 
-    const mkcromfs_fblock& operator[] (size_t index) const { return *fblocks[index].ptr; }
+    const mkcromfs_fblock& operator[] (size_t index) const;
     mkcromfs_fblock& operator[] (size_t index);
 
     int FindFblockThatHasAtleastNbytesSpace(size_t howmuch) const;
