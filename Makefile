@@ -49,11 +49,8 @@ ARCHFILES=\
 	lib/threadworkengine.hh lib/threadworkengine.tcc \
 	lib/duffsdevice.hh \
 	lib/stringsearchutil.hh \
-	lib/simplevec.hh \
-	lib/staticallocator.hh \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
-	lib/bucketcontainer.hh \
 	lib/datacache.hh \
 	lib/mmapping.hh \
 	lib/fadvise.cc lib/fadvise.hh \
