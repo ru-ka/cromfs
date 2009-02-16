@@ -200,7 +200,7 @@ util/unmkcromfs: FORCE
 util/cvcromfs: FORCE
 	make -C util cvcromfs
 
-clean:
+clean: FORCE
 	rm -rf $(OBJS) $(PROGS) install *.pchi
 	rm -f cromfs-driver-static.??? configure.log
 	make -C util clean
@@ -216,6 +216,10 @@ install: $(PROGS) FORCE
 
 test: FORCE
 	cd tests && ./run.sh
+
+CTAGS=ctags --extra=+q
+tags: FORCE
+	(cd doc; $(CTAGS) ../{,util,lib{,/*,/lzma/*}}/{autoptr,*.{c,h,cc,hh,tcc,ch}})
 
 .libdepend: lib/.depend
 	perl -pe 's@([-+a-zA-Z0-9._/]+)@lib/$$1@g' < "$<" > "$@"

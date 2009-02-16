@@ -19,7 +19,12 @@ CPPFLAGS += -I.. -I../lib -I../lib/lzo
 #CPPFLAGS += -DCOMPRESS_MF_MT
 #CPPFLAGS += -DCOMPRESS_MT
 
+tags: FORCE
+	make -C .. tags
+
 include depfun.mak
 
-clean:
+clean: FORCE
 	find -type d | while read d;do rm -f  "$$d"/*.pchi "$$d"/*.o;done
+
+FORCE: ;

@@ -1,0 +1,82 @@
+Cromfs program structures -- a map to the source code
+
+cromfs - Copyright (C) 1992,2007 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL3
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+--------------------------------
+
+cromfs-driver (fuse) architecture:
+
+	fuse-main.c
+		Fuse dispatcher
+	fuse-ops.cc
+		The medium-level primitives used by fuse-main.c
+	cromfs.cc
+		The low-level cromfs functions used by fuse-ops.cc
+
+mkcromfs architecture:
+
+	util/mkcromfs.cc
+		The main program
+		Scans the paths
+		Creates the inodes
+		Assigns the blockifying tasks
+		Writes the filesystem
+	lib/cromfs-blockifier.cc
+		The blockifier
+		Entry points: ScheduleBlockify() and FlushBlockifyRequests()
+		FlushBlockifyRequests() does most of the work.
+		First step: Finds identical blocks (so they can be assigned
+		the same block number).	
+			Optional.
+			Possibly divided into two steps:
+				First, hash all blocks and figure out which
+				hashes occur more than once.
+				Secondly, for all those hashes that occurred
+				more than once, find out which blocks are
+				actually identical.
+		Second step:
+			Create fblocks -- blobs of binary data that minimally
+			contain all the blocks of each schedule item.
+			Three types of matches are recognized:
+				1. Identical block: This is simply a repeat of
+				   a block number. The "find identical blocks"
+				   step is mandatory for this to happen.
+				2. Autoindex match: This is a search on an index
+				   which tells where, in the fblocks, prehashed
+				   data can be found.
+				3. Fblock placement. Candidate fblocks are selected,
+				   and searched for a match on this block. Three
+				   possible outcomes are possible:
+				     A. Data identical to the block was found in
+				        an existing fblock. This is a "full overlap".
+				     B. The end of a fblock matched with the beginning
+				        of the block. This is a "partial overlap".
+				     C. No match was found. The block will be appended
+				        to a selected fblock, or to a new fblock.
+	lib/cromfs-blockindex.hh
+		The block index (used by the blockifier)
+		Block indexing is the most performance critical part of mkcromfs,
+		and it is expected to change in almost all releases. This contains
+		an API for indexing blocks and for finding matches from the index.
+
+unmkcromfs architecture:
+	
+	util/unmkcromfs.cc
+		The main program
+		Creates a cromfs filesystem driver
+		Reads the filesystem contents using the low-level cromfs functions
+	cromfs.cc
+		The low-level cromfs functions used by util/unmkcromfs.cc
+
+
+cvcromfs architecture:
+
+	util/cvcromfs.cc
+		The main program
+		Reads and writes cromfs images using very coarse level of control.
+		It does not know much about the cromfs image format; just about
+		which data sections are compressed and how they are denoted.
+		Does all work pretty much by itself, save for utility functions
+		such as LZMA compression lib/lzma.hh, file access
+		in lib/longfileread.hh and lib/longfilewrite.hh, and so on.

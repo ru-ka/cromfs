@@ -77,13 +77,17 @@ cvcromfs: $(OBJS_CV)
 lzmatest: lzmatest.o $(OBJS_LZMA)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
+tags: FORCE
+	make -C .. tags
 .libdepend: ../lib/.depend
 	perl -pe 's@([-+a-zA-Z0-9._/]+)@../lib/$$1@g' < "$<" > "$@"
-../lib/.depend:
+../lib/.depend: FORCE
 	make -C ../lib depend
 include depfun.mak
 include .libdepend
 
-clean:
+clean: FORCE
 	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV) *.pchi
 	rm -f mkcromfs unmkcromfs cvcromfs
+
+FORCE: ;
