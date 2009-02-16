@@ -23,7 +23,7 @@ public:
     void erase(const Key& lo, const Key& up);
 
     /* Erase a single value */
-    void erase(const Key& lo) { data.erase(lo, lo+1); }
+    void erase(const Key& value) { data.erase(value); }
 
     /* Modify the given range to have the given value */
     void set(const Key& lo, const Key& up, const Value& v)
