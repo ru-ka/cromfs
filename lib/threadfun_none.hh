@@ -27,6 +27,12 @@ public:
  */
 struct InterruptibleContext
 {
+    /* Declaring inline dummy constructor and destructor
+     * suppresses warnings about unused variable when
+     * InterruptibleContext is instantiated
+     */
+    inline InterruptibleContext() { }
+    inline ~InterruptibleContext() { }
     inline void Disable() { }
     inline void Enable() { }
 };
