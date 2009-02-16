@@ -219,7 +219,7 @@ test: FORCE
 
 CTAGS=ctags --extra=+q
 tags: FORCE
-	(cd doc; $(CTAGS) ../{,util,lib{,/*,/lzma/*}}/{autoptr,*.{c,h,cc,hh,tcc,ch}})
+	(cd doc; $(CTAGS) ..{,/util,/lib{,/*,/lzma/*}}/{autoptr,*.{c,h,cc,hh,tcc,ch}})
 
 .libdepend: lib/.depend
 	perl -pe 's@([-+a-zA-Z0-9._/]+)@lib/$$1@g' < "$<" > "$@"

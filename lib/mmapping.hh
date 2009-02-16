@@ -10,6 +10,8 @@ namespace {
 static void* notmapped = (void*)-1;
 }
 
+enum { MMAP_PAGESIZE = 4096 };
+
 template<bool AutoUnmap = true>
 class MemMappingType
 {
@@ -32,7 +34,7 @@ public:
     {
         Unmap();
 
-        uint_fast64_t pos_aligned_down = pos & ~UINT64_C(4095);
+        uint_fast64_t pos_aligned_down = pos & ~UINT64_C(MMAP_PAGESIZE-1);
 
         align_factor = pos - pos_aligned_down;
 
@@ -44,7 +46,7 @@ public:
 
     void ReMapIfNecessary(int fd, uint_fast64_t pos, uint_fast64_t length)
     {
-        uint_fast64_t pos_aligned_down = pos & ~UINT64_C(4095);
+        uint_fast64_t pos_aligned_down = pos & ~UINT64_C(MMAP_PAGESIZE-1);
         size_t new_align_factor = pos - pos_aligned_down;
         size_t new_size         = length + align_factor;
 
