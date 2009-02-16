@@ -792,7 +792,11 @@ template<typename schedule_item, size_t max_open>
 class schedule_cache
 {
     std::vector<schedule_item>& schedule;
-    std::list<size_t, FSBAllocator<size_t> > open_list;
+    typedef
+        std::list<size_t,
+            FSBAllocator<size_t>
+                 > open_list_t;
+    open_list_t open_list;
     size_t n_open;
     MutexType lock;
 public:
@@ -805,18 +809,20 @@ public:
     }
     ~schedule_cache()
     {
-        for(std::list<size_t>::const_iterator
+        for(open_list_t::const_iterator
             i = open_list.begin(); i != open_list.end(); ++i)
                 schedule[*i].GetDataSource()->close();
     }
 
-    schedule_item& Get(size_t pos)
+    schedule_item& Get(size_t pos, bool do_open=true)
     {
+        if(!do_open) return schedule[pos];
+
         ScopedLock lck(lock);
 
         //printf("Get(%lu): %lu are open\n", (unsigned long)pos, (unsigned long)n_open);
 
-        for(std::list<size_t>::iterator
+        for(open_list_t::iterator
             i = open_list.begin(); i != open_list.end(); ++i)
         {
             if(*i == pos)
@@ -863,7 +869,8 @@ class BlockWhereList
 public:
     template<typename schedlist>
     typename schedlist::sched_item_t*
-        Find(schedlist& sched, uint_fast32_t want_blockno, uint_fast64_t& filepos)
+        Find(schedlist& sched, uint_fast32_t want_blockno, uint_fast64_t& filepos,
+             bool do_open = true)
     {
         typedef std::vector<uint_least32_t>::const_iterator it;
         it i = std::lower_bound(block_list.begin(), block_list.end(), want_blockno);
@@ -871,13 +878,13 @@ public:
         {
             size_t schedno = i - block_list.begin();
             filepos = 0;
-            return &sched.Get(schedno);
+            return &sched.Get(schedno, do_open);
         }
         assert(i != block_list.begin());
         --i;
         size_t schedno = i - block_list.begin();
         uint_fast32_t begin_blockno = *i;
-        typename schedlist::sched_item_t* s = &sched.Get(schedno);
+        typename schedlist::sched_item_t* s = &sched.Get(schedno, do_open);
         uint_fast64_t blocksize = s->GetBlockSize();
         filepos = (want_blockno - begin_blockno) * blocksize;
         return s;
@@ -1392,7 +1399,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
     if(true)
     {
-        schedule_cache<schedule_item, 10> schedule_cache(schedule);
+        schedule_cache<schedule_item, 1> schedule_cache(schedule);
         static const char label[] = "Blockifying";
 
         std::printf("Beginning task for %s: %s\n", purpose, label);
@@ -1464,9 +1471,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
                     // Find the schedule item
                     uint_fast64_t filepos;
-                    schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
+                    schedule_item* s2 = where_list.Find(schedule_cache, other, filepos, false);
 
-                    datasource_t* source2  = s2->GetDataSource();
+                    datasource_t* source2  = s2->GetDataSource(); // Note: not necessarily open
                     unsigned char* target2 = s2->GetBlockTarget();
                     uint_fast64_t blocksize2 = s2->GetBlockSize();
         #ifndef NDEBUG
