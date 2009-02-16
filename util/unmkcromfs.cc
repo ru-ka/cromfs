@@ -6,9 +6,6 @@
 #include "lib/util.hh"
 #include "lib/threadfun.hh"
 
-#if HASH_MAP
-# include "hash.hh"
-#endif
 #ifdef _OPENMP
 # include <omp.h>
 #endif
@@ -388,12 +385,7 @@ public:
         std::printf(" <matches>\n");
         std::fflush(stdout);
 
-
-#if HASH_MAP
-        typedef hash_set<cromfs_inodenum_t> handled_inodes_t;
-#else
         typedef std::set<cromfs_inodenum_t> handled_inodes_t;
-#endif
 
         /* Create a map of which inodes cover what sections of the filesystem */
         rangemultimap<cromfs_block_index, cromfs_inodenum_t, FSBAllocator<int> > range_map;

@@ -192,15 +192,6 @@ EOF
 fi
 
 
-do_echo -n "Checking if your compiler supports hash_map... "
-if cc_check '"lib/hash.hh"' '-DHASH_MAP=1' 'hash_map<long,int>x; hash_set<long>y;'; then
-  do_echo Yes
-  CPPFLAGS="$CPPFLAGS -DHASH_MAP=1"
-else
-  do_echo No
-  CPPFLAGS="$CPPFLAGS -DHASH_MAP=0"
-fi
-
 do_echo -n "Checking for fuse (dynamic)... "
 fusetry="`pkg-config --cflags --libs fuse`"
 if cc_check '<fuse_lowlevel.h>' "-DFUSE_USE_VERSION=25 $fusetry" ''; then

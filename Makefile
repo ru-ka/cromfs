@@ -40,7 +40,6 @@ ARCHFILES=\
 	lib/cromfs-blockifier.cc lib/cromfs-blockifier.hh \
 	\
 	lib/endian.hh \
-	lib/hash.hh \
 	lib/simd.hh \
 	lib/threadfun.hh \
 	lib/threadfun_none.hh \
