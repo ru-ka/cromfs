@@ -1,11 +1,30 @@
 Cromfs changelog
 
-cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-1.5.7.1 <wip>
-- Added possibility to disable AutoIndex alltogether, cutting RAM usage.
+1.5.8 <wip>
+- Added possibility to disable AutoIndex alltogether, cutting memory usage
+- After a lot of experimentation, added options for cutting down
+  the memory usage of the block index in mkcromfs significantly.
+  See below.
+- New mkcromfs option: --blockindexmethod
+- Fixed a bug that cause vsnprintf not to be used even if it existed
+- More optimized LZO compression for the blockindex 
+- Added some more documentation in doc/
+- Removed some unused source code files
+- Rewrote the fblock index from scratch, hopefully resulting in slightly
+  more optimal refactored code
+- Detected a memory leak problem in ICC's implementation of OpenMP tasks...
+  As a result, now not using OpenMP tasks anymore
+- Fixed another memory leak problem in mkcromfs
+- Improved mkcromfs performance by refactoring some LZMA access code
+- Improved the speed of the hashing algorithm by some 30%
+- Added some sanity checks in unmkcromfs
+- Deprecated mkcromfs option: --blockifybufferlength
+- Deprecated mkcromfs option: --blockifybufferincrement
+- Deprecated mkcromfs option: --blockifyoptimizemethod
 
 1.5.7 2009-02-01 Joel Yliluoma <bisqwit@iki.fi>
 - Added support for OpenMP 3.0 based task constructs
