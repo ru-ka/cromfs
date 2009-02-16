@@ -1,5 +1,5 @@
 The contents of this directory are extracted from
-the official LZMA SDK, version lzma463.tar.bz2 ,
+the official LZMA SDK, version lzma465.tar.bz2 ,
 for the use in mkcromfs.
 
 However, cromfs does not include all files from that

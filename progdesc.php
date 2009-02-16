@@ -880,9 +880,7 @@ and is distributed under the terms of the
 <a href=\"http://www.gnu.org/licenses/gpl-3.0.html\">General Public License</a>
 version 3 (GPL3).
  <br/>
-The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
-The SparseTable code from Google embedded within is licensed under
-conditions specified therein.
+The LZMA code from the LZMA SDK is in public domain.
  <br/>
 The LZO code from liblzo2.03 embedded within is licensed
 under GPL version 2 or later.

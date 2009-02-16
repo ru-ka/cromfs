@@ -25,6 +25,8 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 - Deprecated mkcromfs option: --blockifybufferlength
 - Deprecated mkcromfs option: --blockifybufferincrement
 - Deprecated mkcromfs option: --blockifyoptimizemethod
+- Updated LZMA to version 4.65. It includes a minor
+  thread-related fix in LZMA encoder that has no practical consequence.
 
 1.5.7 2009-02-01 Joel Yliluoma <bisqwit@iki.fi>
 - Added support for OpenMP 3.0 based task constructs
