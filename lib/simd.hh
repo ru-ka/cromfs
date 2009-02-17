@@ -1,4 +1,4 @@
-#if defined(__MMX__) && !defined(__x86_64)
+#if defined(__MMX__) && !(defined(__x86_64) || defined(_M_X64))
 #define USE_MMX
 #endif
 #if defined(__SSE__)
@@ -53,8 +53,9 @@ struct c64_common
 struct c64_MMX: public c64_common
 {
     typedef c64_MMX c64;
+    typedef __m64 valuetype;
 
-    __m64 value;
+    valuetype value;
 
     inline c64_MMX() : value() { }
     inline c64_MMX(__m64 v) : value(v) { }
@@ -67,6 +68,13 @@ struct c64_MMX: public c64_common
     inline c64 operator>> (int b) const { if(b < 0) return *this << -b; return shr64(b); }
     c64& operator<<= (int n) { return *this = shl64(n); }
     c64& operator>>= (int n) { return *this = shr64(n); }
+
+    operator bool() const
+    {
+        union m64union { struct { uint_least32_t a, b; }; __m64 c; };
+        const m64union& tmp = (const m64union&) value;
+        return !(tmp.a ^ tmp.b);
+    } // TODO: verify
 
     c64 conv_s16_u8() const { return conv_s16_u8(*this); }
     c64 conv_s16_s8() const { return conv_s16_s8(*this); }
@@ -180,8 +188,8 @@ struct c64_MMX: public c64_common
 struct c64_nonMMX: public c64_common
 {
     typedef c64_nonMMX c64;
-
-    uint_least64_t value;
+    typedef uint_least64_t valuetype;
+    valuetype value;
 
     inline c64_nonMMX() : value() { }
     inline c64_nonMMX(uint64_t v) : value(v) { }
@@ -193,6 +201,8 @@ struct c64_nonMMX: public c64_common
     c64 operator>> (int b) const { if(b < 0) return *this << -b; return shr64(b); }
     c64& operator<<= (int n) { return *this = shl64(n); }
     c64& operator>>= (int n) { return *this = shr64(n); }
+
+    operator bool() const { return value; }
 
     c64 conv_s16_u8() const { return conv_s16_u8(*this); }
     c64 conv_s16_s8() const { return conv_s16_s8(*this); }

@@ -52,7 +52,7 @@
  */
 
 template<typename T>
-static inline T rol(T v, int n) { return (v<<n) | (v>>( sizeof(T)*8 - n)); }
+static inline T rol(T v, int n) { return (v<<n) | (v>>int( sizeof(T)*8 - n)); }
 
 /* The mixing step */
 #define mix32z(a,b,c)  \
@@ -263,7 +263,7 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     c64 c_cast = (uint_fast64_t)c; {
     unsigned long len = size;
     c64 a(UINT64_C(0x9e3779b97f4a7c13)); // 2^64 / ((1+sqrt(5))/2)
-    a += c_cast + size;
+    a += c_cast + c64(size);
     c64 b(a), c(a);
     while(len >= 8*3)
     {
