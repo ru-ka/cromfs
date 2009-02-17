@@ -10,7 +10,7 @@ To run, you need:
 	bc
 	lsof
 	pidof (from sysvinit-utils)
-	watch
+	watch (from procps)
 	
 	Issue the command: watch -n3 ./watch_keep ./run-lsof.sh
 	The -n parameter describes the update interval. If your

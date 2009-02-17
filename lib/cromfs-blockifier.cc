@@ -1432,7 +1432,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     }
 
                     schedule_cache.can_close = true;
-                    schedule_item& s2 = schedule_cache.Get(a); // ensure it's not unloaded
+                    schedule_cache.Get(a); // ensure it's not unloaded
                 } // check hash contents
 
                 /*
@@ -1538,6 +1538,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 {
                     ++identical_list_pos;
                 }
+
+                schedule_cache.can_close = false;
+
                 if(identical_list_pos < identical_list.size()
                 && identical_list[identical_list_pos].first == blocks_done)
                 {
@@ -1547,14 +1550,15 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
                     // Find the schedule item
                     uint_fast64_t filepos;
-                    schedule_item* s2 = where_list.Find(schedule_cache, other, filepos, false);
+                    schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
 
-                    datasource_t* source2  = s2->GetDataSource(); // Note: not necessarily open
+                    datasource_t* source2  = s2->GetDataSource();
                     unsigned char* target2 = s2->GetBlockTarget();
                     uint_fast64_t blocksize2 = s2->GetBlockSize();
         #ifndef NDEBUG
                     VerifyInodeIntact(target2, source2->size(), blocksize2, source2->getname());
         #endif
+
                     // Find the blocknumber
                     uint_fast64_t blockindex2 = filepos / blocksize2;
                     uint_fast64_t blocknum = Rn(target2 + blockindex2 * BLOCKNUM_SIZE_BYTES(), BLOCKNUM_SIZE_BYTES());
@@ -1569,6 +1573,15 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     assertflush();
                 #endif
 
+                    DataReadBuffer buf2;
+                    source2->read(buf2, eat, filepos);
+                    if(std::memcmp(buf.Buffer, buf2.Buffer, eat) != 0)
+                    {
+                        std::fprintf(stderr, "Invalid reuse indication %lu = %lu\n",
+                            (unsigned long) blocks_done,
+                            (unsigned long) other);
+                        goto dontreuse;
+                    }
                     if(DisplayBlockSelections)
                     {
                         const cromfs_block_internal& block = blocks[blocknum];
@@ -1585,6 +1598,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 }
                 else
                 {
+                dontreuse:
                     source->read(buf, eat, offset);
                     // Decide the placement within fblocks.
                     // PLAN: 1. Find from autoindex...
@@ -1614,6 +1628,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 target += BLOCKNUM_SIZE_BYTES(); // where block number will be written to.
                 total_done += eat;
                 ++blocks_done;
+
+                schedule_cache.can_close = true;
+                schedule_cache.Get(a); // ensure it's not unloaded
             }
 
             identical_list.DoneWithUntil(identical_list_pos);
