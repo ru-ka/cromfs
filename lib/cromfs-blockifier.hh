@@ -19,7 +19,7 @@ class cromfs_blockifier
 {
 public:
     cromfs_blockifier()
-        : schedule(), blocks(), fblocks(),
+        : schedule(), blocks(), fblocks(), fblock_totalsize(0),
           last_autoindex_length(), autoindex()
     {
         /* Set up the global pointer to our block_index
@@ -124,6 +124,7 @@ private:
         uint_fast32_t startoffs,
         uint_fast32_t blocksize);
 
+    void SpecialAutoIndex(cromfs_fblocknum_t fblocknum);
 
     cromfs_blocknum_t CreateNewBlock(const cromfs_block_internal& block)
     {
@@ -210,6 +211,7 @@ public:
 
     // The fblocks written into filesystem. Indexed by data locators.
     mkcromfs_fblockset fblocks;
+    uint_fast64_t fblock_totalsize;
 
     /* For each bsize differently. */
     std::map<cromfs_fblocknum_t,

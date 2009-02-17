@@ -27,7 +27,6 @@
 #include <functional>
 #include <stdexcept>
 #include <list>
-#include <set>
 
 ///////////////////////////////////////////////
 
@@ -358,22 +357,6 @@ const cromfs_blockifier::WritePlan cromfs_blockifier::CreateWritePlan(
     const BoyerMooreNeedleWithAppend& data, newhash_t crc,
     overlaptest_history_t& minimum_tested_positions) const
 {
-#if 0
-  {
-    int i = fblocks.FindFblockThatHasAtleastNbytesSpace(data.size());
-    if(i >= 0)
-    {
-        AppendInfo appended;
-        appended.SetAppendPos(fblocks[i].size(), data.size());
-        return WritePlan(i, appended, data, crc);
-    }
-    /* Our plan is then, create a new fblock just for this block! */
-    AppendInfo appended;
-    appended.SetAppendPos(0, data.size());
-    return WritePlan(fblocks.size(), appended, data, crc);
-  }
-#endif
-
     /* First check if we can write into an existing fblock. */
     if(true)
     {
@@ -529,6 +512,9 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
     const cromfs_fblocknum_t fblocknum = plan.fblocknum;
     const AppendInfo& appended         = plan.appended;
 
+    if(fblocknum >= fblocks.size() && fblocknum > 0)
+        SpecialAutoIndex(fblocknum-1);
+
     /*
         DoUpdateBlockIndex may be "false" when called
         by EvaluateBlockifyOrders() to figure out
@@ -601,6 +587,7 @@ cromfs_blocknum_t cromfs_blockifier::Execute(
 #endif
 
     fblock.put_appended_raw(appended, &plan.data[0], plan.data.size());
+    fblock_totalsize += new_raw_size - old_raw_size;
 
 /**/
 #if 1
@@ -707,6 +694,116 @@ void cromfs_blockifier::AutoIndexBetween(const cromfs_fblocknum_t fblocknum,
     }
 }
 
+void cromfs_blockifier::SpecialAutoIndex(const cromfs_fblocknum_t fblocknum)
+{
+    /* Put here any special autoindex rules you want to use.
+     *
+     * If your files are very block-based by their type, and
+     * you know that a certain kind of a block begins a file,
+     * you can use these conditions to automatically index
+     * files of that type even if they're missed by normal
+     * identical block detection.
+     */
+
+    const mkcromfs_fblock& fblock = fblocks[fblocknum];
+
+#if 1 /* NES indexing */
+    {
+        static const unsigned char NES_SIG[4] = {'N','E','S',0x1A};
+        static const BoyerMooreNeedle nes_needle(NES_SIG, 4);
+        long bsize = CalcBSIZEfor("x.nes");
+        /* Search for NES headers */
+
+        #define IsNEShdr(ptr) \
+            ((ptr)[4] < 0x10 && (ptr)[9] == 0x00 && (ptr)[10] == 0x00)
+
+        DataReadBuffer Buffer; uint_fast32_t BufSize;
+        fblock.InitDataReadBuffer(Buffer, BufSize, 0, fblock.size());
+        const unsigned char* data = Buffer.Buffer;
+
+        std::vector<size_t> found_list;
+        for(size_t searchpos=0; ; )
+        {
+            size_t nespos = searchpos+nes_needle.SearchInTurbo(data+searchpos, BufSize-searchpos);
+            if(nespos >= BufSize) break;
+            if(IsNEShdr(data+nespos)) found_list.push_back(nespos);
+            searchpos = nespos+4;
+        }
+        #undef IsNEShdr
+        if(!found_list.empty())
+        {
+            found_list.push_back(BufSize);
+            for(size_t a=0; a+1 < found_list.size(); ++a)
+            {
+                AutoIndexBetween(fblocknum,
+                    data+found_list[a], found_list[a],
+                    found_list[a+1],
+                    bsize,
+                    bsize);
+            }
+        }
+    }
+#endif
+
+#if 1 /* GameBoy indexing */
+    {
+        static const unsigned char GB_SIG[4] = {0xCE,0xED,0x66,0x66};
+        static const BoyerMooreNeedle gb_needle(GB_SIG, 4);
+        long bsize = CalcBSIZEfor("x.gb");
+        /* Search for Game Boy headers */
+
+        #define isnamech(c) (((c) >= 'A' && (c) <= 'Z') || ((c) >= '0' && (c) <= '9'))
+        #define isnamech_n(c) (isnamech((c)) || (c) == 0)
+
+        #define IsGBhdr(ptr) \
+         (  isnamech( (ptr)[0x134] ) \
+         && isnamech( (ptr)[0x135] ) \
+         && isnamech( (ptr)[0x136] ) \
+         && isnamech( (ptr)[0x137] ) \
+         && isnamech_n( (ptr)[0x138] ) \
+         && isnamech_n( (ptr)[0x139] ) \
+         && isnamech_n( (ptr)[0x13A] ) \
+         && isnamech_n( (ptr)[0x13B] ) \
+         && isnamech_n( (ptr)[0x13C] ) \
+         && isnamech_n( (ptr)[0x13D] ) \
+         && isnamech_n( (ptr)[0x13E] ) )
+
+        DataReadBuffer Buffer; uint_fast32_t BufSize;
+        fblock.InitDataReadBuffer(Buffer, BufSize, 0, fblock.size());
+        const unsigned char* data = Buffer.Buffer;
+
+        std::vector<size_t> found_list;
+        for(size_t searchpos=0; ; )
+        {
+            size_t gbpos = searchpos+gb_needle.SearchInTurbo(data+searchpos, BufSize-searchpos);
+            if(gbpos >= BufSize) break;
+            if(gbpos < 0x104) { searchpos=gbpos+4; continue; }
+            gbpos -= 0x104;
+            if(gbpos + 0x1000 <= BufSize)
+            {
+                if(IsGBhdr(data+gbpos)) found_list.push_back(gbpos);
+            }
+            searchpos = gbpos+0x108;
+        }
+        #undef isnamech
+        #undef isnamech_n
+        #undef IsGBhdr
+        if(!found_list.empty())
+        {
+            found_list.push_back(BufSize);
+            for(size_t a=0; a+1 < found_list.size(); ++a)
+            {
+                AutoIndexBetween(fblocknum,
+                    data+found_list[a], found_list[a],
+                    found_list[a+1],
+                    bsize,
+                    bsize);
+            }
+        }
+    }
+#endif
+}
+
 void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
     uint_fast32_t old_raw_size,
     uint_fast32_t new_raw_size,
@@ -715,37 +812,6 @@ void cromfs_blockifier::AutoIndex(const cromfs_fblocknum_t fblocknum,
     if(!AutoIndexPeriod) return;
 
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
-
-#if 0 /* NES indexing */
-    if(bsize == 128)
-    {
-        const uint_fast32_t min_offset = old_raw_size, new_size = new_raw_size - min_offset;
-        DataReadBuffer Buffer; uint_fast32_t BufSize;
-        fblock.InitDataReadBuffer(Buffer, BufSize, min_offset, new_size);
-        const unsigned char* const new_raw_data = Buffer.Buffer;
-
-        static const unsigned char NES_SIG[4] = {'N','E','S',0x1A};
-        static const BoyerMooreNeedle nes_needle(NES_SIG, 4);
-        /* Search for NES headers */
-
-        size_t prevpos = new_size;
-        for(size_t searchpos=0; ; )
-        {
-            const size_t nespos = nes_needle.SearchIn(new_raw_data+searchpos, new_size-searchpos)+searchpos;
-            if(prevpos < new_size)
-            {
-                AutoIndexBetween(fblocknum, new_raw_data+prevpos, prevpos+min_offset, new_raw_size, bsize, bsize);
-                prevpos = new_size;
-            }
-            if(nespos+bsize > new_size) break;
-            if(new_raw_data[nespos+4] < 0x10 && new_raw_data[nespos+9] == 0x00
-            && new_raw_data[nespos+10] == 0x00)
-            {
-                prevpos = nespos;
-            }
-        }
-    }
-#endif
 
     /* Index all new checksum data */
     const int OldAutoIndexCount = std::max(CalcAutoIndexCount(old_raw_size,bsize),0);
@@ -1448,8 +1514,18 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 {
                     //if(displaylock.TryLock())
                     //{
+                        std::string autoindex_stats =
+                            " idx("+autoindex.GetStatistics()+")";
+
+                        std::string progress_stats =
+                            " rawin(" + ReportSize(total_done)
+                            +")rawout(" + ReportSize(fblock_totalsize)
+                            +")diff(" + ReportSize(total_done-fblock_totalsize)
+                            +")";
+                        std::string stats = autoindex_stats + progress_stats;
+
                         DisplayProgress(label, total_done, total_size, blocks_done, blocks_total,
-                                        (" autoindex("+autoindex.GetStatistics()+")").c_str());
+                                        stats.c_str());
                         //displaylock.Unlock();
                         last_report_pos = total_done;
                     //}
@@ -1627,6 +1703,6 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
 const std::string cromfs_blockifier::autoindex_t::GetStatistics() const
 {
     std::stringstream out;
-    out << "size=" << added << ",del=" << deleted;
+    out << "siz=" << added << ",del=" << deleted;
     return out.str();
 }
