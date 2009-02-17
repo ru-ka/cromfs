@@ -1078,7 +1078,11 @@ public:
         dontneed_cap = 0;
     }
 
-    size_t size() const { if(fd >= 0) return fsize / sizeof(identical_item); else return data.size(); }
+    size_t size() const
+    {
+        if(fd >= 0 || rd) return fsize / sizeof(identical_item);
+        else return data.size();
+    }
 
     const identical_item& operator[] (size_t index) const
     {
@@ -1191,7 +1195,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 {
                     if(displaylock.TryLock())
                     {
-                        DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+                        std::string stats = " - " + ReportSize(total_done) + " read";
+                        DisplayProgress(label, total_done, total_size, blocks_done, blocks_total,
+                            stats.c_str());
                         displaylock.Unlock();
                         last_report_pos = total_done;
                     }
@@ -1294,7 +1300,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 {
                     //if(displaylock.TryLock())
                     //{
-                        DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+                        std::string stats = " - " + ReportSize(total_done) +  " read";
+                        DisplayProgress(label, total_done, total_size, blocks_done, blocks_total,
+                            stats.c_str());
                         //displaylock.Unlock();
                         last_report_pos = total_done;
                     //}
@@ -1574,12 +1582,20 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 #endif
 
                     DataReadBuffer buf2;
+                    source->read(buf, eat, offset);
                     source2->read(buf2, eat, filepos);
                     if(std::memcmp(buf.Buffer, buf2.Buffer, eat) != 0)
                     {
-                        std::fprintf(stderr, "Invalid reuse indication %lu = %lu\n",
+                        std::fprintf(stderr,
+                            "Invalid reuse indication %lu = %lu. Not identical %u bytes:\n"
+                            "1: Position%14llu in %s\n"
+                            "2: Position%14llu in %s\n",
                             (unsigned long) blocks_done,
-                            (unsigned long) other);
+                            (unsigned long) other,
+                            (unsigned) eat,
+                            (unsigned long long) offset, source->getname().c_str(),
+                            (unsigned long long) filepos, source2->getname().c_str()
+                        );
                         goto dontreuse;
                     }
                     if(DisplayBlockSelections)
@@ -1598,8 +1614,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 }
                 else
                 {
-                dontreuse:
                     source->read(buf, eat, offset);
+                dontreuse:
                     // Decide the placement within fblocks.
                     // PLAN: 1. Find from autoindex...
                     //       2. Find from a selection of fblocks
