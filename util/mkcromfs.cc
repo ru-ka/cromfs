@@ -1636,7 +1636,7 @@ int main(int argc, char** argv)
                     "       --blockindexmethod none\n"
                     "            Blocks are not indexed. Fastest, uses least memory,\n"
                     "            but also neglects most of cromfs's power.\n"
-                    "       --blockindexmethod all  (default)\n"
+                    "       --blockindexmethod all (default)\n"
                     "            All blocks are indexed before blockifying.\n"
                     "            If your filesystem is large (millions of blocks),\n"
                     "            note that the index construction may require\n"
@@ -1646,6 +1646,13 @@ int main(int argc, char** argv)
                     "            before running the \"all\" blocks indexing\n"
                     "            in hopes of consuming less virtual memory overall.\n"
                     "            Use it if \"all\" consumes way too much virtual memory.\n"
+                    "       --blockindexmethod collect\n"
+                    "            All blocks are hashed before blockifying.\n"
+                    "            This is slower than the \"all\" option,\n"
+                    "            but requires considerably less memory.\n"
+                    "       --blockindexmethod collect2\n"
+                    "            A version of \"collect\" that uses an extra 512 MiB\n"
+                    "            of virtual memory to avoid testing unique hashes.\n"
                     "       --blockindexmethod blanks\n"
                     "            Only zero-filled blocks are indexed.\n"
                     "            This parallels the \"sparse file\" optimization\n"
@@ -1995,6 +2002,10 @@ int main(int argc, char** argv)
                     BlockHashing_Method = BlockHashing_BlanksOnly;
                 else if(!strcmp(arg, "none"))
                     BlockHashing_Method = BlockHashing_None;
+                else if(!strcmp(arg, "collect"))
+                    BlockHashing_Method = BlockHashing_Collect;
+                else if(!strcmp(arg, "collect2"))
+                    BlockHashing_Method = BlockHashing_Collect_Speedup;
                 else
                 {
                     std::fprintf(stderr, "mkcromfs: Blockindexmethod may only be none, blanks, prepass or all. You gave %s.\n", arg);

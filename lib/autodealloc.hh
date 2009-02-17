@@ -4,9 +4,9 @@
 template<typename T>
 class autodealloc_array
 {
-    T* p;
+    T* &p;
 public:
-    autodealloc_array(T*q): p(q) { }
+    autodealloc_array(T* &q): p(q) { }
     ~autodealloc_array() { delete[] p; }
 private:
     autodealloc_array(const autodealloc_array<T>&);
@@ -16,9 +16,9 @@ private:
 template<typename T>
 class autodealloc
 {
-    T* p;
+    T* &p;
 public:
-    autodealloc(T*q): p(q) { }
+    autodealloc(T*& q): p(q) { }
     ~autodealloc() { delete p; }
 private:
     autodealloc(const autodealloc<T>&);

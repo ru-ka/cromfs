@@ -34,6 +34,8 @@ enum BlockHashingMethods
     { BlockHashing_All,
       BlockHashing_All_Prepass,
       BlockHashing_BlanksOnly,
+      BlockHashing_Collect,
+      BlockHashing_Collect_Speedup,
       BlockHashing_None
     };
 extern BlockHashingMethods BlockHashing_Method;

@@ -29,7 +29,7 @@ private:
     void operator=(const CompressedHashLayer&);
 private:
     unsigned n_buckets;
-    static const unsigned n_per_bucket = 0x2000;
+    static const unsigned n_per_bucket = 0x4000;
     static const unsigned bucketsize   = n_per_bucket * sizeof(T);
 
     typedef rangeset<IndexType> hashbits_t;

@@ -24,6 +24,9 @@
 #ifdef HAS_GCC_PARALLEL_ALGORITHMS
 # include <parallel/algorithm>
 #endif
+#ifdef _OPENMP
+# include <omp.h>
+#endif
 #include <functional>
 #include <stdexcept>
 #include <list>
@@ -1134,7 +1137,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         blocks_total += CalcSizeInBlocks(size, blocksize);
     }
 
+    bitset1p32* hash_seen      = 0;
     bitset1p32* hash_duplicate = 0;
+    autodealloc<bitset1p32> hash_seen_dealloc(hash_seen);
     autodealloc<bitset1p32> hash_dupl_dealloc(hash_duplicate);
 
     identical_list identical_list;
@@ -1157,8 +1162,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         std::printf("Beginning task for %s: %s\n", purpose, label);
 
         // Precollect list of duplicate hashes
-        bitset1p32* hash_seen = new bitset1p32;
-        autodealloc<bitset1p32> hash_seen_dealloc(hash_seen);
+        hash_seen      = new bitset1p32;
         hash_duplicate = new bitset1p32;
 
         uint_fast64_t total_done  = 0;
@@ -1243,9 +1247,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
               : 0.0
                    );
 
-        //delete hash_seen;
-        //hash_seen = 0;
-        // ^autodealloc deals with this
+        delete hash_seen;
+        hash_seen = 0;
     }
 
     BlockWhereList where_list;
@@ -1267,6 +1270,20 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
              CompressedHashLayer_Sparse<newhash_t, uint_least32_t>
             > blocks_list;
         blocks_list blockhashlist;
+
+        std::vector<newhash_t> full_hash_list;
+
+        if(BlockHashing_Method == BlockHashing_Collect
+        || BlockHashing_Method == BlockHashing_Collect_Speedup)
+        {
+            full_hash_list.reserve(blocks_total);
+        }
+
+        if(BlockHashing_Method == BlockHashing_Collect_Speedup)
+        {
+            // Collect a list of duplicate hashes
+            hash_seen      = new bitset1p32;
+        }
 
         for(size_t a=0; a < schedule.size(); ++a)
         {
@@ -1322,7 +1339,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 std::printf("... hash %08X\n", (unsigned) hash);
                 */
 
-                bool do_checkhash = false;
+                enum { no, use_index, use_list } do_checkhash = no;
 
                 switch(BlockHashing_Method)
                 {
@@ -1330,118 +1347,242 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         break;
                     case BlockHashing_BlanksOnly:
                         if(!is_zero_block(buf.Buffer, eat))
-                            do_checkhash = false;
+                            do_checkhash = no;
                         else
                             hash = newhash_calc(buf.Buffer, eat);
                         break;
                     case BlockHashing_All_Prepass:
                         hash = newhash_calc(buf.Buffer, eat);
-                        do_checkhash = hash_duplicate->test(hash);
+                        do_checkhash = hash_duplicate->test(hash) ? use_index : no;
                         break;
                     case BlockHashing_All:
                         hash = newhash_calc(buf.Buffer, eat);
-                        do_checkhash = true;
+                        do_checkhash = use_index;
                         break;
+                    case BlockHashing_Collect:
+                    {
+                        hash = newhash_calc(buf.Buffer, eat);
+                        full_hash_list.push_back(hash);
+                        do_checkhash = use_list;
+                        break;
+                    }
+                    case BlockHashing_Collect_Speedup:
+                    {
+                        hash = newhash_calc(buf.Buffer, eat);
+                        full_hash_list.push_back(hash);
+                        if(hash_seen->test(hash))
+                            do_checkhash = use_list;
+                        else
+                            hash_seen->set(hash);
+                        break;
+                    }
                 }
-                if(do_checkhash) // Check the hash contents?
+
+                switch(do_checkhash) // Check the hash contents?
                 {
-                    schedule_cache.can_close = false;
-                    // ^ Ensure that the handle to source, and s,
-                    //   will not surprisingly become invalid in
-                    //   the identical_found loop that follows.
-
-                    size_t         index = 0;
-                    MutexType      index_lock;
-                    bool           identical_found = false;
-                    MutexType      identical_lock;
-
-                    /*
-                      The identical block selection is configurable.
-                         Options:
-                          all:
-                              Always run identical block check (default)
-                          blanks:
-                              Only run it for blocks consisting entirely
-                              of some particular byte value
-                          none:
-                              Never run it (fastest, no block-merging benefits whatsoever)
-                          prepass:
-                              Run a pre-pass to find out which hashes might overlap
-                              at all. Maintain two bitmasks:
-                                bitmask_1: This hash has been sighted.
-                                bitmask_2: This hash was already sighted when it was
-                                           sighted again, so it must be an overlap.
-                             In the actual pass, add to the hashmap only those hashes
-                             that were marked in bitmask_2.
-                    */
-
-                  DataReadBuffer buf2;
-                #pragma omp parallel private(buf2)
-                  {
-                    for(;;)
+                    case no: break;
+                    case use_index:
                     {
-                        #pragma omp flush(identical_found)
-                        if(identical_found) break;
+                        schedule_cache.can_close = false;
+                        // ^ Ensure that the handle to source, and s,
+                        //   will not surprisingly become invalid in
+                        //   the identical_found loop that follows.
 
-                        uint_least32_t other;
-                        #pragma omp flush(index)
-                        { ScopedLock lck(index_lock);
-                          #pragma omp flush(identical_found)
-                          if(identical_found) break;
-                          // ^Check again because acquiring the lock could have taken time
-                          if(!blockhashlist.Find(hash, other, index)) break;
-                          ++index;
-                          #pragma omp flush(index)
-                        }
+                        size_t         index = 0;
+                        MutexType      index_lock;
+                        bool           identical_found = false;
+                        MutexType      identical_lock;
 
-                        uint_fast64_t filepos;
-                        schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
-                        datasource_t* source2  = s2->GetDataSource();
-                        uint_fast64_t nbytes2  = source2->size();
-                        uint_fast64_t blocksize2 = s2->GetBlockSize();
+                        /*
+                          The identical block selection is configurable.
+                             Options:
+                              all:
+                                  Always run identical block check (default)
+                              blanks:
+                                  Only run it for blocks consisting entirely
+                                  of some particular byte value
+                              none:
+                                  Never run it (fastest, no block-merging benefits whatsoever)
+                              prepass:
+                                  Run a pre-pass to find out which hashes might overlap
+                                  at all. Maintain two bitmasks:
+                                    bitmask_1: This hash has been sighted.
+                                    bitmask_2: This hash was already sighted when it was
+                                               sighted again, so it must be an overlap.
+                                 In the actual pass, add to the hashmap only those hashes
+                                 that were marked in bitmask_2.
+                              collect (hashlist):
+                                 The hash for all blocks are listed in an array.
+                                 An O(N) search is exacted to the array to find
+                                 matches to the hash. The algorithm is
+                                 therefore O(N^2), but requires less memory
+                                 than the blockindex does.
+                              collect_speedup:
+                                 bitmask_1 (hash_seen) is used to sieve
+                                 unique/duplicate hashes, speeding up the
+                                 search somewhat.
+                        */
 
-                        assertbegin();
-                        assert2var(other, blocks_done);
-                        assert(other < blocks_done);
-                        assertflush();
-
-                        if(blocksize > blocksize2) continue;
-                        if(filepos + eat > nbytes2) continue;
-
-                        source2->read(buf2, eat, filepos);
-
-                        if(!std::memcmp(buf.Buffer, buf2.Buffer, eat))
+                      DataReadBuffer buf2;
+                    #pragma omp parallel private(buf2)
+                      {
+                        for(;;)
                         {
-                            // It is an exact match.
-                            if(identical_lock.TryLock())
-                            {
-                                //std::printf("... matches block %llu\n", (unsigned long long)other);
-                                #pragma omp flush(identical_found)
-                                if(!identical_found)
-                                {
-                                    identical_list.Append( identical_item(blocks_done, other) );
-                                    identical_found = true;
-                                    #pragma omp flush(identical_found)
-                                }
-                                identical_lock.Unlock();
+                            #pragma omp flush(identical_found)
+                            if(identical_found) break;
+
+                            uint_least32_t other;
+                            #pragma omp flush(index)
+                            { ScopedLock lck(index_lock);
+                              #pragma omp flush(identical_found)
+                              if(identical_found) break;
+                              // ^Check again because acquiring the lock could have taken time
+                              if(!blockhashlist.Find(hash, other, index)) break;
+                              ++index;
+                              #pragma omp flush(index)
                             }
-                            break;
+
+                            uint_fast64_t filepos;
+                            schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
+                            datasource_t* source2  = s2->GetDataSource();
+                            uint_fast64_t nbytes2  = source2->size();
+                            uint_fast64_t blocksize2 = s2->GetBlockSize();
+
+                            assertbegin();
+                            assert2var(other, blocks_done);
+                            assert(other < blocks_done);
+                            assertflush();
+
+                            if(blocksize > blocksize2) continue;
+                            if(filepos + eat > nbytes2) continue;
+
+                            source2->read(buf2, eat, filepos);
+
+                            if(!std::memcmp(buf.Buffer, buf2.Buffer, eat))
+                            {
+                                // It is an exact match.
+                                if(identical_lock.TryLock())
+                                {
+                                    //std::printf("... matches block %llu\n", (unsigned long long)other);
+                                    #pragma omp flush(identical_found)
+                                    if(!identical_found)
+                                    {
+                                        identical_list.Append( identical_item(blocks_done, other) );
+                                        identical_found = true;
+                                        #pragma omp flush(identical_found)
+                                    }
+                                    identical_lock.Unlock();
+                                }
+                                break;
+                            }
                         }
-                    }
-                  } // end of scope for omp parallel
+                      } // end of scope for omp parallel
 
-                    if(!identical_found)
+                        if(!identical_found)
+                        {
+                            // Add to the blockhashlist. It cannot already be there,
+                            // because this is the first time that this particular
+                            // value of blocks_done is handled.
+                            blockhashlist.Add(hash, blocks_done);
+                            // ^ This is not thread-safe, so don't run it in a thread context.
+                        }
+
+                        schedule_cache.can_close = true;
+                        schedule_cache.Get(a); // ensure it's not unloaded
+                        break;
+                    } // check hash contents
+
+                    case use_list:
                     {
-                        // Add to the blockhashlist. It cannot already be there,
-                        // because this is the first time that this particular
-                        // value of blocks_done is handled.
-                        blockhashlist.Add(hash, blocks_done);
-                        // ^ This is not thread-safe, so don't run it in a thread context.
-                    }
+                        schedule_cache.can_close = false;
+                        // ^ Ensure that the handle to source, and s,
+                        //   will not surprisingly become invalid in
+                        //   the identical_found loop that follows.
 
-                    schedule_cache.can_close = true;
-                    schedule_cache.Get(a); // ensure it's not unloaded
-                } // check hash contents
+                        DataReadBuffer buf2;
+                        size_t n_listed = full_hash_list.size()-1;
+                        enum { per_section = 65536 };
+                        bool           identical_found = false;
+                        MutexType      identical_lock;
+                        for(size_t section=0; section<n_listed; section += per_section)
+                        {
+                            size_t count = per_section;
+                            if(section+count > n_listed) count = n_listed-section;
+                            if(count <= 0) break;
+                            MadviseWillNeed(&full_hash_list[section],
+                                            count*sizeof(newhash_t));
+
+                      #pragma omp parallel private(buf2) shared(identical_found)
+                      {
+                      #ifdef _OPENMP
+                        size_t thread_no    = omp_get_thread_num();
+                        size_t thread_count = omp_get_num_threads();
+                        size_t section_begin = section+count * (thread_no+0) / thread_count;
+                        size_t section_end   = section+count * (thread_no+1) / thread_count;
+                      #else
+                        size_t section_begin = section, section_end = section+count;
+                      #endif
+                        size_t counter = 8192;
+                        /*
+                        MadviseSequential(&full_hash_list[section_begin],
+                                          (section_end-section_begin)*sizeof(newhash_t)
+                                         );
+                        */
+                        for(size_t other=section_begin; other<section_end; ++other)
+                        {
+                            if(unlikely(--counter <= 0))
+                            {
+                                #pragma omp flush(identical_found)
+                                if(identical_found) break;
+                                counter = 8192;
+                            }
+                            if(unlikely(full_hash_list[other] == hash))
+                            {
+                                #pragma omp flush(identical_found)
+                                if(identical_found) break;
+
+                                uint_fast64_t filepos;
+                                schedule_item* s2 = where_list.Find(schedule_cache, other, filepos);
+                                datasource_t* source2  = s2->GetDataSource();
+                                uint_fast64_t nbytes2  = source2->size();
+                                uint_fast64_t blocksize2 = s2->GetBlockSize();
+
+                                assertbegin();
+                                assert2var(other, blocks_done);
+                                assert(other < blocks_done);
+                                assertflush();
+
+                                if(blocksize > blocksize2) continue;
+                                if(filepos + eat > nbytes2) continue;
+
+                                source2->read(buf2, eat, filepos);
+
+                                if(!std::memcmp(buf.Buffer, buf2.Buffer, eat))
+                                {
+                                    // It is an exact match.
+                                    if(identical_lock.TryLock())
+                                    {
+                                        //std::printf("... matches block %llu\n", (unsigned long long)other);
+                                        #pragma omp flush(identical_found)
+                                        if(!identical_found)
+                                        {
+                                            identical_list.Append( identical_item(blocks_done, other) );
+                                            identical_found = true;
+                                            #pragma omp flush(identical_found)
+                                        }
+                                        identical_lock.Unlock();
+                                    }
+                                    break;
+                                }
+                            } // if hash match
+                        } // for
+                      } // end of scope for omp parallel
+                        } // end of for section
+                        schedule_cache.can_close = true;
+                        schedule_cache.Get(a); // ensure it's not unloaded
+                        break;
+                    } // case
+                } // switch
 
                 /*
                 where_all[blocks_done].first  = a;
@@ -1469,6 +1610,9 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
         delete hash_duplicate;
         hash_duplicate = 0;
+
+        delete hash_seen;
+        hash_seen = 0;
     }
 
     if(true)
