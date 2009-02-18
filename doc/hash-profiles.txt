@@ -1,0 +1,29 @@
+HASH PROFILES
+
+Tests run on Bisqwit's 80 gigabyte corpus,
+using --blockindexmethod prepass
+
+Altered newhash, 64-bit algorithm:
+
+26558860 recurring hashes found. 58101810 unique. Prepass helped skip about 54.3% of work.
+
+Original newhash, 64-bit algorithm:
+
+26561593 recurring hashes found. 58110996 unique. Prepass helped skip about 54.3% of work.
+
+CRC32:
+
+26561633 recurring hashes found. 58112108 unique. Prepass helped skip about 54.3% of work.
+
+
+Interestingly, this would give CRC32 as the best of these hashes.
+However, the difference between the "best" and the, err, "worst"
+is such slight that the performance difference outweighs it by
+a large margin.
+
+CRC32 hashes a byte per iteration.
+  Each iteration is about 6 instructions.
+  So, 6 instructions per byte.
+Newhash-altered hashes 24 bytes per iteration.
+  Each iteration takes some 36 instructions.
+  So, 1.5 instructions per byte.
