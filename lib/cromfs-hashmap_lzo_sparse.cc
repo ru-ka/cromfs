@@ -10,6 +10,9 @@
 # define unlikely(x) (x)
 #endif
 
+enum { MAX_LZO_STRIPES = 2048 };
+// ^ Maximum stripe count. A magic constant, chosen by arbitration.
+
 template<typename HashType, typename T>
 CompressedHashLayer_Sparse<HashType,T>::CompressedHashLayer_Sparse()
     : data()
@@ -80,7 +83,7 @@ redo:;
 
     if(!(merge_prev || merge_next))
     {
-        if(data.size() >= 1024)
+        if(data.size() >= MAX_LZO_STRIPES)
         {
             // Find the shortest gap in the map and merge them, then try again.
             // The variables "prev" and "next" can be reused&overwritten here,
