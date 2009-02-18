@@ -571,13 +571,19 @@ namespace cromfs_creator
 
             if(DisplayFiles)
             {
-                std::printf("%s ... inode %ld. Size %llu, Spans from %p..%p\n",
+                std::printf(
+                    "%s ... inode %ld. Size %llu"
+                #ifndef NDEBUG
+                    ", Spans from %p..%p"
+                #endif
+                    "\n",
                     pathname.c_str(),
                     (long)inonum,
-                    (unsigned long long) ent.bytesize,
-
-                    &inotab[inotab_offset],
+                    (unsigned long long) ent.bytesize
+                #ifndef NDEBUG
+                    ,&inotab[inotab_offset],
                     &inotab[inotab_offset + INODE_SIZE_BYTES(num_blocks)]
+                #endif
                 );
                 std::fflush(stdout);
             }
