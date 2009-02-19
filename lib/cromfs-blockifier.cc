@@ -1050,7 +1050,7 @@ public:
             {
                 std::printf("Identical_list will be saved to %s\n", fn.c_str());
                 fd = open(fn.c_str(), O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE, 0644);
-                wt = new LongFileWrite(fd, 0);
+                wt = new LongFileWrite(fd, 0x200000);
             }
         }
     }
