@@ -223,58 +223,7 @@ public:
              FSBAllocator<int> > last_autoindex_length;
 
     // The autoindex
-    typedef std::multimap<newhash_t, cromfs_block_internal, std::less<newhash_t>,
-                          FSBAllocator<std::pair<const newhash_t, cromfs_block_internal> >
-                         > autoindex_base;
-    class autoindex_t : public
-            std::multimap<newhash_t, cromfs_block_internal, std::less<newhash_t>,
-                          FSBAllocator<std::pair<const newhash_t, cromfs_block_internal> >
-                         >
-    {
-    public:
-        struct find_index_t
-        {
-            autoindex_base::const_iterator i;
-            bool first, last;
-
-            find_index_t() : i(), first(true), last(false) { }
-
-            find_index_t& operator++() { if(!last) ++i; first=false; return *this; }
-            find_index_t operator++(int) const { find_index_t res(*this); ++res; return res; }
-        };
-    public:
-        autoindex_t() : autoindex_base(), added(0), deleted(0) { }
-
-        void Del(newhash_t index, const cromfs_block_internal& b)
-        {
-            for(autoindex_base::iterator i = lower_bound(index);
-                i != end() && i->first == index;
-                ++i)
-            {
-                if(i->second == b) { erase(i); ++deleted; break; }
-            }
-        }
-        void Add(newhash_t index, const cromfs_block_internal& b)
-        {
-            insert(std::make_pair(index, b));
-            ++added;
-        }
-        bool Find(newhash_t index, cromfs_block_internal& res, find_index_t& nmatch) const
-        {
-            if(nmatch.first)
-            {
-                nmatch.i     = lower_bound(index);
-                nmatch.first = false;
-            }
-            if(nmatch.i == end()) { nmatch.last = true; return false; }
-            if(nmatch.i->first != index) { nmatch.last = true; return false; }
-            res = nmatch.i->second;
-            return true;
-        }
-        const std::string GetStatistics() const;
-    private:
-        size_t added, deleted;
-    };
+    typedef block_index_stack_simple<newhash_t, cromfs_block_internal> autoindex_t;
     autoindex_t autoindex;
 
 private:

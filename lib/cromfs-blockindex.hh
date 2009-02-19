@@ -55,4 +55,100 @@ private:
 
 #include "cromfs-blockindex.tcc"
 
+#if 0 && (defined(_LP64) || defined(__LP64__))
+# include <utility>
+# include "rbtree.hh"
+# include "allocatornk.hh"
+
+template<typename Pair>
+struct Select1st
+{
+    typename Pair::first_type&       operator() (Pair& x) const { return x.first; }
+    const typename Pair::first_type& operator() (const Pair& x) const { return x.first; }
+};
+template<typename K>
+struct Less
+{
+    bool operator() (const K& a, const K& b) const { return a < b; }
+};
+#else
+# include <map>
+#endif
+# include "fsballocator.hh"
+
+template<typename K,typename V>
+class block_index_stack_simple : public
+#if 0 && (defined(_LP64) || defined(__LP64__))
+        RbTree<K,
+               std::pair<K, V>,
+               Select1st<std::pair<K,V> >,
+               Less<K>,
+               allocatorNk<int, FSBAllocator<int>, uint_least32_t>
+               //FSBAllocator<int>
+              >
+#else
+        std::multimap<K,V, std::less<K>,
+                      FSBAllocator<int>
+                     >
+#endif
+{
+#if 0 && (defined(_LP64) || defined(__LP64__))
+    typedef
+        RbTree<K,
+               std::pair<K, V>,
+               Select1st<std::pair<K,V> >,
+               Less<K>,
+               allocatorNk<int, FSBAllocator<int>, uint_least32_t>
+               //FSBAllocator<int>
+              > autoindex_base;
+#else
+    typedef std::multimap<K,V, std::less<K>,
+                          FSBAllocator<int>
+                         > autoindex_base;
+#endif
+public:
+    struct find_index_t
+    {
+        typename autoindex_base::const_iterator i;
+        bool first, last;
+
+        find_index_t() : i(), first(true), last(false) { }
+
+        find_index_t& operator++() { if(!last) ++i; first=false; return *this; }
+        find_index_t operator++(int) const { find_index_t res(*this); ++res; return res; }
+    };
+public:
+    block_index_stack_simple() : autoindex_base(), added(0), deleted(0) { }
+
+    void Del(K index, const V& b)
+    {
+        for(typename autoindex_base::iterator i = lower_bound(index);
+            i != autoindex_base::end() && i->first == index;
+            ++i)
+        {
+            if(i->second == b) { erase(i); ++deleted; break; }
+        }
+    }
+    void Add(K index, const V& b)
+    {
+        insert(std::make_pair(index, b));
+        ++added;
+    }
+    bool Find(K index, V& res, find_index_t& nmatch) const
+    {
+        if(nmatch.first)
+        {
+            nmatch.i     = lower_bound(index);
+            nmatch.first = false;
+        }
+        if(nmatch.i == autoindex_base::end()) { nmatch.last = true; return false; }
+        if(nmatch.i->first != index) { nmatch.last = true; return false; }
+        res = nmatch.i->second;
+        return true;
+    }
+    const std::string GetStatistics() const;
+private:
+    size_t added, deleted;
+};
+
 #endif
