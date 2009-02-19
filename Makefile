@@ -69,6 +69,9 @@ ARCHFILES=\
 	lib/autodealloc.hh \
 	lib/autoptr \
 	\
+	lib/allocatornk.hh \
+	lib/rbtree.hh \
+	\
 	lib/range.hh lib/range.tcc \
 	lib/rangeset.hh lib/rangeset.tcc \
 	lib/rangemultimap.hh lib/rangemultimap.tcc \
