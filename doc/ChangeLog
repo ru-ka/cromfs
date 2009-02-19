@@ -9,7 +9,7 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 - After a lot of experimentation, added options for cutting down
   the memory usage of the block index in mkcromfs significantly.
   See below.
-- New mkcromfs option: --blockindexmethod
+- New mkcromfs option: --blockindexmethod (see documentation)
 - Fixed a bug that cause vsnprintf not to be used even if it existed
 - More optimized LZO compression for the blockindex 
 - Added some more documentation in doc/
