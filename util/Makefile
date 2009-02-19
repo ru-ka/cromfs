@@ -11,6 +11,7 @@ CPPDEBUG=-pipe -DNDEBUG
 #OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
 #OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
+#OPTIM += -O1 -g -fno-inline -inline-level=0 -debug extended
 #OPTIM += -O3 -g 
 #OPTIM += -O0 -g -debug all -inline-level=0
 #OPTIM += -O0 -g -fno-inline
@@ -51,6 +52,7 @@ OBJS_MK += mkcromfs.o \
 	   $(MKCROMFS_LZO_OBJ) \
 	   ../lib/boyermoore.o
 
+
 OBJS_UN += unmkcromfs.o ../cromfs.o \
 	   ../lib/fadvise.o \
 	   ../lib/util.o ../lib/fnmatch.o \
@@ -89,5 +91,6 @@ include .libdepend
 clean: FORCE
 	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV) *.pchi
 	rm -f mkcromfs unmkcromfs cvcromfs
+	rm -f ../lib/*.o ../lib/lzo/*.o ../lib/lzma/C/*.o
 
 FORCE: ;
