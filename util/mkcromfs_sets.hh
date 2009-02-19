@@ -32,6 +32,7 @@ extern const char* GetTempDir();
 
 enum BlockHashingMethods
     { BlockHashing_All,
+      BlockHashing_All_Speedup,
       BlockHashing_All_Prepass,
       BlockHashing_BlanksOnly,
       BlockHashing_Collect,

@@ -1647,15 +1647,19 @@ int main(int argc, char** argv)
                     "            If your filesystem is large (millions of blocks),\n"
                     "            note that the index construction may require\n"
                     "            excessive amounts of virtual memory.\n"
+                    "       --blockindexmethod all2\n"
+                    "            A version of \"all\" that uses an extra 512 MiB\n"
+                    "            of virtual memory to avoid testing unique hashes.\n"
                     "       --blockindexmethod prepass\n"
-                    "            This option uses an extra 1 gigabyte of virtual memory\n"
-                    "            before running the \"all\" blocks indexing\n"
-                    "            in hopes of consuming less virtual memory overall.\n"
-                    "            Use it if \"all\" consumes way too much virtual memory.\n"
+                    "            This option uses an extra 1024 MiB of virtual memory\n"
+                    "            before running the \"all\" blocks indexing in the\n"
+                    "            hopes of consuming less virtual memory overall.\n"
+                    "            Use it if \"all2\" consumes way too much virtual memory.\n"
                     "       --blockindexmethod collect\n"
                     "            All blocks are hashed before blockifying.\n"
-                    "            This is slower than the \"all\" option,\n"
-                    "            but requires considerably less memory.\n"
+                    "            This requires a predictable amount of memory\n"
+                    "            (4 * block count bytes), but is considerably\n"
+                    "            slower than the \"all\" option.\n"
                     "       --blockindexmethod collect2\n"
                     "            A version of \"collect\" that uses an extra 512 MiB\n"
                     "            of virtual memory to avoid testing unique hashes.\n"
@@ -1665,7 +1669,7 @@ int main(int argc, char** argv)
                     "            that occurs in most compressing filesystems,\n"
                     "            and requires relatively little virtual memory. It\n"
                     "            neglects most of cromfs's power, though.\n"
-                    "            Use it if \"prepass\" consumes too much virtual memory.\n"
+                    "            Use it if \"all2\" consumes too much virtual memory.\n"
                     " --nosortbyfilename\n"
                     "     Disables sorting by filename when blockifying. Use when\n"
                     "     you have made attempts to affect manually the order in which\n"
@@ -2001,6 +2005,8 @@ int main(int argc, char** argv)
                 char* arg = optarg;
                 if(!strcmp(arg, "all"))
                     BlockHashing_Method = BlockHashing_All;
+                else if(!strcmp(arg, "all2"))
+                    BlockHashing_Method = BlockHashing_All_Speedup;
                 else if(!strcmp(arg, "prepass"))
                     BlockHashing_Method = BlockHashing_All_Prepass;
                 else if(!strcmp(arg, "blanks")
@@ -2014,7 +2020,7 @@ int main(int argc, char** argv)
                     BlockHashing_Method = BlockHashing_Collect_Speedup;
                 else
                 {
-                    std::fprintf(stderr, "mkcromfs: Blockindexmethod may only be none, blanks, prepass or all. You gave %s.\n", arg);
+                    std::fprintf(stderr, "mkcromfs: Blockindexmethod may only be none, blanks, all, all2, prepass, collect or collect2. You gave %s.\n", arg);
                     return -1;
                 }
                 break;

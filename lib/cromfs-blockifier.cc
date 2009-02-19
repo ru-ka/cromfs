@@ -1249,6 +1249,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
         delete hash_seen;
         hash_seen = 0;
+
+        // keep hash_duplicate -- it is wanted by the "identical blocks" phase
     }
 
     BlockWhereList where_list;
@@ -1269,9 +1271,18 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             <newhash_t, uint_least32_t,
              CompressedHashLayer_Sparse<newhash_t, uint_least32_t>
             > blocks_list;
-        blocks_list blockhashlist;
+        /*
+        typedef block_index_stack_simple
+            <newhash_t, uint_least32_t
+            > blocks_list;
+        */
+        blocks_list blockhashlist; // For All, All_Prepass and All_Speedup
+        blocks_list blockhashlist_firsttime; // for All_Speedup
 
-        std::vector<newhash_t> full_hash_list;
+        uint_fast64_t n_collisions = 0;
+        uint_fast64_t n_unique     = 0;
+
+        std::vector<newhash_t> full_hash_list; // For Collect and Collect_Speedup
 
         if(BlockHashing_Method == BlockHashing_Collect
         || BlockHashing_Method == BlockHashing_Collect_Speedup)
@@ -1279,7 +1290,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             full_hash_list.reserve(blocks_total);
         }
 
-        if(BlockHashing_Method == BlockHashing_Collect_Speedup)
+        if(BlockHashing_Method == BlockHashing_Collect_Speedup
+        || BlockHashing_Method == BlockHashing_All_Speedup)
         {
             // Collect a list of duplicate hashes
             hash_seen      = new bitset1p32;
@@ -1346,18 +1358,55 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     case BlockHashing_None:
                         break;
                     case BlockHashing_BlanksOnly:
-                        if(!is_zero_block(buf.Buffer, eat))
-                            do_checkhash = no;
-                        else
+                        if(is_zero_block(buf.Buffer, eat))
+                        {
                             hash = newhash_calc(buf.Buffer, eat);
+                            do_checkhash = use_index;
+                        }
+                        break;
+                    case BlockHashing_All:
+                        hash = newhash_calc(buf.Buffer, eat);
+                        do_checkhash = use_index;
                         break;
                     case BlockHashing_All_Prepass:
                         hash = newhash_calc(buf.Buffer, eat);
                         do_checkhash = hash_duplicate->test(hash) ? use_index : no;
                         break;
-                    case BlockHashing_All:
+                    case BlockHashing_All_Speedup:
                         hash = newhash_calc(buf.Buffer, eat);
-                        do_checkhash = use_index;
+                        if(hash_seen->test(hash))
+                        {
+                            do_checkhash = use_index;
+                            #pragma omp atomic
+                            ++n_collisions;
+
+                            // If this is the first time we see this particular hash
+                            // being a duplicate, fetch the original blocks_done value
+                            // from blockhashlist_firsttime.
+                            blocks_list::find_index_t tmp = blocks_list::find_index_t();
+                            uint_least32_t            first_seen_blocknumber;
+                            if(!blockhashlist.Find(hash, first_seen_blocknumber, tmp))
+                            {
+                                tmp = blocks_list::find_index_t();
+                                if(blockhashlist_firsttime.Find(hash, first_seen_blocknumber, tmp))
+                                {
+                                    blockhashlist.Add(hash, first_seen_blocknumber);
+                                    blockhashlist_firsttime.Del(hash, first_seen_blocknumber);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            hash_seen->set(hash);
+                            #pragma omp atomic
+                            ++n_unique;
+                            // Add to the list... Actually, when hash_seen->test()
+                            // returns "true", we should only then call this Add(),
+                            // but at that point, we no longer know the value of
+                            // blocks_done, so we must do it here. This wastes
+                            // virtual memory, but there's not much we can do.
+                            blockhashlist_firsttime.Add(hash, blocks_done);
+                        }
                         break;
                     case BlockHashing_Collect:
                     {
@@ -1371,9 +1420,17 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         hash = newhash_calc(buf.Buffer, eat);
                         full_hash_list.push_back(hash);
                         if(hash_seen->test(hash))
+                        {
                             do_checkhash = use_list;
+                            #pragma omp atomic
+                            ++n_collisions;
+                        }
                         else
+                        {
                             hash_seen->set(hash);
+                            #pragma omp atomic
+                            ++n_unique;
+                        }
                         break;
                     }
                 }
@@ -1388,7 +1445,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         //   will not surprisingly become invalid in
                         //   the identical_found loop that follows.
 
-                        size_t         index = 0;
+                        blocks_list::find_index_t index = blocks_list::find_index_t();
                         MutexType      index_lock;
                         bool           identical_found = false;
                         MutexType      identical_lock;
@@ -1406,11 +1463,12 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                               prepass:
                                   Run a pre-pass to find out which hashes might overlap
                                   at all. Maintain two bitmasks:
-                                    bitmask_1: This hash has been sighted.
-                                    bitmask_2: This hash was already sighted when it was
-                                               sighted again, so it must be an overlap.
-                                 In the actual pass, add to the hashmap only those hashes
-                                 that were marked in bitmask_2.
+                                    hash_seen:
+                                      This hash has been sighted.
+                                    hash_duplicate:
+                                      This hash has been seen twice or more.
+                                 In the actual pass, add to the hashmap only those
+                                 hashes that were marked in hash_duplicate.
                               collect (hashlist):
                                  The hash for all blocks are listed in an array.
                                  An O(N) search is exacted to the array to find
@@ -1418,13 +1476,12 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                                  therefore O(N^2), but requires less memory
                                  than the blockindex does.
                               collect_speedup:
-                                 bitmask_1 (hash_seen) is used to sieve
-                                 unique/duplicate hashes, speeding up the
-                                 search somewhat.
+                                 hash_seen is used to sieve unique/duplicate hashes,
+                                 speeding up the search somewhat.
                         */
 
                       DataReadBuffer buf2;
-                    #pragma omp parallel private(buf2)
+                    #pragma omp parallel private(buf2) shared(identical_found,index)
                       {
                         for(;;)
                         {
@@ -1432,11 +1489,11 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                             if(identical_found) break;
 
                             uint_least32_t other;
-                            #pragma omp flush(index)
                             { ScopedLock lck(index_lock);
                               #pragma omp flush(identical_found)
                               if(identical_found) break;
                               // ^Check again because acquiring the lock could have taken time
+                              #pragma omp flush(index)
                               if(!blockhashlist.Find(hash, other, index)) break;
                               ++index;
                               #pragma omp flush(index)
@@ -1599,6 +1656,23 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             identical_list.EndSaving();
 
         DisplayProgress(label, total_done, total_size, blocks_done, blocks_total);
+
+        if(hash_seen) // for All_Speedup and Collect_Speedup
+        {
+            std::printf("%lu recurring hashes found. %lu unique. The extra 512 MiB helped skip about %.1f%% of work.\n",
+                (unsigned long) n_collisions,
+                (unsigned long) n_unique,
+                n_unique
+                  ? (n_unique - n_collisions) * 100.0 / n_unique
+                  : 0.0
+                   );
+            delete hash_seen;
+            hash_seen = 0;
+        }
+
+        delete hash_duplicate;
+        hash_duplicate = 0;
+
         std::printf("%lu reuse opportunities found. %lu unique blocks. Block table will be %.1f%% smaller than without the index search.\n",
             (unsigned long) identical_list.size(),
             (unsigned long) (blocks_done - identical_list.size()),
@@ -1607,12 +1681,6 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         std::fflush(stdout);
 
         blocks.reserve(blocks.size() + blocks_done - identical_list.size());
-
-        delete hash_duplicate;
-        hash_duplicate = 0;
-
-        delete hash_seen;
-        hash_seen = 0;
     }
 
     if(true)
