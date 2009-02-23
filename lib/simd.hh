@@ -6,7 +6,7 @@
 #endif
 
 /* SIMD interface (MMX) written by Bisqwit
- * Copyright (C) 1992,2008 Joel Yliluoma (http://iki.fi/bisqwit/)
+ * Copyright (C) 1992,2009 Joel Yliluoma (http://iki.fi/bisqwit/)
  */
 
 #ifdef __3dNOW__

@@ -10,7 +10,8 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
   the memory usage of the block index in mkcromfs significantly.
   See below.
 - New mkcromfs option: --blockindexmethod (see documentation)
-- Fixed a bug that cause vsnprintf not to be used even if it existed
+- Fixed a bug that caused vsnprintf not to be used even
+  if it existed
 - More optimized LZO compression for the blockindex 
 - Added some more documentation in doc/
 - Removed some unused source code files
