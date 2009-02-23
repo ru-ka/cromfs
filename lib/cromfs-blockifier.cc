@@ -1685,7 +1685,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
     if(true)
     {
-        schedule_cache<schedule_item, 1> schedule_cache(schedule);
+        schedule_cache<schedule_item, 4> schedule_cache(schedule);
         static const char label[] = "Blockifying";
 
         std::printf("Beginning task for %s: %s\n", purpose, label);
