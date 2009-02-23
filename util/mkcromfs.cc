@@ -863,8 +863,8 @@ namespace cromfs_creator
             unsigned onesize = DATALOCATOR_SIZE_BYTES();
             if(DisplayEndProcess)
             {
-                std::printf("Compressing %u block records (%u bytes each)...",
-                    (unsigned)blocks.size(), onesize);
+                std::printf("Compressing %u block records (%u bytes each, total %s)\n",
+                    (unsigned)blocks.size(), onesize, ReportSize(blocks.size() * onesize).c_str());
                 fflush(stdout);
             }
 
@@ -991,9 +991,9 @@ namespace cromfs_creator
             reduction(+:uncompressed_total)
         for(long/*cromfs_fblocknum_t*/ fblocknum=0; fblocknum<(long)fblocks.size(); ++fblocknum)
         {
-      #ifdef _OPENMP
-          omp_set_num_threads(backup_max_threads);
-      #endif
+          #ifdef _OPENMP
+            omp_set_num_threads(backup_max_threads);
+          #endif
 
             mkcromfs_fblock& fblock = fblocks[fblocknum];
 
