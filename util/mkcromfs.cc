@@ -112,6 +112,19 @@ static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
     char why[512];std::sprintf(why,"fblock %u", (unsigned)fblocknum);
     std::vector<unsigned char>
         fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, buf.Buffer,fblock_rawlength, why);
+
+    if(false)
+    {
+        bool is_ok = true;
+        LZMADeCompress(fblock_lzma, is_ok);
+        if(!is_ok)
+        {
+            std::fprintf(stderr,
+                "Error: LZMA compression produced invalid LZMA data!\n"
+                "       This should never happen. Sorry.\n");
+        }
+    }
+
     fblock.put_compressed(fblock_lzma);
 
     if(DisplayEndProcess)
@@ -950,8 +963,6 @@ namespace cromfs_creator
         #pragma omp section
         { SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs); }
       }
-        lseek64(out_fd, sblock.fblktab_offs, SEEK_SET);
-
         if(DisplayEndProcess)
         {
             std::printf("Compressing and writing %u fblocks...\n",
@@ -982,10 +993,13 @@ namespace cromfs_creator
         }
       #endif
 
+        uint_fast64_t fblk_offset = sblock.fblktab_offs;
+
         /* Note: Using "long" for loop iteration variable, because OpenMP
          * requires the loop iteration variable to be of _signed_ type,
          * and cromfs_fblocknum_t is unsigned.
          */
+
       #pragma omp parallel for ordered schedule(dynamic) \
             reduction(+:compressed_total) \
             reduction(+:uncompressed_total)
@@ -1004,13 +1018,29 @@ namespace cromfs_creator
           #pragma omp ordered
           {
             const std::vector<unsigned char> fblock_lzma = fblock.get_compressed();
+            if(true)
+            {
+                bool is_ok = true;
+                LZMADeCompress(fblock_lzma, is_ok);
+                if(!is_ok)
+                {
+                    std::fprintf(stderr,
+                        "Error: Compressed fblock %ld ended up being invalid LZMA data!\n"
+                        "       This should never happen. Sorry.\n",
+                        fblocknum);
+                    terminate_for = true;
+                  #pragma omp flush(terminate_for)
+                    goto next_for;
+                }
+            }
 
-            { char Buf[64];
+            { unsigned char Buf[64];
               W32(Buf, fblock_lzma.size());
-              write(out_fd, Buf, 4); }
+              SparseWrite(out_fd, Buf, 4, fblk_offset);
+              fblk_offset += 4;
+            }
 
-            const uint_fast64_t pos = lseek64(out_fd, 0, SEEK_CUR);
-            SparseWrite(out_fd, &fblock_lzma[0], fblock_lzma.size(), pos);
+            SparseWrite(out_fd, &fblock_lzma[0], fblock_lzma.size(), fblk_offset);
 
             if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
             {
@@ -1027,11 +1057,12 @@ namespace cromfs_creator
                   #pragma omp flush(terminate_for)
                     goto next_for;
                 }
-                lseek64(out_fd, pos + FSIZE, SEEK_SET);
+
+                fblk_offset += FSIZE;
             }
             else
             {
-                lseek64(out_fd, pos + fblock_lzma.size(), SEEK_SET);
+                fblk_offset += fblock_lzma.size();
             }
 
             std::fflush(stdout);
@@ -1041,7 +1072,9 @@ namespace cromfs_creator
             // with --finish-interrupted is possible.
 
             fdatasync(out_fd);
-            fblock.Delete();
+            fblock.Close();
+            //fblock.Delete();
+            std::printf("You may now delete %s if you want\n", fblock.getfn().c_str());
           next_for:;
           }
         }
@@ -1052,11 +1085,11 @@ namespace cromfs_creator
 
         if(terminate_for) return -1;
 
-        ftruncate64(out_fd, lseek64(out_fd, 0, SEEK_CUR));
+        ftruncate64(out_fd, fblk_offset);
 
         if(DisplayEndProcess)
         {
-            uint_fast64_t file_size = lseek64(out_fd, 0, SEEK_CUR);
+            uint_fast64_t file_size = fblk_offset;
 
             std::printf(
                 "\n%u fblocks were written: %s = %.2f %% of %s\n",
@@ -1098,6 +1131,7 @@ namespace cromfs_creator
          * value is updated on the previous loop.
          * Not even the "ordered" OpenMP clause can help this.
          */
+        bool error = false;
         for(size_t fblocknum=0; /*fblocknum<max_num_fblocks*/; ++fblocknum)
         {
             std::printf("checking the state of fblock %u... (supposedly at file position 0x%X)\n",
@@ -1113,14 +1147,16 @@ namespace cromfs_creator
 
                 LongFileRead(out_fd, fblock_pos+4, fblock_lzma_size, &fblockdata[0]);
 
-                std::printf(" fblock %u appears to be in the file already\n", (int)fblocknum);
+                std::printf(" fblock %u appears to be in the file already (%lu bytes)\n",
+                    (int)fblocknum, (unsigned long)fblockdata.size());
 
                 bool is_ok = true;
 
-                if(fblocknum >= 190) LZMADeCompress(fblockdata, is_ok);
+                /*if(fblocknum >= 190)*/ LZMADeCompress(fblockdata, is_ok);
                 if(!is_ok)
                 {
                     std::printf(" but it is not valid LZMA data!\n");
+                    error = true;
                     throw EINVAL;
                 }
 
@@ -1183,7 +1219,7 @@ namespace cromfs_creator
             }
         }
         std::printf("Done\n");
-        ftruncate64(out_fd, fblock_pos);
+        if(!error) ftruncate64(out_fd, fblock_pos);
 
         return 0;
     }

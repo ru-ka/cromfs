@@ -51,12 +51,14 @@ public:
     std::vector<unsigned char> get_compressed();
 
     void Delete();
+    bool Close();
 
     uint_fast32_t getfilesize() const { return filesize; }
     bool          is_uncompressed() const { return !is_compressed; }
 
-private:
     std::string getfn() const;
+
+private:
     void Decompress() const
         { (const_cast<mkcromfs_fblock*> (this))->Decompress(); }
     void Decompress();
@@ -64,7 +66,6 @@ private:
 
 protected:
     friend class mkcromfs_fblockset;
-    bool Close();
     void Compress();
     void Unmap();
 

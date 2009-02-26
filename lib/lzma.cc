@@ -339,14 +339,17 @@ const std::vector<unsigned char> LZMADeCompress
         &LZMAalloc);
 
     /*
-    fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
-        res, (int)in_done, (int)length,
-             (int)out_done, (int)out_sizemax);
+    fprintf(stderr, "res=%d, status=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
+        res,
+        (int)status,
+        (int)srclen, (int)length,
+        (int)destlen, (int)out_sizemax);
     */
 
     ok = res == SZ_OK && (status == LZMA_STATUS_FINISHED_WITH_MARK
                        || status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK)
-      && srclen == (length-LZMA_PROPS_SIZE) && destlen == out_sizemax;
+      && srclen == (length-(LZMA_PROPS_SIZE+8))
+      && destlen == out_sizemax;
     return result;
 }
 
