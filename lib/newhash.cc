@@ -12,6 +12,10 @@
 # define unlikely(x) (x)
 #endif
 
+/* Note: The differing algorithms in this
+ *       file are not value-compatible.
+ */
+
 #if defined(__x86_64) || (defined(USE_MMX) && defined(__SSE2__))
 /* On x86_64, we can use 64-bit registers. Which is fast.
  * On 32-bit, we can use MMX registers, if MMX is enabled

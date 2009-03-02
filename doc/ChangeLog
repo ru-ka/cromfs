@@ -22,6 +22,7 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 - Fixed another memory leak problem in mkcromfs
 - Improved mkcromfs performance by refactoring some LZMA access code
 - Improved the speed of the hashing algorithm by some 30%
+  (neglible impact to hash efficiency)
 - Added some sanity checks in unmkcromfs
 - Deprecated mkcromfs option: --blockifybufferlength
 - Deprecated mkcromfs option: --blockifybufferincrement
