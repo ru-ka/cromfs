@@ -1,5 +1,6 @@
 #include "../lib/boyermooreneedle.hh"
 #include "../lib/boyermoore.cc"
+#include "../lib/stringsearchutil.cc"
 #include <cstdlib>
 #include <cstdio>
 

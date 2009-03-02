@@ -48,7 +48,9 @@ ARCHFILES=\
 	lib/threadfun_pthread.hh \
 	lib/threadworkengine.hh lib/threadworkengine.tcc \
 	lib/duffsdevice.hh \
+	lib/stringsearchutil.cc \
 	lib/stringsearchutil.hh \
+	lib/stringsearchutil_backwardsmatch.tcc \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
 	lib/datacache.hh \

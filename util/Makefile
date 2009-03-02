@@ -51,7 +51,8 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/cromfs-hashmap_lzo.o \
 	   ../lib/cromfs-hashmap_lzo_sparse.o \
 	   $(MKCROMFS_LZO_OBJ) \
-	   ../lib/boyermoore.o
+	   ../lib/boyermoore.o \
+	   ../lib/stringsearchutil.o
 
 
 OBJS_UN += unmkcromfs.o ../cromfs.o \

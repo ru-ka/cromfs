@@ -5,6 +5,14 @@
 #define __STDC_CONSTANT_MACROS /* for UINT16_C etc */
 #endif
 
+#ifdef __GNUC__
+# define likely(x)       __builtin_expect(!!(x), 1)
+# define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+# define likely(x)   (x)
+# define unlikely(x) (x)
+#endif
+
 #include <map>
 #include <vector>
 #include <string>
@@ -15,7 +23,7 @@
 #include "threadfun.hh"
 
 #include "boyermoore.hh"
-
+#include "stringsearchutil.hh"
 
 class BoyerMooreNeedle: public ptrable
 {
@@ -24,27 +32,24 @@ public:
     typedef BoyerMooreSearch::skiptable_type skiptable_type;
 public:
     explicit BoyerMooreNeedle(const std::vector<unsigned char>& n)
-        : needle(&n[0]), nlen(n.size()), occ(), skip(nlen, nlen)
+        : needle(&n[0]), nlen(n.size()),
+          occ( BoyerMooreSearch::InitOcc(&n[0], n.size()) ),
+          skip( BoyerMooreSearch::InitSkip(&n[0], n.size()) )
     {
-        /* Preprocess the needle */
-        InitOcc();
-        InitSkip();
     }
 
     explicit BoyerMooreNeedle(const std::string& n)
-        : needle( (const unsigned char*) n.data()), nlen(n.size()), occ(), skip(nlen, nlen)
+        : needle( (const unsigned char*) n.data()), nlen(n.size()),
+          occ( BoyerMooreSearch::InitOcc(needle,nlen) ),
+          skip( BoyerMooreSearch::InitSkip(needle,nlen) )
     {
-        /* Preprocess the needle */
-        InitOcc();
-        InitSkip();
     }
 
     explicit BoyerMooreNeedle(const unsigned char* n, size_t nl)
-        : needle(n), nlen(nl), occ(), skip(nlen, nlen)
+        : needle(n), nlen(nl),
+          occ( BoyerMooreSearch::InitOcc(n,nl) ),
+          skip( BoyerMooreSearch::InitSkip(n,nl) )
     {
-        /* Preprocess the needle */
-        InitOcc();
-        InitSkip();
     }
     virtual ~BoyerMooreNeedle() { }
 
@@ -179,17 +184,6 @@ public:
             }
         }
         return hlen;
-    }
-
-private:
-    void InitOcc()
-    {
-        BoyerMooreSearch::InitOcc(occ, needle, nlen);
-    }
-
-    void InitSkip()
-    {
-        BoyerMooreSearch::InitSkip(skip, needle, nlen);
     }
 
 private:
