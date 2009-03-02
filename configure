@@ -269,7 +269,7 @@ fi
 
 
 do_echo -n "Checking for vsnprintf... "
-if cc_check '<cstdio>' '' 'char Buf[10];using namespace std; va_list ap;vsnprintf(Buf,sizeof Buf,ap,"gruu");'; then
+if cc_check '<cstdio>' '' 'char Buf[10];using namespace std; va_list ap;vsnprintf(Buf,sizeof Buf,"gruu",ap);'; then
   do_echo Yes
   OPTIM="$OPTIM -DHAS_VSNPRINTF"
 else
@@ -373,7 +373,7 @@ else
   T_CXXWARNINGS="-Woverloaded-virtual -Weffc++ -Wno-non-virtual-dtor"
 
   for s in $T_WARNINGS;do
-    do_echo -n "Checking if your compiler supports -$s... "
+    do_echo -n "Checking if your compiler supports $s... "
     if cc_check '<stdio.h>' "$s" ''; then
       do_echo Yes
       WARNINGS="$WARNINGS $s"
@@ -382,7 +382,7 @@ else
     fi
   done
   for s in $T_CWARNINGS;do
-    do_echo -n "Checking if your compiler supports -$s... "
+    do_echo -n "Checking if your compiler supports $s... "
     if cc_check '<stdio.h>' "$s" ''; then
       do_echo Yes
       CWARNINGS="$CWARNINGS $s"
@@ -391,7 +391,7 @@ else
     fi
   done
   for s in $T_CXXWARNINGS;do
-    do_echo -n "Checking if your compiler supports -$s... "
+    do_echo -n "Checking if your compiler supports $s... "
     if cc_check '<stdio.h>' "$s" ''; then
       do_echo Yes
       CXXWARNINGS="$CXXWARNINGS $s"
@@ -400,6 +400,10 @@ else
     fi
   done
 fi  
+
+(echo "Your CPU has these features:"
+ grep flags /proc/cpuinfo | uniq | sed 's/.*://' | tr ' ' '\012'|sort|grep .|(fmt -w60||cat)|sed 's/^/- /'
+) >> $DEVNULL
 
 if [ ! "$CC" = "icc" ]; then
   cpu_check MMX   mmx   -mmmx   __MMX__
