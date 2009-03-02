@@ -112,6 +112,7 @@ static struct ThreadSafeConsole
                   )
     {
     #ifdef _OPENMP
+        ScopedLock lck(lock);
         lines.erase(threadno);
     #endif
     }

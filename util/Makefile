@@ -11,10 +11,11 @@ CPPDEBUG=-pipe -DNDEBUG
 #OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
 #OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
-#OPTIM += -O1 -g -fno-inline -inline-level=0 -debug extended
+#OPTIM += -O2 -g -fno-inline -inline-level=0 -debug extended
 #OPTIM += -O3 -g 
 #OPTIM += -O0 -g -debug all -inline-level=0
 #OPTIM += -O0 -g -fno-inline
+#OPTIM += -g
 # -ftree-vectorize 
 
 #OPTIM += -O1 -pg -g

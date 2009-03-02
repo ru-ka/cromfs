@@ -5,20 +5,21 @@ License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 1.5.8 <wip>
+- Fixed a bug that caused vsnprintf not to be used even if it existed.
+- Fixed a random crashing bug (race condition) in unmkcromfs (it was
+  introduced in version 1.5.6, commit 274443a59d977d021b24ca10c0b1d81f4d4d6b7b).
 - Added possibility to disable AutoIndex alltogether, cutting memory usage
 - After a lot of experimentation, added options for cutting down
   the memory usage of the block index in mkcromfs significantly.
   See below.
 - New mkcromfs option: --blockindexmethod (see documentation)
-- Fixed a bug that caused vsnprintf not to be used even
-  if it existed
 - More optimized LZO compression for the blockindex 
 - Added some more documentation in doc/
 - Removed some unused source code files
 - Rewrote the fblock index from scratch, hopefully resulting in slightly
   more optimal refactored code
 - Detected a memory leak problem in ICC's implementation of OpenMP tasks...
-  As a result, now not using OpenMP tasks anymore
+  As a result, now not using OpenMP tasks anymore.
 - Fixed another memory leak problem in mkcromfs
 - Improved mkcromfs performance by refactoring some LZMA access code
 - Improved the speed of the hashing algorithm by some 30%
