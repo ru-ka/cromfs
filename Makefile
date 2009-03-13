@@ -133,6 +133,7 @@ ARCHFILES=\
 	tests/a/sparse.bin \
 	tests/test-boyermoore.cc \
 	tests/test-hashmaps.cc \
+	tests/test-backwards_match.cc \
 	\
 	doc/examples/pack_rom_images/README \
 	doc/examples/pack_rom_images/make-spc-set-dir.sh \
