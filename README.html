@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.5.7.
+  This is the documentation of cromfs-1.5.8.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlist">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -621,6 +621,13 @@ To control the memory usage, use these tips:
  <li>In mkcromfs, adjust the block size (--bsize). The RAM usage of mkcromfs
      is directly proportional to the number of blocks (and the filesystem size),
      so smaller blocks require more memory and larger require less.
+ <li>Adjust the --blockindexmethod option. Different values of this option
+     have different effect on the virtual memory use of mkcromfs (it does
+     not affect cromfs-driver, though).
+     Use "--blockindexmethod none" and "-A0" if you want the smallest possible
+     memory usage for your selected block size. It has an impact on the compression
+     power, but you can compensate it by using a large value for the --bruteforcelimit
+     option instead, if you don't mind longer runtime.
 </ul>
 
 </div><H4 id="h4" class="level4"><a name="h4"></a>8.0.4. To control the filesystem speed</H4><div class="level4" id="divh4">
@@ -884,13 +891,15 @@ and is distributed under the terms of the
 <a href="http://www.gnu.org/licenses/gpl-3.0.html">General Public License</a>
 version 3 (GPL3).
  <br/>
-The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
-The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
+The LZMA code from the LZMA SDK is in public domain.
+ <br/>
+The LZO code from liblzo2.03 embedded within is licensed
+under GPL version 2 or later.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml20><b id=eml6 class=nonmail>f1e2j@v</b><span id=eml7 class=ismail>Joel</span><span id=eml8 class=nonmail><b>D</b></span><span id=eml9 class=ismail> Yli</span><b id=eml10 class=nonmail>erke.</b><span id=eml11 class=ismail>luom</span><span id=eml12 class=nonmail><b>e</b></span><span id=eml13 class=ismail>a &lt;bi</span><b id=eml14 class=nonmail>dtqx.iaba</b><span id=eml15 class=ismail>sqwi</span><span id=eml16 class=nonmail><b>q0mbee</b></span><span id=eml17 class=ismail>t@ik</span><b id=eml18 class=nonmail>8ae@</b><span id=eml19 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=6;i<20;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml23><b id=eml9 class=nonmail>kps</b><span id=eml10 class=ismail>Joel</span><span id=eml11 class=nonmail><b>.bqfymw96@</b></span><span id=eml12 class=ismail> Yli</span><b id=eml13 class=nonmail>2Tec</b><span id=eml14 class=ismail>luom</span><span id=eml15 class=nonmail><b>.1o.ieten</b></span><span id=eml16 class=ismail>a &lt;bi</span><b id=eml17 class=nonmail>kwem8glz/y</b><span id=eml18 class=ismail>sqwi</span><span id=eml19 class=nonmail><b>Tee/</b></span><span id=eml20 class=ismail>t@ik</span><b id=eml21 class=nonmail>Tlsa</b><span id=eml22 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=9;i<23;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -979,6 +988,8 @@ to this package.
   module and the userspace programs before mounting Cromfs volumes.
   You need Fuse version 2.5.2 or newer.
  </li>
+ <li>liblzo2-dev is recommended on i386 platforms.
+  If it is missing, mkcromfs will use a version shipped in the package.</li>
 </ul>
 
 </div><H2 id="links" class="level2"><a name="links"></a>14. Links</H2><div class="level2" id="divlinks">
@@ -993,9 +1004,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 <p>Additionally, the most recent source code (bleeding edge) for cromfs can also be downloaded by cloning the Git repository by:<ul style="margin-left:3em;margin-top:0px"><li><code> git clone <a href="git://bisqwit.iki.fi/cromfs.git">git://bisqwit.iki.fi/cromfs.git</a></code></li><li><code> git checkout origin/release -b release</code></li><li><code> git checkout origin/master  -b master</code></li></ul></p></div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Mon, 02 Feb 2009 00:56:35 +0200)<br>
-  with <tt>docmaker.php</tt> (last updated: Mon, 02 Feb 2009 00:56:35 +0200)<br>
-  at Mon, 02 Feb 2009 00:56:35 +0200</small>
+       <tt>progdesc.php</tt> (last updated: Fri, 13 Mar 2009 11:24:53 +0200)<br>
+  with <tt>docmaker.php</tt> (last updated: Fri, 13 Mar 2009 11:24:53 +0200)<br>
+  at Fri, 13 Mar 2009 11:24:53 +0200</small>
  </p>
 </body>
 </html>

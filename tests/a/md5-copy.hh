@@ -11,7 +11,7 @@ public:
     bool operator==(const MD5& b) const { return std::memcmp(Buf,b.Buf,sizeof(Buf))==0; }
     bool operator< (const MD5& b) const { return std::memcmp(Buf,b.Buf,sizeof(Buf)) < 0; }
     bool operator!=(const MD5& b) const { return !operator==(b); }
-    
+
     MD5(const char* data, unsigned length)
     {
         MD5_CTX ctx;
@@ -19,7 +19,7 @@ public:
         MD5_Update(&ctx, data, length);
         MD5_Final(Buf, &ctx);
     }
-    
+
     const std::string Get()
     {
         char tgt[64];
@@ -29,6 +29,6 @@ public:
     }
     /* MD5(const std::string& s)
     {
-        
+
     } */
 } MD5c;

@@ -9,8 +9,8 @@
 #endif
 
 #include <sstream>
-
 #include <sys/stat.h>
+#include <cstring>
 
 const std::string ReportSize(uint_fast64_t size)
 {
@@ -29,62 +29,63 @@ const std::string ReportSize(uint_fast64_t size)
 static char ftypelet(unsigned mode)
 {
     /* this list of modes and chars comes from glibc, lib/filemode.c, ftypelet() */
-    switch(__builtin_expect(mode & S_IFMT, S_IFREG))
+    static const char modes[1 << (3+1)] =
     {
-        case S_IFREG: return '-';
-#ifdef S_ISBLK
-        case S_IFBLK: return 'b';
-#endif
-#ifdef S_ISCHR
-        case S_IFCHR: return 'c';
-#endif
-#ifdef S_ISDIR
-        case S_IFDIR: return 'd';
-#endif
-#ifdef S_ISFIFO
-        case S_IFIFO: return 'p';
-#endif
-#ifdef S_ISLNK
-        case S_IFLNK: return 'l';
-#endif
-#ifdef S_ISSOCK
-        case S_IFSOCK: return 's';
-#endif
-    }
-#ifdef S_ISMPC
-    if (S_ISMPC(mode)) return 'm';
-#endif
-#ifdef S_ISNWK
-    if (S_ISNWK(mode)) return 'n';
-#endif
-#ifdef S_ISDOOR
-    if (S_ISDOOR(mode)) return 'D';
-#endif
-#ifdef S_ISCTG
-    if (S_ISCTG(mode)) return 'C';
-#endif
-#ifdef S_ISOFD
-    if (S_ISOFD(mode)) return 'M';
-#endif
-#ifdef S_ISOFL
-    if (S_ISOFL(mode)) return 'M';
-#endif
-    return '?';
+    //  000xxxx 001xxxx 002xxxx 003xxxx  004xxxx  005xxxx 006xxxx 007xxxx
+        '?'/**/,'p',    'c',    'm',     'd',     '?',    'b',    'm',
+    //  010xxxx 011xxxx 012xxxx 013xxxx  014xxxx  015xxxx 016xxxx 017xxxx
+        '-',    '?',    'l',    '?',     's',     'D',    '?',    '?'
+
+        // Recognized:
+        // 001: IFIFO
+        // 002: IFCHR
+        // 003: IFMPC (not Linux)
+        // 004: IFDIR
+        // 006: IFBLK
+        // 007: IFMPB (coherent)
+        // 010: IFREG
+        // 012: IFLNK
+        // 014: IFSOCK
+        // 015: IFDOOR (not Linux)
+        //
+        // Don't know mode characters for these:
+        // 005: IFNAM (xenix)
+        // 011: IFCMP (compressed,VxFS)
+        // 013: IFSHAD (solaris)
+        // 016: IFWHT (BSD whiteout)
+        //
+        // Don't know bitmasks for these (known by glibc):
+        //      ISWNK ('n')
+        //      ISCTG ('C')
+        //      ISOFD ('M')
+        //      ISOFL ('M')
+    };
+    return modes[(mode & S_IFMT) >> 12];
 }
 
 const std::string TranslateMode(unsigned mode)
 {
-    char result[10];
-    static const char data[] = {'-','r','x','w', 'S','T', 's','t' };
-    result[0] = ftypelet(mode);
-    result[1] = data[!!(mode & S_IRUSR)*1]; // -,r
-    result[2] = data[!!(mode & S_IWUSR)*3]; // -,w
-    result[3] = data[!!(mode & S_IXUSR)*2 + 4*!!(mode & S_ISUID)]; // -,x or S,s
-    result[4] = data[!!(mode & S_IRGRP)*1]; // -,r
-    result[5] = data[!!(mode & S_IWGRP)*3]; // -,w
-    result[6] = data[!!(mode & S_IXGRP)*2 + 4*!!(mode & S_ISGID)]; // -,x or S,s
-    result[7] = data[!!(mode & S_IROTH)*1]; // -,r
-    result[8] = data[!!(mode & S_IWOTH)*3]; // -,w
-    result[9] = data[!!(mode & S_IXOTH)*2 + 5*!!(mode & S_ISVTX)]; // -,x or T,t
-    return std::string(result,result+10);
+    static const char rw[2*4] =
+    {// two-byte options. +1 = write; +2 = read
+     '-','-', // no r and no w
+     '-','w', // w and no r
+     'r','-', // r and no w
+     'r','w', // r and w
+    };
+    static const char sx[2*3] =
+    {// one-byte items. +1 = execute; +2 = svtx; +4 = suid/sgid
+     '-','x', // no x; x
+     'T','t', // svtx and no x; vtx and x
+     'S','s'};// suid and no x; suid and x  (same for sgid)
+    char destptr[10] = {ftypelet(mode)};
+    #define set(offs,ndset, src,nsrc) std::memcpy(destptr+offs, src,nsrc)
+    unsigned mdlo = mode/* & 0777*/, mdhi = mode / (01000/2);
+    set(7,2, rw+(mdlo&06), 2); mdlo >>= 3; // other rw
+    set(4,2, rw+(mdlo&06), 2); mdlo >>= 3; // group rw
+    set(1,2, rw+(mdlo&06), 2);             // user  rw
+    set(9,1, sx+(mode&1) + (mdhi&2), 1); mode >>= 3; mdhi >>= 1; // other x & svtx
+    set(6,1, sx+(mode&1) + (mdhi&2), 1); mode >>= 3;             // group x & sgid
+    set(3,1, sx+(mode&1) + (mdhi&4), 1);                         // user  x & suid
+    #undef set
+    return std::string(destptr, destptr+10);
 }

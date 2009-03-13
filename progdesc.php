@@ -610,6 +610,13 @@ To control the memory usage, use these tips:
  <li>In mkcromfs, adjust the block size (--bsize). The RAM usage of mkcromfs
      is directly proportional to the number of blocks (and the filesystem size),
      so smaller blocks require more memory and larger require less.
+ <li>Adjust the --blockindexmethod option. Different values of this option
+     have different effect on the virtual memory use of mkcromfs (it does
+     not affect cromfs-driver, though).
+     Use \"--blockindexmethod none\" and \"-A0\" if you want the smallest possible
+     memory usage for your selected block size. It has an impact on the compression
+     power, but you can compensate it by using a large value for the --bruteforcelimit
+     option instead, if you don't mind longer runtime.
 </ul>
 
 ", '1.1.1. To control the filesystem speed' => "
@@ -873,8 +880,10 @@ and is distributed under the terms of the
 <a href=\"http://www.gnu.org/licenses/gpl-3.0.html\">General Public License</a>
 version 3 (GPL3).
  <br/>
-The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
-The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
+The LZMA code from the LZMA SDK is in public domain.
+ <br/>
+The LZO code from liblzo2.03 embedded within is licensed
+under GPL version 2 or later.
  <p/>
 Patches and other related material can be submitted to the
 author
@@ -966,6 +975,8 @@ to this package.
   module and the userspace programs before mounting Cromfs volumes.
   You need Fuse version 2.5.2 or newer.
  </li>
+ <li>liblzo2-dev is recommended on i386 platforms.
+  If it is missing, mkcromfs will use a version shipped in the package.</li>
 </ul>
 
 ", 'links:1. Links' => "

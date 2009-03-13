@@ -1,21 +1,30 @@
-VERSION=1.5.7
+VERSION=1.5.8
 
 include Makefile.sets
+
+CPPDEBUG=-pipe -DNDEBUG
 
 #OPTIM += -O0 -fno-inline -g
 # -fmudflap
 #LDOPTS += -fmudflap -lmudflap
 
-OPTIM += -O3
+#OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-#OPTIM += -O3 -g -fno-inline -finline-level=0 -debug extended
+#OPTIM += -O3 -g -fno-inline -inline-level=0 -debug extended
+#OPTIM += -O2 -g -fno-inline -inline-level=0 -debug extended
+#OPTIM += -O3 -g 
+#OPTIM += -O0 -g -debug all -inline-level=0
 #OPTIM += -O0 -g -fno-inline
+#OPTIM += -g
 # -ftree-vectorize 
 
 #OPTIM += -O1 -pg -g
 #LDOPTS += -pg
 
-CPPFLAGS += -I../lib -I..
+LDOPTS += $(OPTIM)
+
+
+CPPFLAGS += -I../lib -I.. -I../lib/lzo
 
 # multithread versions of lzma -- Windows only
 #CPPFLAGS += -DCOMPRESS_MF_MT
@@ -37,11 +46,14 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/longfilewrite.o \
 	   ../lib/cromfs-inodefun.o \
 	   ../lib/cromfs-directoryfun.o \
-	   ../lib/cromfs-blockindex.o \
 	   ../lib/cromfs-fblockfun.o \
 	   ../lib/cromfs-blockifier.o \
+	   ../lib/cromfs-hashmap_lzo.o \
+	   ../lib/cromfs-hashmap_lzo_sparse.o \
+	   $(MKCROMFS_LZO_OBJ) \
 	   ../lib/boyermoore.o \
-	   ../lib/minilzo.o
+	   ../lib/stringsearchutil.o
+
 
 OBJS_UN += unmkcromfs.o ../cromfs.o \
 	   ../lib/fadvise.o \
@@ -69,13 +81,18 @@ cvcromfs: $(OBJS_CV)
 lzmatest: lzmatest.o $(OBJS_LZMA)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
+tags: FORCE
+	make -C .. tags
 .libdepend: ../lib/.depend
 	perl -pe 's@([-+a-zA-Z0-9._/]+)@../lib/$$1@g' < "$<" > "$@"
-../lib/.depend:
+../lib/.depend: FORCE
 	make -C ../lib depend
 include depfun.mak
 include .libdepend
 
-clean:
-	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV)
+clean: FORCE
+	rm -f $(OBJS_MK) $(OBJS_UN) $(OBJS_CV) *.pchi
 	rm -f mkcromfs unmkcromfs cvcromfs
+	rm -f ../lib/*.o ../lib/lzo/*.o ../lib/lzma/C/*.o
+
+FORCE: ;

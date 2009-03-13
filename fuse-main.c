@@ -1,5 +1,5 @@
 /*
-cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL3
 
 main.c: The main module. This provides the bindings for the cromfs

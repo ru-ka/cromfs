@@ -2,7 +2,7 @@
 #define bqtCromfsDefsHH
 
 /*
-cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL
 
 cromfs-defs.hh: The structures used by the cromfs filesystem engine

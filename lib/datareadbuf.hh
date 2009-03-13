@@ -16,10 +16,12 @@ public:
 
     void AssignRefFrom(const unsigned char* d, unsigned)
     {
+        if(Buffer && State==Allocated) delete[] Buffer;
         Buffer = d; State = None;
     }
     void AssignCopyFrom(const unsigned char* d, unsigned size)
     {
+        if(Buffer && State==Allocated) delete[] Buffer;
         unsigned char* p = new unsigned char[size];
         std::memcpy(p, d, size);
         State = Allocated;
@@ -27,6 +29,7 @@ public:
     }
     int LoadFrom(int fd, uint_fast32_t size, uint_fast64_t pos = 0)
     {
+        if(Buffer && State==Allocated) delete[] Buffer;
         unsigned char* pp = new unsigned char[size];
         int res = pread64(fd, pp, size, pos);
         Buffer = pp;

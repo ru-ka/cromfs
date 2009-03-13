@@ -1,0 +1,11 @@
+This directory contains example scripts that can be used to create
+optimized cromfs archives of various repositories of ROM images.
+
+
+It is recommended to use the Screen program to create a detachable terminal
+where to run the scripts, and then to monitor it in another terminal using
+the "watch" program in the way described in ../progress_monitor/ .
+This way, if you accidentally close a terminal or two, it won't terminate
+mkcromfs. Using the progress monitor, or simply with "tail <logfile>",
+or attaching the screen, you can see where the progress is going.
+

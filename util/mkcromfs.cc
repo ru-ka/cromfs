@@ -1,8 +1,8 @@
-#define _LARGEFILE64_SOURCE
 #define __STDC_CONSTANT_MACROS
 
 #include "cromfs-defs.hh"
 #include "threadfun.hh"
+#include "assert++.hh"
 
 #include <vector>
 #include <cstdio>
@@ -58,13 +58,9 @@ uint_fast32_t OverlapGranularity = 1;
 bool MayPackBlocks = true;
 bool MayAutochooseBlocknumSize = true;
 bool MaySuggestDecompression = true;
+std::string ReuseListFile;
 
-// Number of blockifys to keep in buffer, hoping for optimal sorting
-size_t BlockifyAmount1 = 64;
-// Number of blockifys to add to buffer at once
-size_t BlockifyAmount2 = 1;
-// 0 = nope. 1 = yep, 2 = use TSP, 3 = yes, and try combinations too
-int TryOptimalOrganization = 0;
+BlockHashingMethods BlockHashing_Method = BlockHashing_All;
 
 
 long FSIZE = 2097152;
@@ -110,30 +106,43 @@ static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
     uint_fast64_t& compressed_total,
     uint_fast64_t& uncompressed_total)
 {
-    std::vector<unsigned char> fblock_lzma, fblock_raw;
-
-    fblock_raw = fblock_lzma = fblock.get_raw();
+    DataReadBuffer buf; uint_fast32_t fblock_rawlength;
+    fblock.InitDataReadBuffer(buf, fblock_rawlength);
 
     char why[512];std::sprintf(why,"fblock %u", (unsigned)fblocknum);
-    fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, fblock_lzma, why);
+    std::vector<unsigned char>
+        fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, buf.Buffer,fblock_rawlength, why);
+
+    if(false)
+    {
+        bool is_ok = true;
+        LZMADeCompress(fblock_lzma, is_ok);
+        if(!is_ok)
+        {
+            std::fprintf(stderr,
+                "Error: LZMA compression produced invalid LZMA data!\n"
+                "       This should never happen. Sorry.\n");
+        }
+    }
+
     fblock.put_compressed(fblock_lzma);
 
     if(DisplayEndProcess)
     {
         std::printf(" [%d] %u -> %u\n",
             (int)fblocknum,
-            (unsigned)fblock_raw.size(),
+            (unsigned)fblock_rawlength,
             (unsigned)fblock_lzma.size());
         std::fflush(stdout);
     }
 
   #pragma omp atomic
-    uncompressed_total += fblock_raw.size();
+    uncompressed_total += fblock_rawlength;
   #pragma omp atomic
     compressed_total   += fblock_lzma.size();
 }
 
-static long CalcBSIZEfor(const std::string& pathfn)
+long CalcBSIZEfor(const std::string& pathfn)
 {
     long result = BSIZE;
 
@@ -165,23 +174,25 @@ namespace cromfs_creator
         std::string pathname; // Source path
         std::string name;     // Just the entry name
         struct stat64 st;
+        /*
         char sortkey;
+        */
 
-        size_t             num_blocks; // Number of blocks (for determining inode number)
+        uint_fast64_t      bytesize;   // Size in bytes (in case of a file or symlink)
         cromfs_inodenum_t* inonum;     // Where inode number will be written when known
 
         cromfs_dirinfo* dirinfo; // In case of a directory
         bool needs_blockify;
 
-        direntry() : pathname(),name(), st(),sortkey(), // -Weffc++
-            num_blocks(0),inonum(0), dirinfo(0), needs_blockify()
+        direntry() : pathname(),name(), st()/*,sortkey()*/, // -Weffc++
+            bytesize(0),inonum(0), dirinfo(0), needs_blockify()
         {
         }
 
         direntry(const direntry& b)
             : pathname(b.pathname), name(b.name),
-              st(b.st), sortkey(b.sortkey),
-              num_blocks(b.num_blocks),
+              st(b.st), /*sortkey(b.sortkey),*/
+              bytesize(b.bytesize),
               inonum(b.inonum), dirinfo(b.dirinfo),
               needs_blockify(b.needs_blockify) // -Weffc++
         {
@@ -196,8 +207,8 @@ namespace cromfs_creator
             if(&b != this)
             {
                 pathname=b.pathname; name=b.name;
-                st=b.st; sortkey=b.sortkey;
-                num_blocks=b.num_blocks;
+                st=b.st; /*sortkey=b.sortkey;*/
+                bytesize=b.bytesize;
                 inonum=b.inonum; dirinfo=b.dirinfo;
                 needs_blockify=b.needs_blockify;
             }
@@ -205,7 +216,7 @@ namespace cromfs_creator
         }
 
         bool CompareSortKey(const direntry& b) const
-            { if(sortkey != b.sortkey) return sortkey < b.sortkey;
+            { /*if(sortkey != b.sortkey) return sortkey < b.sortkey;*/
               //return *inonum < *b.inonum;
               if(SortByFilename) return name < b.name;
               /*return std::lexicographical_compare(
@@ -218,20 +229,57 @@ namespace cromfs_creator
             { return pathname < b.pathname;
             }
     };
-    typedef std::vector<direntry> dircollection;
+
+#if defined(HAS_READDIR_R) && defined(_OPENMP) && (_OPENMP >= 200805)
+ /*
+  * The different recursion levels of WalkDir_Recursive()
+  * can be multitasked, if the following conditions are met:
+  *
+  *  readdir_r is defined (readdir is not thread-safe)
+  *  We have got OPENMP 3.0 (2.5 does not have "task")
+  */
+
+ #define USE_RECURSIVE_OMP_READDIR
+#else
+ #undef USE_RECURSIVE_OMP_READDIR
+#endif
+
+    class dircollection: public std::vector<direntry>
+    {
+    public:
+        MutexType lock;
+    };
 
     /* Reads the contents of one directory. Put rudimentary dircollection
-     * entries into collection. Notably, num_blocks won't be filled yet.
+     * entries into collection.
      */
     static void CollectOneDir(const std::string& path, dircollection& collection)
     {
+        std::vector<std::string> dnames;
+
+      {
         DIR* dir = opendir(path.c_str());
         if(!dir) { std::perror(path.c_str()); return; }
+
+    #ifdef USE_RECURSIVE_OMP_READDIR
+      {
+        int dirent_len = offsetof(dirent, d_name) + pathconf(path.c_str(), _PC_NAME_MAX) + 1;
+        std::vector<char> dirent_buf(dirent_len);
+        dirent* dent = 0;
+        while(readdir_r(dir, (dirent*)&dirent_buf[0], &dent)==0 && dent)
+            dnames.push_back(dent->d_name);
+      }
+    #else
+        while(dirent* dent = readdir(dir)) // Note: readdir is not re-entrant
+            dnames.push_back(dent->d_name);
+    #endif
+        closedir(dir);
+      } // scope for dir
 
         direntry ent;
         /* Fields common in all entries: */
         ent.inonum     = 0;
-        ent.num_blocks = 0;
+        ent.bytesize   = 0;
         ent.dirinfo    = 0;
         /* These fields will be set:
          * - pathname
@@ -240,15 +288,8 @@ namespace cromfs_creator
          * - sortkey
          */
         /* And these won't just yet:
-         * - num_blocks
          * - needs_blockify
          */
-        std::vector<std::string> dnames;
-        while(dirent* dent = readdir(dir)) // Note: readdir is not re-entrant
-            dnames.push_back(dent->d_name);
-        closedir(dir);
-
-        MutexType CollectionLock;
 
         // using "long" here becase OpenMP 2.5 requires a signed iteration variable
         #pragma omp parallel for firstprivate(ent) schedule(guided)
@@ -269,19 +310,19 @@ namespace cromfs_creator
                 std::perror(ent.pathname.c_str());
                 continue;
             }
-
+            /*
             if(S_ISLNK(ent.st.st_mode)) ent.sortkey = DirParseOrder.Link;
             else if(S_ISDIR(ent.st.st_mode)) ent.sortkey = DirParseOrder.Dir;
             else ent.sortkey = DirParseOrder.Other;
-
-            ScopedLock lck(CollectionLock);
+            */
+            ScopedLock lck(collection.lock);
             collection.push_back(ent);
         }
     }
 
     /* Reads the contents of a subtree. It will fill in just
      * one field that CollectOneDir() did not do:
-     * - num_blocks
+     * - bytesize
      *
      * It is done here because for directories, it cannot
      * be done before scanning the subdirectory contents.
@@ -298,17 +339,35 @@ namespace cromfs_creator
         // Step 1: Scan the contents of this directory.
         //         Ignore entries which were not wanted (through MatchFile).
 
+    #ifdef USE_RECURSIVE_OMP_READDIR
+        dircollection tmpcollection;
+        CollectOneDir(path, tmpcollection);
+
+        collection.lock.Lock();
+        const size_t collection_begin_pos = collection.size();
+        collection.insert(collection.end(),
+                          tmpcollection.begin(),
+                          tmpcollection.end());
+        const size_t collection_end_pos = collection.size();
+        collection.lock.Unlock();
+    #else
         const size_t collection_begin_pos = collection.size();
         CollectOneDir(path, collection);
         const size_t collection_end_pos = collection.size();
-
+    #endif
         // Step 2: Sort the contents of the directory according
         //         to the filename.
-
-        MAYBE_PARALLEL_NS::stable_sort(
+        // This must be done so that a directory gets the inode
+        // numbers assigned in their name order.
+        {
+    #ifdef USE_RECURSIVE_OMP_READDIR
+        ScopedLock lck(collection.lock);
+    #endif
+        MAYBE_PARALLEL_NS::sort(
             &collection[collection_begin_pos],
             &collection[collection_end_pos],
             std::mem_fun_ref(&direntry::CompareName));
+        }
 
         // Step 3: Read subdirectories and calculate the number of
         //         blocks. Also assign the target for the inode number.
@@ -319,9 +378,19 @@ namespace cromfs_creator
         // span of inode numbers.
         for(size_t p=collection_begin_pos; p<collection_end_pos; ++p)
         {
+        #ifdef USE_RECURSIVE_OMP_READDIR
+          #pragma omp task
+          {
+        #endif
             uint_fast64_t bytesize = 0;
             if(true) // scope
             {
+                #ifdef USE_RECURSIVE_OMP_READDIR
+                // We don't want our references to collection[]
+                // to be moved to other location in RAM unexpectedly.
+                ScopedLock lck(collection.lock);
+                #endif
+
                 /* Scan subdirectory, if one exists. */
                 direntry& ent = collection[p];
                 const struct stat64& st = ent.st;
@@ -336,13 +405,18 @@ namespace cromfs_creator
                     // the collection gets reallocated.
                     std::string path_copy = ent.pathname;
 
+                #ifdef USE_RECURSIVE_OMP_READDIR
+                    lck.Unlock();
+                #endif
+
                     // Note: If you use OpenMP 3.0 "task" here, you will
                     //       have to change readdir() into readdir_r().
                     WalkDir_Recursive(path_copy, collection, subdir);
-
+                  /*
                     // If it was a directory, take the file size from
                     // the calculated cromfs directory size instead.
                     bytesize = calc_encoded_directory_size(subdir);
+                  */
                 }
             }
             // After the recursive call to WalkDir_Recursive(), the
@@ -351,8 +425,12 @@ namespace cromfs_creator
             // a new reference and abandon the current one.
             if(true) // scope
             {
+            #ifdef USE_RECURSIVE_OMP_READDIR
+                ScopedLock lck(collection.lock);
+            #endif
+
                 direntry& ent = collection[p];
-                ent.num_blocks = CalcSizeInBlocks(bytesize, CalcBSIZEfor(ent.pathname));
+                ent.bytesize   = bytesize;
                 /* This inserts the entry in the directory
                  * listing, assigns it a dummy inode number (which
                  * will be filled later), and remembers the pointer
@@ -360,7 +438,10 @@ namespace cromfs_creator
                  */
                 ent.inonum = &(result_dirinfo[ent.name] = 0);
             }
-        }
+        #ifdef USE_RECURSIVE_OMP_READDIR
+          } // omp task
+        #endif
+        } // for collection
     }
 
     /* Scans some directory and schedules all the entries
@@ -408,13 +489,24 @@ namespace cromfs_creator
         */
         dircollection collection;
         cromfs_dirinfo root_dirinfo;
+    #ifdef USE_RECURSIVE_OMP_READDIR
+       #pragma omp parallel
+       {
+        #pragma omp single
+        {
+    #endif
         WalkDir_Recursive(path, collection, root_dirinfo); // Step 1.
+    #ifdef USE_RECURSIVE_OMP_READDIR
+       } // omp single
+      } // omp parallel
+    #endif
 
         uint_fast64_t inotab_size = inotab.size(); // Step 2.
 
         if(true) /* scope for hardlink_map */
         {
             hardlinkmap_t hardlink_map;
+            // this is a non-threading context.
             for(size_t p=0; p<collection.size(); ++p)
             {
                 direntry& ent = collection[p];
@@ -443,9 +535,13 @@ namespace cromfs_creator
                 // Although the inode was not yet really created, we will
                 // simulate that it was, in order to be able to create new
                 // inode numbers
-                inotab_size += INODE_SIZE_BYTES(ent.num_blocks);
+                if(S_ISDIR(ent.st.st_mode))
+                    ent.bytesize = calc_encoded_directory_size(*ent.dirinfo);
+                uint_fast64_t num_blocks = CalcSizeInBlocks(ent.bytesize, CalcBSIZEfor(ent.pathname));
+
+                inotab_size += INODE_SIZE_BYTES(num_blocks);
                 // Ensure the inotab tail is 4-aligned.
-                inotab_size = (inotab_size + 3) & ~3;
+                inotab_size = (inotab_size + 3UL) & ~3UL;
             }
         }
 
@@ -456,12 +552,16 @@ namespace cromfs_creator
          * sort the entry list in the order in which we want to
          * blockify it.
          */
-
+        /*
         MAYBE_PARALLEL_NS::stable_sort(
             collection.begin(),
             collection.end(),
             std::mem_fun_ref(&direntry::CompareSortKey)); // Step 3.
+        */
 
+        MutexType blockify_lock;
+
+        #pragma omp parallel for schedule(guided)
         for(size_t p=0; p<collection.size(); ++p) // Step 4.
         {
             direntry& ent = collection[p];
@@ -477,14 +577,30 @@ namespace cromfs_creator
                 continue;
             }
 
+            /* Inode offset in inotab */
+            const uint_fast32_t block_size = CalcBSIZEfor(ent.pathname);
+            const uint_fast64_t inotab_offset = GetInodeOffset(inonum);
+            const uint_fast32_t num_blocks = CalcSizeInBlocks(ent.bytesize, block_size);
+
             if(DisplayFiles)
             {
-                std::printf("%s ... inode %ld\n", pathname.c_str(),
-                    (long)inonum);
+                std::printf(
+                    "%s ... inode %ld. Size %llu"
+                #ifndef NDEBUG
+                    ", Spans from %p..%p"
+                #endif
+                    "\n",
+                    pathname.c_str(),
+                    (long)inonum,
+                    (unsigned long long) ent.bytesize
+                #ifndef NDEBUG
+                    ,&inotab[inotab_offset],
+                    &inotab[inotab_offset + INODE_SIZE_BYTES(num_blocks)]
+                #endif
+                );
+                std::fflush(stdout);
             }
 
-            /* Inode offset in inotab */
-            const uint_fast64_t inotab_offset = GetInodeOffset(inonum);
 
             /* Create inode */
             cromfs_inode_internal inode;
@@ -496,7 +612,7 @@ namespace cromfs_creator
             inode.rdev     = 0;
             inode.uid      = st.st_uid;
             inode.gid      = st.st_gid;
-            inode.blocksize = CalcBSIZEfor(pathname);
+            inode.blocksize = block_size;
 
             if(S_ISDIR(st.st_mode))
             {
@@ -511,12 +627,14 @@ namespace cromfs_creator
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
+
+                ScopedLock lck(blockify_lock);
                 blockifier.ScheduleBlockify(
                     datasrc,
                     DataClassOrder.Directory,
                     &inotab[inotab_offset + headersize],
                     inode.blocksize);
-
+                // If you remove blockify_lock, make this atomic.
                 bytes_of_files += inode.bytesize;
             }
             else if(S_ISLNK(st.st_mode))
@@ -531,12 +649,14 @@ namespace cromfs_creator
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
+
+                ScopedLock lck(blockify_lock);
                 blockifier.ScheduleBlockify(
                     datasrc,
                     DataClassOrder.Symlink,
                     &inotab[inotab_offset + headersize],
                     inode.blocksize);
-
+                // If you remove blockify_lock, make this atomic.
                 bytes_of_files += inode.bytesize;
             }
             else if(S_ISREG(st.st_mode))
@@ -546,18 +666,26 @@ namespace cromfs_creator
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
+
+                ScopedLock lck(blockify_lock);
                 blockifier.ScheduleBlockify(
                     datasrc,
                     DataClassOrder.File,
                     &inotab[inotab_offset + headersize],
                     inode.blocksize);
-
+                // If you remove blockify_lock, make this atomic.
                 bytes_of_files += inode.bytesize;
             }
             else if(S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode))
             {
                 inode.rdev = st.st_rdev;
             }
+
+            assertbegin();
+            assert4var(num_blocks, inode.blocklist.size(), ent.bytesize, inode.bytesize);
+            assert(num_blocks   == inode.blocklist.size());
+            assert(ent.bytesize == inode.bytesize);
+            assertflush();
 
             put_inode(&inotab[inotab_offset], inode, storage_opts);
         }
@@ -624,11 +752,6 @@ namespace cromfs_creator
                         blockifier
                       );
 
-                if(DisplayFiles)
-                {
-                    std::printf("Paths scanned, now blockifying\n");
-                }
-
                 cromfs_inode_internal root_inode;
                 root_inode.mode  = S_IFDIR | 0555;
                 root_inode.time  = time(NULL);
@@ -658,8 +781,18 @@ namespace cromfs_creator
                     &raw_root_inode[headersize],
                     root_inode.blocksize);
 
-                // blockify rootdir, write block numbers in raw_root_inode.
-                blockifier.FlushBlockifyRequests();
+                if(DisplayFiles)
+                {
+                    std::printf("Paths scanned, now blockifying. Inotab size will be %s.\n",
+                        ReportSize(inotab.size()).c_str());
+                }
+
+                // blockify all files&dirs, write block numbers in raw_root_inode.
+                std::printf("Inotab spans %p..%p\n",
+                    &inotab[0], &inotab[inotab.size()]);
+                std::printf("Root inode spans %p..%p\n",
+                    &raw_root_inode[headersize], &raw_root_inode[raw_root_inode.size()]);
+                blockifier.FlushBlockifyRequests("Files and directories");
 
                 if(DisplayEndProcess)
                     printf("Compressing raw rootdir inode (%s)\n",
@@ -687,7 +820,7 @@ namespace cromfs_creator
                  */
 
                 datasource_t* datasrc =
-                    new datasource_vector(inotab, "inotab");
+                    new datasource_vector_ref(inotab, "INOTAB");
 
                 PutInodeSize(inotab_inode, datasrc->size());
 
@@ -708,7 +841,9 @@ namespace cromfs_creator
                     inotab_inode.blocksize);
 
                 // blockify inotab, write block numbers in raw_inotab_inode.
-                blockifier.FlushBlockifyRequests();
+                std::printf("Inotab inode spans %p..%p\n",
+                    &raw_inotab_inode[headersize], &raw_inotab_inode[raw_inotab_inode.size()]);
+                blockifier.FlushBlockifyRequests("INOTAB");
 
                 blockifier.EnablePackedBlocksIfPossible();
 
@@ -741,8 +876,8 @@ namespace cromfs_creator
             unsigned onesize = DATALOCATOR_SIZE_BYTES();
             if(DisplayEndProcess)
             {
-                std::printf("Compressing %u block records (%u bytes each)...",
-                    (unsigned)blocks.size(), onesize);
+                std::printf("Compressing %u block records (%u bytes each, total %s)\n",
+                    (unsigned)blocks.size(), onesize, ReportSize(blocks.size() * onesize).c_str());
                 fflush(stdout);
             }
 
@@ -828,8 +963,6 @@ namespace cromfs_creator
         #pragma omp section
         { SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs); }
       }
-        lseek64(out_fd, sblock.fblktab_offs, SEEK_SET);
-
         if(DisplayEndProcess)
         {
             std::printf("Compressing and writing %u fblocks...\n",
@@ -860,18 +993,21 @@ namespace cromfs_creator
         }
       #endif
 
+        uint_fast64_t fblk_offset = sblock.fblktab_offs;
+
         /* Note: Using "long" for loop iteration variable, because OpenMP
          * requires the loop iteration variable to be of _signed_ type,
          * and cromfs_fblocknum_t is unsigned.
          */
+
       #pragma omp parallel for ordered schedule(dynamic) \
             reduction(+:compressed_total) \
             reduction(+:uncompressed_total)
         for(long/*cromfs_fblocknum_t*/ fblocknum=0; fblocknum<(long)fblocks.size(); ++fblocknum)
         {
-      #ifdef _OPENMP
-          omp_set_num_threads(backup_max_threads);
-      #endif
+          #ifdef _OPENMP
+            omp_set_num_threads(backup_max_threads);
+          #endif
 
             mkcromfs_fblock& fblock = fblocks[fblocknum];
 
@@ -882,13 +1018,29 @@ namespace cromfs_creator
           #pragma omp ordered
           {
             const std::vector<unsigned char> fblock_lzma = fblock.get_compressed();
+            if(true)
+            {
+                bool is_ok = true;
+                LZMADeCompress(fblock_lzma, is_ok);
+                if(!is_ok)
+                {
+                    std::fprintf(stderr,
+                        "Error: Compressed fblock %ld ended up being invalid LZMA data!\n"
+                        "       This should never happen. Sorry.\n",
+                        fblocknum);
+                    terminate_for = true;
+                  #pragma omp flush(terminate_for)
+                    goto next_for;
+                }
+            }
 
-            { char Buf[64];
+            { unsigned char Buf[64];
               W32(Buf, fblock_lzma.size());
-              write(out_fd, Buf, 4); }
+              SparseWrite(out_fd, Buf, 4, fblk_offset);
+              fblk_offset += 4;
+            }
 
-            const uint_fast64_t pos = lseek64(out_fd, 0, SEEK_CUR);
-            SparseWrite(out_fd, &fblock_lzma[0], fblock_lzma.size(), pos);
+            SparseWrite(out_fd, &fblock_lzma[0], fblock_lzma.size(), fblk_offset);
 
             if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
             {
@@ -905,11 +1057,12 @@ namespace cromfs_creator
                   #pragma omp flush(terminate_for)
                     goto next_for;
                 }
-                lseek64(out_fd, pos + FSIZE, SEEK_SET);
+
+                fblk_offset += FSIZE;
             }
             else
             {
-                lseek64(out_fd, pos + fblock_lzma.size(), SEEK_SET);
+                fblk_offset += fblock_lzma.size();
             }
 
             std::fflush(stdout);
@@ -919,7 +1072,9 @@ namespace cromfs_creator
             // with --finish-interrupted is possible.
 
             fdatasync(out_fd);
-            fblock.Delete();
+            fblock.Close();
+            //fblock.Delete();
+            std::printf("You may now delete %s if you want\n", fblock.getfn().c_str());
           next_for:;
           }
         }
@@ -930,11 +1085,11 @@ namespace cromfs_creator
 
         if(terminate_for) return -1;
 
-        ftruncate64(out_fd, lseek64(out_fd, 0, SEEK_CUR));
+        ftruncate64(out_fd, fblk_offset);
 
         if(DisplayEndProcess)
         {
-            uint_fast64_t file_size = lseek64(out_fd, 0, SEEK_CUR);
+            uint_fast64_t file_size = fblk_offset;
 
             std::printf(
                 "\n%u fblocks were written: %s = %.2f %% of %s\n",
@@ -974,8 +1129,9 @@ namespace cromfs_creator
         /* Note: This loop cannot be made parallel, because each loop
          * iteration requires knowing the value of fblock_pos, and that
          * value is updated on the previous loop.
-         * Not even the "ordered" OpenMP clause helps this.
+         * Not even the "ordered" OpenMP clause can help this.
          */
+        bool error = false;
         for(size_t fblocknum=0; /*fblocknum<max_num_fblocks*/; ++fblocknum)
         {
             std::printf("checking the state of fblock %u... (supposedly at file position 0x%X)\n",
@@ -991,14 +1147,16 @@ namespace cromfs_creator
 
                 LongFileRead(out_fd, fblock_pos+4, fblock_lzma_size, &fblockdata[0]);
 
-                std::printf(" fblock %u appears to be in the file already\n", (int)fblocknum);
+                std::printf(" fblock %u appears to be in the file already (%lu bytes)\n",
+                    (int)fblocknum, (unsigned long)fblockdata.size());
 
                 bool is_ok = true;
 
-                if(fblocknum >= 190) LZMADeCompress(fblockdata, is_ok);
+                /*if(fblocknum >= 190)*/ LZMADeCompress(fblockdata, is_ok);
                 if(!is_ok)
                 {
                     std::printf(" but it is not valid LZMA data!\n");
+                    error = true;
                     throw EINVAL;
                 }
 
@@ -1061,7 +1219,7 @@ namespace cromfs_creator
             }
         }
         std::printf("Done\n");
-        ftruncate64(out_fd, fblock_pos);
+        if(!error) ftruncate64(out_fd, fblock_pos);
 
         return 0;
     }
@@ -1335,6 +1493,7 @@ int main(int argc, char** argv)
             {"blockifybufferincrement", 1,0,3002},
             {"blockifyoptimizemethod",  1,0,3003},
             {"blockifyoptimisemethod",  1,0,3003},
+            {"blockindexmethod",        1,0,3004},
             {"32bitblocknums",          0,0,'4'},
             {"24bitblocknums",          0,0,'3'},
             {"16bitblocknums",          0,0,'2'},
@@ -1350,6 +1509,7 @@ int main(int argc, char** argv)
             {"overlapgranularity",      1,0,'g'},
 
             {"finish-interrupted",      1,0,7001},
+            {"resume-blockify",         1,0,7002},
             {0,0,0,0}
         };
         int c = getopt_long(argc, argv, "hVvf:b:B:er:s:a:A:c:qx:X:lS:432g:", long_options, &option_index);
@@ -1364,7 +1524,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "mkcromfs v"VERSION" - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "mkcromfs v"VERSION" - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Usage: mkcromfs [<options>] <input_path> <target_image>\n"
                     "\n"
@@ -1411,7 +1571,13 @@ int main(int argc, char** argv)
                     "     reason mkcromfs was interrupted during the final phase of\n"
                     "     LZMA-compressing fblocks (due to blackout for example).\n"
                     "     Example:\n"
-                    "       mkcromfs --finish-interrupted '/path/to/fblock_6207-' out.cromfs\n"
+                    "       mkcromfs --finish-interrupted '/path/to/fblock_6207-' out.cromfs files...\n"
+                    " --resume-blockify <resumefile_prefix>\n"
+                    "     Use this option if you want the possibility to save the\n"
+                    "     progress after the \"finding identical blocks\" phase\n"
+                    "     or to load a previously saved progress.\n"
+                    "     Example:\n"
+                    "       mkcromfs --resume-blockify '/path/to/resume-' out.cromfs files...\n"
                     "\n"
                     "Filesystem parameters:\n"
                     " --fsize, -f <size>\n"
@@ -1475,6 +1641,8 @@ int main(int argc, char** argv)
                     " --autoindexperiod, -A <value>\n"
                     "     Controls how often a new automatic index will be added in an fblock.\n"
                     "     For example, value 32 tells that a new index will be added every 32 bytes.\n"
+                    "     Value of 0 disables autoindex alltogether.\n"
+                    "     (Overlaps still cause predictive autoindexing to happen.)\n"
                     "     Default: 256\n"
                     " --autoindexratio, -a <value>\n"
                     "     Deprecated option.\n"
@@ -1500,24 +1668,44 @@ int main(int argc, char** argv)
                     "     try every possible option. Beware it will consume lots of time.\n"
                     "     \"--lzmabits auto\" is a lighter alternative to \"--lzmabits full\",\n"
                     "     and enabled by default.\n"
-                    " --blockifybufferincrement <value>\n"
-                    "     Number of blocks (of bsize) to handle simultaneously (default: 1)\n"
-                    " --blockifybufferlength <value>\n"
-                    "     Number of blocks to keep in a pending buffer (default: 64)\n"
-                    "     Increasing this number will increase memory and CPU usage, and\n"
-                    "     may sometimes yield a better compression, sometimes worse.\n"
-                    "     Use 0 to disable.\n"
-                    " --blockifyoptimizemethod <value>\n"
-                    "     Selects method for selecting blocks to \"blockify\"\n"
-                    "     0 (default) = straightforward selection\n"
-                    "     1 = selects the pending block which gets largest overlap\n"
-                    "     2 = selects the order of pending blocks which yields shortest superstring\n"
-                    "     3 = selects the pending block which enables best compression for others\n"
-                    "     This feature is under development. For now, 0 is usually best.\n"
                     " --blockifyorder <value>\n"
                     "     Specifies the priorities for blockifying different types of data\n"
                     "     Default: dir=1,link=2,file=3,inotab=4\n"
                     "     Changing it may affect compressibility.\n"
+                    " --blockindexmethod <value>\n"
+                    "     Controls the way how identical blocks are recognized.\n"
+                    "     Four possible methods exist:\n"
+                    "       --blockindexmethod none\n"
+                    "            Blocks are not indexed. Fastest, uses least memory,\n"
+                    "            but also neglects most of cromfs's power.\n"
+                    "       --blockindexmethod all (default)\n"
+                    "            All blocks are indexed before blockifying.\n"
+                    "            If your filesystem is large (millions of blocks),\n"
+                    "            note that the index construction may require\n"
+                    "            excessive amounts of virtual memory.\n"
+                    "       --blockindexmethod all2\n"
+                    "            A version of \"all\" that uses an extra 512 MiB\n"
+                    "            of virtual memory to avoid testing unique hashes.\n"
+                    "       --blockindexmethod prepass\n"
+                    "            This option uses an extra 1024 MiB of virtual memory\n"
+                    "            before running the \"all\" blocks indexing in the\n"
+                    "            hopes of consuming less virtual memory overall.\n"
+                    "            Use it if \"all2\" consumes way too much virtual memory.\n"
+                    "       --blockindexmethod collect\n"
+                    "            All blocks are hashed before blockifying.\n"
+                    "            This requires a predictable amount of memory\n"
+                    "            (4 * block count bytes), but is considerably\n"
+                    "            slower than the \"all\" option.\n"
+                    "       --blockindexmethod collect2\n"
+                    "            A version of \"collect\" that uses an extra 512 MiB\n"
+                    "            of virtual memory to avoid testing unique hashes.\n"
+                    "       --blockindexmethod blanks\n"
+                    "            Only zero-filled blocks are indexed.\n"
+                    "            This parallels the \"sparse file\" optimization\n"
+                    "            that occurs in most compressing filesystems,\n"
+                    "            and requires relatively little virtual memory. It\n"
+                    "            neglects most of cromfs's power, though.\n"
+                    "            Use it if \"all2\" consumes too much virtual memory.\n"
                     " --nosortbyfilename\n"
                     "     Disables sorting by filename when blockifying. Use when\n"
                     "     you have made attempts to affect manually the order in which\n"
@@ -1630,9 +1818,9 @@ int main(int argc, char** argv)
             {
                 char* arg = optarg;
                 long val = strtol(arg, &arg, 10);
-                if(val < 1)
+                if(val < 0)
                 {
-                    std::fprintf(stderr, "mkcromfs: The minimum allowed autoindexperiod is 1. You gave %ld%s.\n", val, arg);
+                    std::fprintf(stderr, "mkcromfs: The minimum allowed autoindexperiod is 0. You gave %ld%s.\n", val, arg);
                     return -1;
                 }
                 AutoIndexPeriod = val;
@@ -1818,7 +2006,8 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: The parameter blockifybufferlength may not be negative. You gave %ld%s.\n", size,arg);
                     return -1;
                 }
-                BlockifyAmount1 = size;
+                //BlockifyAmount1 = size;
+                std::fprintf(stderr, "mkcromfs: --blockifybufferlength is obsolete and does not do anything.\n");
                 break;
             }
             case 3002: // blockifybufferincrement
@@ -1830,7 +2019,8 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: The parameter blockifybufferincrement may not be less than 1. You gave %ld%s.\n", size,arg);
                     return -1;
                 }
-                BlockifyAmount2 = size;
+                //BlockifyAmount2 = size;
+                std::fprintf(stderr, "mkcromfs: --blockifybufferincrement is obsolete and does not do anything.\n");
                 break;
             }
             case 3003: // blockifyoptimizemethod
@@ -1842,7 +2032,33 @@ int main(int argc, char** argv)
                     std::fprintf(stderr, "mkcromfs: Blockifyoptimizemethod may only be 0, 1, 2 or 3. You gave %ld%s.\n", size,arg);
                     return -1;
                 }
-                TryOptimalOrganization = size;
+                //TryOptimalOrganization = size;
+                std::fprintf(stderr, "mkcromfs: --blockifyoptimizemethod is obsolete and does not do anything.\n");
+                break;
+            }
+            case 3004: // blockindexmethod
+            {
+                char* arg = optarg;
+                if(!strcmp(arg, "all"))
+                    BlockHashing_Method = BlockHashing_All;
+                else if(!strcmp(arg, "all2"))
+                    BlockHashing_Method = BlockHashing_All_Speedup;
+                else if(!strcmp(arg, "prepass"))
+                    BlockHashing_Method = BlockHashing_All_Prepass;
+                else if(!strcmp(arg, "blanks")
+                     || !strcmp(arg, "blank"))
+                    BlockHashing_Method = BlockHashing_BlanksOnly;
+                else if(!strcmp(arg, "none"))
+                    BlockHashing_Method = BlockHashing_None;
+                else if(!strcmp(arg, "collect"))
+                    BlockHashing_Method = BlockHashing_Collect;
+                else if(!strcmp(arg, "collect2"))
+                    BlockHashing_Method = BlockHashing_Collect_Speedup;
+                else
+                {
+                    std::fprintf(stderr, "mkcromfs: Blockindexmethod may only be none, blanks, all, all2, prepass, collect or collect2. You gave %s.\n", arg);
+                    return -1;
+                }
                 break;
             }
             case 4003: // threads
@@ -1908,6 +2124,10 @@ int main(int argc, char** argv)
                     if(last_comma) break;
                     arg=comma+1;
                 }
+                if(c == 5002)
+                {
+                    std::fprintf(stderr, "mkcromfs: --dirparseorder is obsolete and does not do anything.\n");
+                }
                 break;
             }
             case 5003: // nosortbyfilename
@@ -1919,6 +2139,12 @@ int main(int argc, char** argv)
             {
                 char* arg = optarg;
                 resume_file_selection = arg;
+                break;
+            }
+            case 7002: // resume-blockify
+            {
+                char* arg = optarg;
+                ReuseListFile = arg;
                 break;
             }
         }
@@ -1962,16 +2188,18 @@ int main(int argc, char** argv)
     }
 
     if(AutoIndexRatio > 0)
+    {
         AutoIndexPeriod = BSIZE / AutoIndexRatio;
 
-    if(AutoIndexPeriod < 1)
-    {
-        std::fprintf(stderr,
-            "mkcromfs: Error: Your autoindexperiod %ld is smaller than 1.\n"
-            "  Cannot comply.\n", (long)AutoIndexPeriod);
-        return -1;
+        if(AutoIndexPeriod < 1)
+        {
+            std::fprintf(stderr,
+                "mkcromfs: Error: Your autoindexperiod %ld is smaller than 1.\n"
+                "  Cannot comply.\n", (long)AutoIndexPeriod);
+            return -1;
+        }
     }
-    if(AutoIndexPeriod <= 4)
+    if(AutoIndexPeriod > 0 && AutoIndexPeriod <= 4)
     {
         char Buf[256];
         if(AutoIndexPeriod == 1) std::sprintf(Buf, "for every possible byte");

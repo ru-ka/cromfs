@@ -1,4 +1,4 @@
-VERSION=1.5.7
+VERSION=1.5.8
 
 include Makefile.sets
 
@@ -8,7 +8,7 @@ include Makefile.sets
 
 OPTIM += -O3
 #OPTIM += -O1 -g -fno-inline
-CPPFLAGS += -pthread -I.. -I../lib
+CPPFLAGS += -I.. -I../lib -I../lib/lzo
 #OPTIM += -O1 -g
 # -ftree-vectorize 
 
@@ -19,7 +19,12 @@ CPPFLAGS += -pthread -I.. -I../lib
 #CPPFLAGS += -DCOMPRESS_MF_MT
 #CPPFLAGS += -DCOMPRESS_MT
 
+tags: FORCE
+	make -C .. tags
+
 include depfun.mak
 
-clean:
-	find -type d | while read d;do rm -f "$$d"/*.o;done
+clean: FORCE
+	find -type d | while read d;do rm -f  "$$d"/*.pchi "$$d"/*.o;done
+
+FORCE: ;

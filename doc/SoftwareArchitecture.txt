@@ -1,0 +1,192 @@
+Cromfs program structures -- a map to the source code
+
+cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL3
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+--------------------------------
+
+cromfs-driver (fuse) architecture:
+
+	fuse-main.c
+		Fuse dispatcher
+	fuse-ops.cc
+		The medium-level primitives used by fuse-main.c
+	cromfs.cc
+		The low-level cromfs functions used by fuse-ops.cc
+
+mkcromfs architecture:
+
+	util/mkcromfs.cc
+		The main program
+		Scans the paths
+		Creates the inodes
+		Assigns the blockifying tasks
+		Writes the filesystem
+	lib/cromfs-blockifier.cc
+		The blockifier
+		Entry points: ScheduleBlockify() and FlushBlockifyRequests()
+		FlushBlockifyRequests() does most of the work.
+		First step: Finds identical blocks (so they can be assigned
+		the same block number).	
+			Optional.
+			Possibly divided into two steps:
+				First, hash all blocks and figure out which
+				hashes occur more than once.
+				Secondly, for all those hashes that occurred
+				more than once, find out which blocks are
+				actually identical.
+		Second step:
+			Create fblocks -- blobs of binary data that minimally
+			contain all the blocks of each schedule item.
+			Three types of matches are recognized:
+				1. Identical block: This is simply a repeat of
+				   a block number. The "find identical blocks"
+				   step is mandatory for this to happen.
+				2. Autoindex match: This is a search on an index
+				   which tells where, in the fblocks, prehashed
+				   data can be found.
+				3. Fblock placement. Candidate fblocks are selected,
+				   and searched for a match on this block. Three
+				   possible outcomes are possible:
+				     A. Data identical to the block was found in
+				        an existing fblock. This is a "full overlap".
+				     B. The end of a fblock matched with the beginning
+				        of the block. This is a "partial overlap".
+				     C. No match was found. The block will be appended
+				        to a selected fblock, or to a new fblock.
+	lib/cromfs-blockindex.hh
+		The block index (used by the blockifier)
+		Block indexing is the most performance critical part of mkcromfs,
+		and it is expected to change in almost all releases. This contains
+		an API for indexing blocks and for finding matches from the index.
+
+unmkcromfs architecture:
+	
+	util/unmkcromfs.cc
+		The main program
+		Creates a cromfs filesystem driver
+		Reads the filesystem contents using the low-level cromfs functions
+	cromfs.cc
+		The low-level cromfs functions used by util/unmkcromfs.cc
+
+
+cvcromfs architecture:
+
+	util/cvcromfs.cc
+		The main program
+		Reads and writes cromfs images using very coarse level of control.
+		It does not know much about the cromfs image format; just about
+		which data sections are compressed and how they are denoted.
+		Does all work pretty much by itself, save for utility functions
+		such as LZMA compression lib/lzma.hh, file access
+		in lib/longfileread.hh and lib/longfilewrite.hh, and so on.
+
+General-purpose utility libraries:
+
+	newhash.cc, newhash.h
+		Fast 32-bit hash generation
+	append.cc, append.hh
+		Function AnalyzeAppend() which determines whether the
+		given "needle" is found in the haystack (data) fully
+		or partially submerged, or whether it should simply
+		be appended to it.
+	assert++.cc, assert++.hh
+		An assert() function that displays related variable
+		values if the assertion fails.
+	autodealloc.hh
+		Two template classes similar to std::auto_ptr, responsible
+		for automatically deallocating the given pointer at the end
+		of the scope.
+	boyermoore.cc, boyermoore.hh
+		Boyer-Moore string search algorithm (fast)
+	boyermooreneedle.hh
+		Since the Boyer-Moore string search algorithm requires
+		precalculating certain tables for the needle to be searched,
+		it is advantegous to save those tables if the same needle
+		is searched from multiple haystacks. Boyermooreneedle
+		encapsulates those tables and the searching operations.
+	datacache.hh
+		A template class for caching stuff and timeouting it.
+		Thread-safe.
+	datareadbuf.hh
+		An inline class that encapsulates data read contexts where
+		the data can either be acquired through a reference to another
+		memory area or by copying temporary data. Compared to allocating
+		a std::vector<unsigned char> every time, this saves resources
+		when the data can simply be a reference to e.g. mmap()'d file.
+	datasource.hh
+		datasource_t is a virtual base class for block-based access from streams.
+		The streams offered are "memory buffers" (vector), "memory references"
+		(vector ref), and "file readers" (file and file_name).
+	duffsdevice.hh
+		Preprocessor macroes that make implementing a duff's device for
+		a constant value of unrolling somewhat easier.
+	endian.hh
+		Encapsulates 8-bit, 16-bit, 24-bit, 32-bit and 64-bit integer
+		read/write access from memory buffers in an endianess-safe manner.
+	fadvise.cc, fadvise.hh
+		Encapsulates the posix_fadvise() and madvice() system calls that
+		can be used to finetune the operating system kernel's paging behavior.
+	fnmatch.cc, fnmatch.hh
+		File/pathname matching against given patterns.
+	fsballocator.hh
+		Fixed-size block allocator. Fast. Copyright Juha Nieminen.
+		Described in detail at: http://iki.fi/warp/FSBAllocator/
+	longfileread.hh
+		Encapsulates 64-bit file reading.
+	longfilewrite.cc, longfilewrite.hh
+		Encapsulates 64-bit file writing, possibly sparse.
+	lzma.cc, lzma.hh
+		Encapsulates LZMA compression and decompression. Contains also
+		a function that finds the optimal LZMA compression parameters
+		with a parabolic search.
+	mmapping.hh
+		Encapsulates 64-bit memory mapped file access.
+	range.hh, rangeset.hh, rangemultimap.hh,
+	range.tcc, rangeset.tcc, rangemultimap.tcc
+		Template classes for an efficient associative container
+		where the keys are numeric ranges.
+	simd.hh
+		Encapsulates the concept of 64-bit integers implemented either
+		through native 64-bit integers or the MMX registers on IA-32.
+	sparsewrite.cc, sparsewrite.hh
+		Functions regarding sparse files.
+	stringsearchutil.hh
+		The backwards_match_len() and ScanByte() functions used
+		by the Boyer-Moore string matcher, implemented as inline
+		functions.
+	threadfun*.hh
+		threadfun.hh encapsulates the concept of a mutex and
+		a scoped lock. Depending on system defines, different
+		implementations are compiled.
+	threadworkengine.tcc, threadworkengine.hh
+		The ThreadWorkEngine template object implements a method
+		to run searching-type tasks in a parallel manner.
+	lzo/lzo1x.h, lzo/*.c, lzo/*.ch
+		LZO1X compression and decompression. Copyright Markus Oberhumer.
+	lzma/C/LzmaDec.h, lzma/C/LzmaDec.c
+		LZMA decompression. Copyright Igor Pavlov.
+	lzma/C/LzmaEnc.h, lzma/C/LzmaEnc.c
+		LZMA compression. Copyright Igor Pavlov.
+		Always used through lzma.hh.
+
+Cromfs-specific utility libraries:
+	cromfs-inodefun.cc, cromfs-inodefun.hh
+		Functions concerning inodes.
+			Inode struct <-> Raw inode data
+			Calculating inode offsets and inode numbers
+			Calculating block counts for files
+	cromfs-directoryfun.cc, cromfs-directoryfun.hh
+		Functions concerning directories.
+		Encodes a cromfs_dirinfo struct into raw directory data.
+	cromfs-blockifier.cc, cromfs-blockifier.hh
+		The main workhorse of mkcromfs; it lives together with mkcromfs.
+	cromfs-blockindex.cc, cromfs-blockindex.hh
+		The main subcomponent of cromfs-blockifier: the block index.
+	cromfs-hashmap_*.*
+		Several different hash layer implementations for cromfs-blockindex.
+	cromfs-fblockfun.cc, cromfs-fblockfun.cc
+		The fblock storage engine for mkcromfs.
+	util.cc, util.hh
+		Functions for converting filesystem related numeric items
+		into textual strings.

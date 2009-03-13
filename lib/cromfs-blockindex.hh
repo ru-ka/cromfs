@@ -1,24 +1,17 @@
+#ifndef bqtCromfsBlockIndexHH
+#define bqtCromfsBlockIndexHH
+
 #include "../cromfs-defs.hh"
 
 #include <vector>
 #include <string>
 
-#include "fsballocator.hh"
-#include "staticallocator.hh"
-#include "rangeset.hh"
-
 #define NO_BLOCK   ((cromfs_blocknum_t)~UINT64_C(0))
 
-/* Methods for calculating the block hash (used to be CRC-32) */
-typedef uint_least32_t BlockIndexHashType;
-extern BlockIndexHashType
-    BlockIndexHashCalc(const unsigned char* buf, unsigned long size);
-
-
 /* Block index may contain two different types of things:
- *   crc32 -> cromfs_blocknum_t
+ *   index32 -> cromfs_blocknum_t
  *            (real index)
- *   crc32 -> cromfs_block_internal
+ *   index32 -> cromfs_block_internal
  *            (autoindex)
  *
  * The same data structure may serve both of these purposes.
@@ -29,94 +22,133 @@ extern BlockIndexHashType
  * However, we now use two separate indexes to conserve resources.
  */
 
-/* Index for reusable material */
-/* This structure should be optimized for minimal RAM usage,
- * though its access times should not be very slow either.
- * One important aspect in the design of this structure
- * is knowing you never need to delete anything from it.
- */
-class block_index_type
+template<typename Key, typename Value, typename layer>
+class block_index_stack
 {
+    // Vector items are made pointers so that
+    // index resizing will not cause copying.
+    // It is not a std::list because we still
+    // want random access.
+    std::vector<layer*> layers;
 public:
-    bool FindRealIndex(BlockIndexHashType crc, cromfs_blocknum_t& result,     size_t find_index) const;
-    bool FindAutoIndex(BlockIndexHashType crc, cromfs_block_internal& result, size_t find_index) const;
-
-    void AddRealIndex(BlockIndexHashType crc, cromfs_blocknum_t value);
-    void AddAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
-
-    void DelAutoIndex(BlockIndexHashType crc, const cromfs_block_internal& value);
-
-    bool EmergencyFreeSpace(bool Auto=true, bool Real=true);
-
+    size_t size, deleted;
 public:
-    block_index_type() : realindex(), autoindex() { Init(); }
+    block_index_stack();
+    ~block_index_stack() { Close(); }
+    void clear();
 
-    block_index_type(const block_index_type& b)
-        : realindex(b.realindex),
-          autoindex(b.autoindex)
-    {
-        Clone();
-    }
-    block_index_type& operator= (const block_index_type& b)
-    {
-        if(&b != this)
-        {
-            Close();
-            realindex = b.realindex;
-            autoindex = b.autoindex;
-            Clone();
-        }
-        return *this;
-    }
+    typedef size_t find_index_t;
+    bool Find(Key index, Value& result, find_index_t find_index) const;
+    void Add(Key index, const Value& value);
+    void Del(Key index, const Value& value);
 
-    ~block_index_type()
-    {
-        Close();
-    }
-
-    void clear()
-    {
-        Close();
-        realindex.clear();
-        autoindex.clear();
-    }
+    std::string GetStatistics() const;
 
 private:
-    void Init();
+    block_index_stack(const block_index_stack&);
+    block_index_stack& operator= (const block_index_stack& b);
+
+private:
     void Close();
-    void Clone();
-
-    template<typename T>
-    struct CompressedHashLayer
-    {
-        static const unsigned n_per_bucket = 0x10000;
-        static const unsigned n_buckets    = (UINT64_C(1) << 32) / n_per_bucket;
-        static const unsigned bucketsize   = n_per_bucket * sizeof(T);
-
-        rangeset<BlockIndexHashType, StaticAllocator<BlockIndexHashType> > hashbits;
-
-        std::vector<unsigned char> buckets[ n_buckets ];
-
-        CompressedHashLayer();
-
-        void extract(BlockIndexHashType crc, T& result)       const;
-        void     set(BlockIndexHashType crc, const T& value);
-        void   unset(BlockIndexHashType crc);
-    private:
-        std::vector<unsigned char> dirtybucket;
-        size_t dirtybucketno;
-        enum { none, ro, rw } dirtystate;
-
-        void flushdirty();
-        void load(size_t bucketno);
-    };
-    std::vector<CompressedHashLayer<cromfs_blocknum_t>     > realindex;
-    std::vector<CompressedHashLayer<cromfs_block_internal> > autoindex;
+    //void Clone();
 };
 
-/* This global pointer to block_index is required
- * so that cromfs-fblockfun.cc can call
- * the EmergencyFreeSpace() method across module
- * boundaries when necessary.
- */
-extern block_index_type* block_index_global;
+#include "cromfs-blockindex.tcc"
+
+#if 0 && (defined(_LP64) || defined(__LP64__))
+# include <utility>
+# include "rbtree.hh"
+# include "allocatornk.hh"
+
+template<typename Pair>
+struct Select1st
+{
+    typename Pair::first_type&       operator() (Pair& x) const { return x.first; }
+    const typename Pair::first_type& operator() (const Pair& x) const { return x.first; }
+};
+template<typename K>
+struct Less
+{
+    bool operator() (const K& a, const K& b) const { return a < b; }
+};
+#else
+# include <map>
+#endif
+# include "fsballocator.hh"
+
+template<typename K,typename V>
+class block_index_stack_simple : public
+#if 0 && (defined(_LP64) || defined(__LP64__))
+        RbTree<K,
+               std::pair<K, V>,
+               Select1st<std::pair<K,V> >,
+               Less<K>,
+               allocatorNk<int, FSBAllocator<int>, uint_least32_t>
+               //FSBAllocator<int>
+              >
+#else
+        std::multimap<K,V, std::less<K>,
+                      FSBAllocator<int>
+                     >
+#endif
+{
+#if 0 && (defined(_LP64) || defined(__LP64__))
+    typedef
+        RbTree<K,
+               std::pair<K, V>,
+               Select1st<std::pair<K,V> >,
+               Less<K>,
+               allocatorNk<int, FSBAllocator<int>, uint_least32_t>
+               //FSBAllocator<int>
+              > autoindex_base;
+#else
+    typedef std::multimap<K,V, std::less<K>,
+                          FSBAllocator<int>
+                         > autoindex_base;
+#endif
+public:
+    struct find_index_t
+    {
+        typename autoindex_base::const_iterator i;
+        bool first, last;
+
+        find_index_t() : i(), first(true), last(false) { }
+
+        find_index_t& operator++() { if(!last) ++i; first=false; return *this; }
+        find_index_t operator++(int) const { find_index_t res(*this); ++res; return res; }
+    };
+public:
+    block_index_stack_simple() : autoindex_base(), added(0), deleted(0) { }
+
+    void Del(K index, const V& b)
+    {
+        for(typename autoindex_base::iterator i = lower_bound(index);
+            i != autoindex_base::end() && i->first == index;
+            ++i)
+        {
+            if(i->second == b) { erase(i); ++deleted; break; }
+        }
+    }
+    void Add(K index, const V& b)
+    {
+        insert(std::make_pair(index, b));
+        ++added;
+    }
+    bool Find(K index, V& res, find_index_t& nmatch) const
+    {
+        if(nmatch.first)
+        {
+            nmatch.i     = lower_bound(index);
+            nmatch.first = false;
+        }
+        if(nmatch.i == autoindex_base::end()) { nmatch.last = true; return false; }
+        if(nmatch.i->first != index) { nmatch.last = true; return false; }
+        res = nmatch.i->second;
+        return true;
+    }
+    const std::string GetStatistics() const;
+private:
+    size_t added, deleted;
+};
+
+#endif

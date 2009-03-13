@@ -1,10 +1,30 @@
 #include <cstring>
 #include "boyermoore.hh"
 #include "threadfun.hh" // for InterruptibleContext
+#include "stringsearchutil.hh"
+
+#ifndef __GNUC__
+#include "autodealloc.hh"
+#endif
 
 #include <cstdio>
 
+#ifdef __GNUC__
+# define likely(x)       __builtin_expect(!!(x), 1)
+# define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+# define likely(x)   (x)
+# define unlikely(x) (x)
+#endif
+
 namespace BoyerMooreSearch {
+
+occtable_type InitOcc(const unsigned char* needle, const size_t needle_length)
+{
+    occtable_type result;
+    InitOcc(result, needle, needle_length);
+    return result;
+}
 
 void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needle_length)
 {
@@ -26,6 +46,15 @@ void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needl
         occ[needle[a]] = needle_length_minus_1 - a;
 }
 
+skiptable_type
+    InitSkip(const unsigned char* needle, const size_t needle_length)
+{
+    skiptable_type result(needle_length, needle_length);
+    InitSkip(result, needle, needle_length);
+    return result;
+}
+
+
 /* Note: this function expects skip to be resized to needle_length and initialized with needle_length. */
 void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t needle_length)
 {
@@ -43,9 +72,11 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
     const size_t needle_length_minus_1 = needle_length-1;
 
 #ifdef __GNUC__
-    size_t suff[needle_length+1];
+    __extension__ size_t suff[needle_length+1]; // variable size array is a GCC extension
 #else
-    std::vector<size_t> suff(needle_length+1);
+    size_t* suff = new size_t[needle_length+1];
+    autodealloc_array<size_t> suff_dealloc(suff);
+    //std::vector<size_t> suff(needle_length+1);
 #endif
     suff[needle_length] = needle_length;
 
@@ -120,7 +151,7 @@ size_t SearchInHorspool(const unsigned char* haystack, const size_t haystack_len
 
     if(unlikely(needle_length == 1))
     {
-        const unsigned char* result = (const unsigned char*)ScanByte(haystack, *needle, haystack_length);
+        const unsigned char* result = (const unsigned char*)std::memchr(haystack, *needle, haystack_length);
         return result ? result-haystack : haystack_length;
     }
 
@@ -157,7 +188,7 @@ size_t SearchIn(const unsigned char* haystack, const size_t haystack_length,
     if(unlikely(needle_length == 1))
     {
         const unsigned char* result =
-            (const unsigned char*)ScanByte(haystack, *needle, haystack_length);
+            (const unsigned char*)std::memchr(haystack, *needle, haystack_length);
         return result ? result-haystack : haystack_length;
     }
 
@@ -170,9 +201,7 @@ size_t SearchIn(const unsigned char* haystack, const size_t haystack_length,
         //fprintf(stderr, "haystack_length=%u needle_length=%u\n", hpos, needle_length);
 
         const size_t match_len = backwards_match_len(
-            needle,
-            haystack+hpos,
-            needle_length);
+            needle, haystack+hpos, needle_length);
         if(match_len == needle_length) return hpos;
 
         const size_t mpos = needle_length_minus_1 - match_len;
@@ -201,7 +230,7 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
     if(unlikely(needle_length == 1))
     {
         const unsigned char* result =
-            (const unsigned char*)ScanByte(haystack, *needle, haystack_length);
+            (const unsigned char*)std::memchr(haystack, *needle, haystack_length);
         return result ? result-haystack : haystack_length;
     }
 
@@ -211,6 +240,10 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
     size_t hpos = 0;
     size_t ignore_num = 0, shift = needle_length;
 
+    /* For cache locality we reuse the "generic" backwards_match_len_max_min()
+     * function here multiple times, even though we could use the simpler
+     * backwards_match_len() and backwards_match_len_max() instead.
+     */
     while(hpos <= search_room)
     {
         //fprintf(stderr, "haystack_length=%u needle_length=%u\n", hpos, needle_length);
@@ -218,25 +251,30 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
         size_t match_len;
         if(ignore_num == 0)
         {
-            match_len = backwards_match_len(
-                needle,
-                haystack+hpos,
-                needle_length);
+            match_len = backwards_match_len_max_min(
+                needle, haystack+hpos, needle_length,
+                needle_length, /* maximum */
+                0 /* minimum */);
             if(match_len == needle_length) return hpos;
         }
         else
         {
             match_len =
-                backwards_match_len(needle, haystack+hpos, needle_length,
-                    shift
+                backwards_match_len_max_min(
+                    needle, haystack+hpos, needle_length,
+                    shift, /* maximum */
+                    0 /* minimum */
                    );
 
-            if(match_len == shift)
+            if(match_len == shift) // it matched fully
             {
                 //if(shift + ignore_num >= needle_length) return hpos;
                 match_len =
-                    backwards_match_len(needle, haystack+hpos, needle_length,
-                        needle_length, shift + ignore_num);
+                    backwards_match_len_max_min(
+                        needle, haystack+hpos, needle_length,
+                        needle_length, /* maximum */
+                        shift + ignore_num /* minimum */
+                    );
             }
             if(match_len >= needle_length) return hpos;
         }

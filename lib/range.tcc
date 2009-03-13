@@ -107,7 +107,7 @@ void rangecollection<Key,Valueholder,Allocator>::set(const Key& lo, const Key& u
     else if(next_thing == data.begin())
     {
         /* We need a nil node at our "up" */
-        data.insert(std::make_pair(up, Valueholder()));
+        data.insert(next_thing, std::make_pair(up, Valueholder()));
     }
     else
     {
@@ -115,7 +115,7 @@ void rangecollection<Key,Valueholder,Allocator>::set(const Key& lo, const Key& u
         if(next_thing->second != newvalue)
         {
             /* We need this node at our "up" */
-            data.insert(std::make_pair(up, next_thing->second));
+            data.insert(next_thing, std::make_pair(up, next_thing->second));
         }
     }
 
@@ -138,14 +138,14 @@ void rangecollection<Key,Valueholder,Allocator>::set(const Key& lo, const Key& u
     typename Cont::iterator prev_thing = data.lower_bound(lo);
     if(prev_thing == data.begin())
     {
-        data.insert(std::make_pair(lo, newvalue));
+        data.insert(prev_thing, std::make_pair(lo, newvalue));
     }
     else
     {
         --prev_thing;
         if(prev_thing->second != newvalue)
         {
-            data.insert(std::make_pair(lo, newvalue));
+            data.insert(prev_thing, std::make_pair(lo, newvalue));
         }
     }
 }

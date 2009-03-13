@@ -7,25 +7,58 @@
 template<typename WorkType>
 void ThreadWorkEngine<WorkType>::RunTasks(
     size_t
-    #if !(defined(_OPENMP) || !USE_PTHREADS)
+    #if !( defined(_OPENMP) || USE_PTHREADS==0 )
            num_threads /* Note: <- unused when OPENMP */
     #endif
                       ,
-    ssize_t num_workunits,
+    size_t num_workunits,
     WorkType& workparams,
     bool (*DoWork)(size_t index, WorkType& )
     /* DoWork returns bool if it wants to cancel its siblings */
 )
 {
-#if defined(_OPENMP) || !defined(USE_PTHREADS)
+#if defined(_OPENMP) || USE_PTHREADS==0
     /* This version does not cancel sibling threads,
      * but may be a little more robust that way.
      * Just hope that DoWork() does not consume a lot of time.
      */
     bool cancel = false;
 
+ #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805)
+    /* OPENMP 3.0 VERSION and NO OPENMP version */
+    /* However, ICC's implementation of omp tasks leaks memory,
+     * so it is disabled here if ICC is used.
+     */
+  #pragma omp parallel firstprivate(num_workunits) shared(cancel,workparams)
+  {
+   #pragma omp single
+   {
+     for(size_t a=0; a<num_workunits; ++a)
+     {
+       #pragma omp flush(cancel)
+       if(cancel) break;
+       #pragma omp task firstprivate(a) shared(cancel)
+       {
+         /* Check the cancel flag again, because there's a possibility
+          * that time elapsed between the last check and the actual
+          * starting of the task. (TODO: is there an actual possibility?)
+          */
+         #pragma omp flush(cancel)
+         if(!cancel
+         && DoWork(a, workparams))
+         {
+           cancel = true;
+           #pragma omp flush(cancel)
+         }
+       }
+     }
+   }
+  }
+ #else
+    /* OPENMP 2.5 VERSION */
+    ssize_t num_workunits_signed = num_workunits;
   #pragma omp parallel for schedule(guided,1) shared(cancel)
-    for(ssize_t a=0; a<num_workunits; ++a)
+    for(ssize_t a=0; a<num_workunits_signed; ++a)
     {
       #pragma omp flush(cancel)
         if(!cancel && DoWork(a, workparams))
@@ -34,8 +67,9 @@ void ThreadWorkEngine<WorkType>::RunTasks(
             //#pragma omp flush(cancel) -- is this needed here?
         }
     }
+ #endif
 #else
-    if(num_threads <= 1 || num_workunits <= 1)
+    if(num_threads <= 1 || num_workunits <= 1) // just do linearly
     {
         for(size_t a = 0; a < num_workunits; ++a)
             if( DoWork(a, workparams) ) break;
@@ -141,7 +175,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
 #endif
 }
 
-#if !(defined(_OPENMP) || !USE_PTHREADS)
+#if !(defined(_OPENMP) || USE_PTHREADS==0)
 template<typename WorkType>
 void* ThreadWorkEngine<WorkType>::WorkRunner
     (ThreadWorkEngine<WorkType>::workerparam& params)
@@ -241,3 +275,72 @@ void* ThreadWorkEngine<WorkType>::WorkRunner
     return 0;
 }
 #endif
+
+
+template<typename WorkType> template<typename T>
+void ThreadWorkEngine<WorkType>::RunUntil(
+    size_t
+    #if !( defined(_OPENMP) || USE_PTHREADS==0 )
+           num_threads /* Note: <- unused when OPENMP */
+    #endif
+                     ,
+    WorkType& workparams,
+    bool (*NextTask_lock)    (WorkType&, T& ),
+    bool (*NextTask_unlocked)(WorkType&, T& ),
+
+    bool (*DoWork)(WorkType&, const T& )
+    /* DoWork returns bool if it wants to cancel its siblings */
+)
+{
+    bool cancel = false;
+
+  /*#if !defined(_OPENMP) && USE_PTHREADS != 0
+   *
+   * TODO: Create a pthread version
+   */
+  #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805)
+    /* OPENMP 3.0 and no OPENMP versions */
+    /* However, ICC's implementation of omp tasks leaks memory,
+     * so it is disabled here if ICC is used.
+     */
+    #pragma omp parallel
+    {
+     #pragma omp single
+     {
+      T a;
+      for(;;)
+      {
+          #pragma omp flush(cancel)
+          if(cancel) break;
+
+          if(!NextTask_unlocked(workparams, a)) break;
+
+          #pragma omp task firstprivate(a) shared(workparams,cancel)
+          {
+            if(DoWork(workparams, a))
+                cancel = true;
+          }
+      }
+     }
+    }
+  #else
+    /* OPENMP 2.5 */
+    #pragma omp parallel
+    {
+      for(;;)
+      {
+        #pragma omp flush(cancel)
+        if(cancel) break;
+
+        T a;
+        if(!NextTask_lock(workparams, a)) break;
+
+        if(DoWork(workparams, a))
+            cancel = true;
+
+        #pragma omp flush(cancel)
+        if(cancel) break;
+      }
+    }
+  #endif
+}

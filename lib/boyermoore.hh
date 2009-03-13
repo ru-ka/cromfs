@@ -1,8 +1,6 @@
 #ifndef bqtBoyerMooreUtilHH
 #define bqtBoyerMooreUtilHH
 
-#include "stringsearchutil.hh"
-
 #include <stdint.h>
 #include <vector>
 
@@ -19,6 +17,12 @@ namespace BoyerMooreSearch
     typedef std::vector<size_t> skiptable_type;
 
     /////////////////////
+
+    occtable_type
+        InitOcc(const unsigned char* needle, const size_t needle_length);
+
+    skiptable_type
+         InitSkip(const unsigned char* needle, const size_t needle_length);
 
     void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needle_length);
 

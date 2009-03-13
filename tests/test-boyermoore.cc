@@ -1,5 +1,6 @@
 #include "../lib/boyermooreneedle.hh"
 #include "../lib/boyermoore.cc"
+#include "../lib/stringsearchutil.cc"
 #include <cstdlib>
 #include <cstdio>
 
@@ -15,12 +16,12 @@ static const std::vector<unsigned char>
     GenRandomVector(unsigned len)
 {
     std::vector<unsigned char> result(len);
-    
+
     for(unsigned a=0; a<len; ++a)
     {
         result[a] = std::rand() % 4;
     }
-    
+
     return result;
 }
 
@@ -29,7 +30,7 @@ static const std::vector<unsigned char>
 {
     unsigned len = minlen + rand() % (maxlen-minlen);
     return GenRandomVector(len);
-}    
+}
 
 enum kinds { Full, Horspool, Turbo };
 static void Test(kinds kind)
@@ -41,13 +42,13 @@ static void Test(kinds kind)
      * exists in that position */
     unsigned needlepos = std::rand() % (haystack.size() - needle.size());
     std::memcpy(&haystack[needlepos], &needle[0], needle.size());
-    
+
     /* Then see what BoyerMoore comes up with */
     const BoyerMooreNeedle ding(needle);
-    
+
     std::printf("%u in %u... \r", needle.size(), haystack.size());
     std::fflush(stdout);
-    
+
     unsigned foundpos = 0;
     switch(kind)
     {
@@ -55,20 +56,20 @@ static void Test(kinds kind)
         case Turbo: foundpos = ding.SearchInTurbo(haystack); break;
         case Horspool: foundpos = ding.SearchInHorspool(haystack); break;
     }
-    
+
     if(foundpos < needlepos)
     {
         /* If the found position is smaller than what we intended,
          * check if it's actually true
          */
-       
+
         if(std::memcmp(&haystack[foundpos], &needle[0], needle.size()) == 0)
         {
             /* Accept this position */
             needlepos = foundpos;
         }
     }
-    
+
     if(foundpos != needlepos)
     {
         std::fprintf(stderr, "Error: needle=%u, haystack=%u, pos=%u, claims %u\n",
@@ -87,20 +88,20 @@ static void TestWithAppend()
     /* Generate a random haystack and a random needle */
     std::vector<unsigned char> haystack = GenRandomVector(100, 1500);
     const std::vector<unsigned char> needle   = GenRandomVector(20, haystack.size()-1);
-    
+
     /* Then see what BoyerMoore comes up with */
     const BoyerMooreNeedleWithAppend ding(needle);
     std::fflush(stderr);
     for(unsigned reuse_count = 0; reuse_count < 2000; ++reuse_count)
     {
         haystack = GenRandomVector(haystack.size());
-        
+
         /* Select a position randomly and ensure that the needle
          * exists in that position */
         const unsigned hndiff = haystack.size() - needle.size();
 
         unsigned needlepos = hndiff + std::rand() % (needle.size()+1);
-        
+
     #if 1
         std::memcpy(&haystack[needlepos], &needle[0],
             std::min(needle.size(),
@@ -110,36 +111,36 @@ static void TestWithAppend()
         haystack.insert(haystack.end(), needle.begin(), needle.end());
 
     #endif
-        
+
         /*std::printf("%u in %u (append %u)...\r",
             needle.size(), haystack.size(),
             std::max(0l, (long)(needlepos + needle.size() - haystack.size()))
           );
         std::fflush(stdout);*/
-        
+
         unsigned foundpos = ding.SearchInTurboWithAppend(haystack, 0, granularity);
         std::fflush(stderr);
-        
+
         if(needlepos < haystack.size() &&
         (needlepos - hndiff) % granularity) needlepos = haystack.size();
-        
+
         if(foundpos < needlepos)
         {
             /* If the found position is smaller than what we intended,
              * check if it's actually true
              */
             unsigned compare_size = std::min(needle.size(), haystack.size() - foundpos);
-           
+
             if(std::memcmp(&haystack[foundpos], &needle[0], compare_size) == 0)
             {
                 /* Accept this position */
                 needlepos = foundpos;
             }
         }
-        
+
         if(needlepos < haystack.size() &&
         (needlepos - hndiff) % granularity) needlepos = haystack.size();
-        
+
         if(foundpos != needlepos)
         {
             if(foundpos < haystack.size() && (foundpos - hndiff) % granularity)
@@ -150,7 +151,7 @@ static void TestWithAppend()
             {
                 std::fprintf(stderr, "Error: We ignored granularity\n");
             }
-        
+
             unsigned compare_size = std::min(needle.size(), haystack.size() - needlepos);
             if(std::memcmp(&haystack[needlepos], &needle[0], compare_size) != 0)
             {
@@ -180,9 +181,9 @@ static void TestWithAppend()
 int main(void)
 {
 #if 1
-    for(unsigned a=0; a<500; ++a)
+    for(unsigned a=0; a<100; ++a)
     {
-        std::printf("\rtest %u/500...%50s\r", a, ""); std::fflush(stdout);
+        std::printf("\rtest %u/100...%50s\r", a, ""); std::fflush(stdout);
         TestWithAppend();
     }
     if(!fails)
@@ -192,9 +193,9 @@ int main(void)
     fails=0;
 #endif
 #if 1
-    for(unsigned a=0; a<250; ++a)
+    for(unsigned a=0; a<100; ++a)
     {
-        std::printf("\rtest %u/250...%50s\r", a, ""); std::fflush(stdout);
+        std::printf("\rtest %u/100...%50s\r", a, ""); std::fflush(stdout);
         Test(Horspool);
     }
     if(!fails)
@@ -204,9 +205,9 @@ int main(void)
     fails=0;
 #endif
 #if 1
-    for(unsigned a=0; a<1250; ++a)
+    for(unsigned a=0; a<100; ++a)
     {
-        std::printf("\rtest %u/12500...%50s\r", a, ""); std::fflush(stdout);
+        std::printf("\rtest %u/100...%50s\r", a, ""); std::fflush(stdout);
         Test(Full);
     }
     if(!fails)
@@ -216,9 +217,9 @@ int main(void)
     fails=0;
 #endif
 #if 1
-    for(unsigned a=0; a<1250; ++a)
+    for(unsigned a=0; a<100; ++a)
     {
-        std::printf("\rtest %u/1250...%50s\r", a, ""); std::fflush(stdout);
+        std::printf("\rtest %u/100...%50s\r", a, ""); std::fflush(stdout);
         Test(Turbo);
     }
     if(!fails)

@@ -45,25 +45,25 @@ namespace fblock_private
             is_compressed = false;
             last_access = 0;
             mmapped.Unmap();
-            
+
             Check_Existing_File();
         }
-        
+
         void Check_Existing_File();
-        
+
         bool is_uncompressed() const { return !is_compressed; }
         bool is_mmapped()      const { return mmapped; }
         uint_fast64_t getfilesize() const { return filesize; }
-        
+
         const std::string getfn() const;
-        
+
         void Delete()
         {
             Unmap();
             ::unlink(getfn().c_str());
             filesize = 0;
         }
-        
+
         void get(std::vector<unsigned char>& raw,
                  std::vector<unsigned char>& compressed)
         {
@@ -83,9 +83,9 @@ namespace fblock_private
             get(NULL, &compressed);
             return compressed;
         }
-        
+
         void put_raw(const std::vector<unsigned char>& raw);
-        
+
         void put_compressed(const std::vector<unsigned char>& compressed);
 
         void put(const std::vector<unsigned char>& /*raw*/,
@@ -105,7 +105,7 @@ namespace fblock_private
                 put_raw(raw);
             */
         }
-        
+
         void put_appended_raw(const AppendInfo& append, const std::vector<unsigned char>& data)
         {
             put_appended_raw(append, &data[0], data.size());
@@ -114,11 +114,11 @@ namespace fblock_private
         {
             put_appended_raw(append, &data[0], data.size());
         }
-        
+
         void put_appended_raw(
             const AppendInfo& append,
             const unsigned char* data, const uint_fast32_t datasize);
-        
+
     private:
         void get(std::vector<unsigned char>* raw,
                  std::vector<unsigned char>* compressed);
@@ -140,7 +140,7 @@ namespace fblock_private
         {
             Unmap();
             if(is_compressed) return;
-            
+
             const autoclosefd fd = open(getfn().c_str(), O_RDWR | O_LARGEFILE);
             if(fd >= 0) RemapFd(fd);
             // fd will be automcally closed.
@@ -150,9 +150,9 @@ namespace fblock_private
             if(is_compressed) return get_raw().size();
             return filesize;
         }
-        
+
         time_t get_last_access() const { return last_access; }
-        
+
     private:
         void RemapFd(int fd) { mmapped.SetMap(fd, 0, filesize); }
 
@@ -196,7 +196,7 @@ public:
     void Unmap() { storage.Unmap(); }
     void Remap() { storage.Remap(); }
     void Delete() { storage.Delete(); }
-    
+
     const std::vector<unsigned char> get_raw() const { return storage.get_raw(); }
     const std::vector<unsigned char> get_compressed() const { return storage.get_compressed(); }
     void put_raw(const std::vector<unsigned char>& raw)
@@ -221,7 +221,7 @@ public:
     typedef fblock_private::fblock_storage::undo_t undo_t;
     undo_t create_backup() const { return storage.create_backup(); }
     void restore_backup(undo_t b) { storage.restore_backup(b); }
-    
+
     size_t size() const { return storage.size(); }
 };
 
@@ -233,14 +233,14 @@ class mkcromfs_fblockset
 public:
     mkcromfs_fblockset(): index(), fblocks() { }
     ~mkcromfs_fblockset();
-    
+
     inline size_t size() const { return fblocks.size(); }
 
     const mkcromfs_fblock& operator[] (size_t index) const
         { return fblocks[index]; }
-    
+
     mkcromfs_fblock& operator[] (size_t index);
-    
+
 public:
     int FindFblockThatHasAtleastNbytesSpace(size_t howmuch) const
         { return index.FindAtleastNbytesSpace(howmuch); }
@@ -266,10 +266,10 @@ public:
         std::vector<mkcromfs_fblock::undo_t> fblock_state;
         index_type fblock_index;
     };
-    
+
     undo_t create_backup() const;
     void restore_backup(const undo_t& e);
-    
+
     void FreeSomeResources();
 
 private:

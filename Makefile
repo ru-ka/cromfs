@@ -1,4 +1,4 @@
-VERSION=1.5.7
+VERSION=1.5.8
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -13,6 +13,7 @@ ARCHFILES=\
 	doc/README.html \
 	doc/ChangeLog \
 	doc/ImplementationGuide.txt \
+	doc/SoftwareArchitecture.txt \
 	doc/WritingFrontends.txt \
 	doc/WriteAccess.txt \
 	doc/BlockIndexing.txt \
@@ -36,11 +37,10 @@ ARCHFILES=\
 	lib/cromfs-inodefun.cc lib/cromfs-inodefun.hh \
 	lib/cromfs-directoryfun.cc lib/cromfs-directoryfun.hh \
 	lib/cromfs-fblockfun.cc lib/cromfs-fblockfun.hh \
-	lib/cromfs-blockindex.cc lib/cromfs-blockindex.hh \
+	lib/cromfs-blockindex.tcc lib/cromfs-blockindex.hh \
 	lib/cromfs-blockifier.cc lib/cromfs-blockifier.hh \
 	\
 	lib/endian.hh \
-	lib/hash.hh \
 	lib/simd.hh \
 	lib/threadfun.hh \
 	lib/threadfun_none.hh \
@@ -48,13 +48,11 @@ ARCHFILES=\
 	lib/threadfun_pthread.hh \
 	lib/threadworkengine.hh lib/threadworkengine.tcc \
 	lib/duffsdevice.hh \
+	lib/stringsearchutil.cc \
 	lib/stringsearchutil.hh \
-	lib/simplevec.hh \
-	lib/staticallocator.hh \
+	lib/stringsearchutil_backwardsmatch.tcc \
 	lib/datasource.hh \
 	lib/datareadbuf.hh \
-	lib/autoclosefd.hh \
-	lib/bucketcontainer.hh \
 	lib/datacache.hh \
 	lib/mmapping.hh \
 	lib/fadvise.cc lib/fadvise.hh \
@@ -62,7 +60,6 @@ ARCHFILES=\
 	lib/util.cc lib/util.hh \
 	lib/append.cc lib/append.hh \
 	lib/fnmatch.cc lib/fnmatch.hh \
-	lib/crc32.h lib/crc32.cc \
 	lib/newhash.h lib/newhash.cc \
 	lib/assert++.hh lib/assert++.cc \
 	lib/sparsewrite.cc lib/sparsewrite.hh \
@@ -70,17 +67,50 @@ ARCHFILES=\
 	lib/longfilewrite.hh lib/longfilewrite.cc \
 	lib/boyermooreneedle.hh \
 	lib/boyermoore.hh lib/boyermoore.cc \
-	lib/superstringfinder.hh \
-	lib/asymmetrictsp.hh \
 	lib/fsballocator.hh \
+	lib/autodealloc.hh \
 	lib/autoptr \
+	\
+	lib/allocatornk.hh \
+	lib/rbtree.hh \
 	\
 	lib/range.hh lib/range.tcc \
 	lib/rangeset.hh lib/rangeset.tcc \
 	lib/rangemultimap.hh lib/rangemultimap.tcc \
 	\
-	lib/lzoconf.h lib/lzodefs.h \
-	lib/minilzo.c lib/minilzo.h \
+	lib/cromfs-hashmap_lzo.hh \
+	lib/cromfs-hashmap_lzo.cc \
+	lib/cromfs-hashmap_sparsefile.hh \
+	lib/cromfs-hashmap_sparsefile.cc \
+	lib/cromfs-hashmap_googlesparse.hh \
+	lib/cromfs-hashmap_googlesparse.cc \
+	lib/cromfs-hashmap_lzo_sparse.hh \
+	lib/cromfs-hashmap_lzo_sparse.cc \
+	lib/cromfs-hashmap_trivial.hh \
+	\
+	lib/google/dense_hash_map \
+	lib/google/dense_hash_set \
+	lib/google/sparse_hash_map \
+	lib/google/sparse_hash_set \
+	lib/google/sparsehash/densehashtable.h \
+	lib/google/sparsehash/sparseconfig.h \
+	lib/google/sparsehash/sparsehashtable.h \
+	lib/google/sparsetable \
+	lib/google/type_traits.h \
+	\
+	lib/lzo/config1x.h \
+	lib/lzo/lzo1_d.ch \
+	lib/lzo/lzo1x_1o.c \
+	lib/lzo/lzo1x_c.ch \
+	lib/lzo/lzo1x_d1.c \
+	lib/lzo/lzo1x_d.ch \
+	lib/lzo/lzo1x.h \
+	lib/lzo/lzo_conf.h \
+	lib/lzo/lzoconf.h \
+	lib/lzo/lzodefs.h \
+	lib/lzo/lzo_dict.h \
+	lib/lzo/lzo_ptr.h \
+	lib/lzo/miniacc.h \
 	\
 	lib/lzma/C/LzmaDec.c \
 	lib/lzma/C/LzmaDec.h \
@@ -101,7 +131,26 @@ ARCHFILES=\
 	tests/a/dir2 tests/a/dir2/util.cc \
 	tests/a/dir2/util.hh \
 	tests/a/sparse.bin \
-	tests/test-boyermoore.cc
+	tests/test-boyermoore.cc \
+	tests/test-hashmaps.cc \
+	tests/test-backwards_match.cc \
+	\
+	doc/examples/pack_rom_images/README \
+	doc/examples/pack_rom_images/make-spc-set-dir.sh \
+	doc/examples/pack_rom_images/pack-a2600.sh \
+	doc/examples/pack_rom_images/pack-gb.sh \
+	doc/examples/pack_rom_images/pack-gba.sh \
+	doc/examples/pack_rom_images/pack-gens.sh \
+	doc/examples/pack_rom_images/pack-n64.sh \
+	doc/examples/pack_rom_images/pack-nes.sh \
+	doc/examples/pack_rom_images/pack-sms.sh \
+	doc/examples/pack_rom_images/pack-snes.sh \
+	doc/examples/pack_rom_images/pack-spc.sh \
+	doc/examples/pack_rom_images/reconstruct-interrupted.sh \
+	doc/examples/progress_monitor/Makefile \
+	doc/examples/progress_monitor/README \
+	doc/examples/progress_monitor/main.cc \
+	doc/examples/progress_monitor/run-lsof.sh
 
 include Makefile.sets
 
@@ -153,8 +202,8 @@ util/unmkcromfs: FORCE
 util/cvcromfs: FORCE
 	make -C util cvcromfs
 
-clean:
-	rm -rf $(OBJS) $(PROGS) install
+clean: FORCE
+	rm -rf $(OBJS) $(PROGS) install *.pchi
 	rm -f cromfs-driver-static.??? configure.log
 	make -C util clean
 
@@ -167,8 +216,12 @@ install: $(PROGS) FORCE
 	@echo "The 'install' directory was prepared. Copy the contents to the locations you see fit."
 	@echo "*****************************************"
 
-test: $(PROGS) FORCE
+test: FORCE
 	cd tests && ./run.sh
+
+CTAGS=ctags --extra=+q
+tags: FORCE
+	(cd doc; $(CTAGS) ..{,/util,/lib{,/*,/lzma/*}}/{autoptr,*.{c,h,cc,hh,tcc,ch}})
 
 .libdepend: lib/.depend
 	perl -pe 's@([-+a-zA-Z0-9._/]+)@lib/$$1@g' < "$<" > "$@"

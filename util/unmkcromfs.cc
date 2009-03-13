@@ -6,9 +6,6 @@
 #include "lib/util.hh"
 #include "lib/threadfun.hh"
 
-#if HASH_MAP
-# include "hash.hh"
-#endif
 #ifdef _OPENMP
 # include <omp.h>
 #endif
@@ -115,6 +112,7 @@ static struct ThreadSafeConsole
                   )
     {
     #ifdef _OPENMP
+        ScopedLock lck(lock);
         lines.erase(threadno);
     #endif
     }
@@ -388,12 +386,7 @@ public:
         std::printf(" <matches>\n");
         std::fflush(stdout);
 
-
-#if HASH_MAP
-        typedef hash_set<cromfs_inodenum_t> handled_inodes_t;
-#else
         typedef std::set<cromfs_inodenum_t> handled_inodes_t;
-#endif
 
         /* Create a map of which inodes cover what sections of the filesystem */
         rangemultimap<cromfs_block_index, cromfs_inodenum_t, FSBAllocator<int> > range_map;
@@ -892,10 +885,8 @@ public:
                     uint_fast64_t read_size = block_size;
 
                     /* the last block may be smaller than the block size */
-                    if(a+1 == ino.blocklist.size() && (ino.bytesize % block_size) > 0)
-                    {
-                        read_size = ino.bytesize % block_size;
-                    }
+                    if(a+1 == ino.blocklist.size())
+                        read_size = ino.bytesize - (ino.blocklist.size()-1) * block_size;
 
                     if(block_startoffs + read_size > fblock.size())
                     {
@@ -1091,7 +1082,16 @@ private:
 
             std::set<cromfs_fblocknum_t> fblist;
             for(unsigned a=0; a<ino.blocklist.size(); ++a)
-                fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                if(ino.blocklist[a] < blktab.size())
+                    fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                else
+                {
+                    fprintf(stderr, "Inode %llu (%s) is corrupt. It refers to block %u which does not exist (%u blocks exist).\n",
+                        (unsigned long long)inonum, entname.c_str(),
+                        (unsigned) ino.blocklist[a],
+                        (unsigned) blktab.size());
+                    break;
+                }
 
             bool namematch = MatchFile(entname);
 
@@ -1185,10 +1185,8 @@ private:
             /* Count how much. */
             uint_fast64_t size = block_size;
             /* the last block may be smaller than the block size */
-            if(a+1 == ino.blocklist.size() && (ino.bytesize % size) > 0)
-            {
-                size = ino.bytesize % block_size;
-            }
+            if(a+1 == ino.blocklist.size())
+                size = ino.bytesize - (ino.blocklist.size()-1) * block_size;
 
             cromfs_block_index b(blk);
             result.set(b, b + size);
@@ -1255,7 +1253,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "unmkcromfs v"VERSION" - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "unmkcromfs v"VERSION" - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Extracts (the) contents of a cromfs image without mounting it.\n"
                     "\n"
@@ -1353,7 +1351,7 @@ int main(int argc, char** argv)
     {
         AddFilePattern(extract_files, argv[optind++]);
     }
-    
+
     umask(0); // Prevent umask screwing up our permission bits.
 
     if(should_create_output)

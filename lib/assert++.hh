@@ -1,7 +1,7 @@
 #ifndef bqtAssertPPhh
 #define bqtAssertPPhh
 #include <cassert>
-#include <iostream>
+#include <ostream>
 #include <string>
 #include <vector>
 #include <map>
@@ -17,6 +17,9 @@
 /* __ASSERT_FUNCTION is defined by glibc. */
 #if defined(__ASSERT_FUNCTION) && !defined(NDEBUG)
 
+#include "threadfun.hh"
+extern MutexType assert_mutex;
+
 extern bool assertflag;
 namespace assertprivate
 {
@@ -24,7 +27,7 @@ namespace assertprivate
     {
     public:
         virtual ~asserterbase() {}
-        virtual void dump() = 0;
+        virtual void dump(std::ostream& ) = 0;
     };
     typedef std::map<std::string, autoptr<asserterbase> > varmapbase;
     class varmap: public varmapbase, public ptrable
@@ -60,27 +63,28 @@ namespace assertprivate
     extern autoptr<varmap> vars;
     extern bool vars_used;
     extern std::vector<assertion> asserttab;
+
     template<class T>
     class asserter: public asserterbase
     {
         T var;
     public:
         asserter(const T &value) : var(value) {}
-        virtual void dump() { std::cerr << var; }
+        virtual void dump(std::ostream& out) { out << var; }
     };
     class string_asserter: public asserterbase
     {
         std::string var;
     public:
         string_asserter(const std::string &value) : var(value) {}
-        virtual void dump();
+        virtual void dump(std::ostream& );
     };
     class char_asserter: public asserterbase
     {
         char var;
     public:
         char_asserter(char value) : var(value) {}
-        virtual void dump();
+        virtual void dump(std::ostream& );
     };
     template<class T>
     void assertvar(const char *name, const T &var)
@@ -97,6 +101,9 @@ namespace assertprivate
                unsigned line, const char *func);
 } /* end namespace */
 #undef assert
+
+#define assertbegin() assert_mutex.Lock()
+
 #define assert(condition) (static_cast<void> (\
     (assertprivate::vars_used = true), ((condition) ? 0 : \
         (assertprivate::adder(#condition, __FILE__, __LINE__, __ASSERT_FUNCTION), 0))))
@@ -105,9 +112,10 @@ namespace assertprivate
 #define assertset() (static_cast<void>(assertflag=false))
 #define asserttest() (assertflag)
 #else
+#define assertbegin() {}
 /* If we don't have glibc.. Or have NDEBUG */
 #define assertflush() {}
-#define assertvar(expr) {}
+#define assertvar(expr) 0
 #define assertset()
 #define asserttest() (0)
 #endif

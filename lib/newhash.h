@@ -1,5 +1,5 @@
-#ifndef bqtCrc32HH
-#define bqtCrc32HH
+#ifndef bqtNewhashHH
+#define bqtNewhashHH
 
 #ifdef __cplusplus
 extern "C" {

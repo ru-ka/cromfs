@@ -1,5 +1,6 @@
 #include "assert++.hh"
 
+#include <sstream>
 #include <cstdlib>
 #include <cctype>
 #include <set>
@@ -14,6 +15,8 @@
  */
 
 bool assertflag;
+#if defined(__ASSERT_FUNCTION) && !defined(NDEBUG)
+MutexType assert_mutex;
 
 struct parec
 {
@@ -43,27 +46,27 @@ namespace assertprivate
         asserttab.push_back(a);
     }
 
-    void string_asserter::dump()
+    void string_asserter::dump(std::ostream& out)
     {
-        std::cerr << '"';
+        out << '"';
         for(unsigned a=0; a<var.size(); ++a)
-            if(var[a]=='\n')std::cerr << "\\n";
-            else if(var[a]=='\r')std::cerr << "\\r";
-            else if(var[a]=='\t')std::cerr << "\\t";
-            else if(var[a]=='\\')std::cerr << "\\\\";
-            else std::cerr << var[a];
-        std::cerr << '"';
+            if(var[a]=='\n')out << "\\n";
+            else if(var[a]=='\r')out << "\\r";
+            else if(var[a]=='\t')out << "\\t";
+            else if(var[a]=='\\')out << "\\\\";
+            else out << var[a];
+        out << '"';
     }
 
-    void char_asserter::dump()
+    void char_asserter::dump(std::ostream& out)
     {
-        std::cerr << '\'';
-        if(var=='\n')std::cerr << "\\n";
-        else if(var=='\r')std::cerr << "\\r";
-        else if(var=='\t')std::cerr << "\\t";
-        else if(var=='\\')std::cerr << "\\\\";
-        else std::cerr << var;
-        std::cerr << '\'';
+        out << '\'';
+        if(var=='\n')out << "\\n";
+        else if(var=='\r')out << "\\r";
+        else if(var=='\t')out << "\\t";
+        else if(var=='\\')out << "\\\\";
+        else out << var;
+        out << '\'';
     }
 
     void assertvar(const char *name, const std::string &var)
@@ -84,7 +87,9 @@ namespace assertprivate
         vars_used = true;
         if(asserttab.size())
         {
-            std::cerr << file << '[' << func << "]:" << line << ":Failing assertions:\n";
+            std::stringstream errormsg;
+
+            errormsg << "Failing assertions:\n";
             typedef std::map<varmap*, std::vector<assertiondata> > tabtype;
             tabtype tab;
             for(unsigned i=0; i<asserttab.size(); ++i)
@@ -101,7 +106,7 @@ namespace assertprivate
                 {
                     const assertiondata &a = i->second[j];
                     const std::string &condition = a.condition;
-                    std::cerr << a.file << '[' << a.func << "]:" << a.line
+                    errormsg << a.file << '[' << a.func << "]:" << a.line
                               << ": " << condition << std::endl;
 
                     parec state;
@@ -216,7 +221,7 @@ namespace assertprivate
                 }
                 /* Dump the vars found in the expressions
                 for(varset::const_iterator k = vars.begin(); k!=vars.end(); ++k)
-                    std::cerr << "Var: " << *k << std::endl;*/
+                    errormsg << "Var: " << *k << std::endl;*/
                 bool first=true;
                 const varmapbase *mappi = i->first;
                 for(varmapbase::const_iterator j=mappi->begin(); j!=mappi->end(); ++j)
@@ -226,18 +231,25 @@ namespace assertprivate
                     /* Don't display the variable if it isn't
                      * used in any of the expressions
                      */
-                    varset::const_iterator k = vars.find(s);
-                    if(k == vars.end())continue;
+                    //varset::const_iterator k = vars.find(s);
+                    //if(k == vars.end())continue;
 
                     if(first) { first=false;
-                         std::cerr <<    "\t\t(With ";}
-                    else std::cerr << ", ";
-                    std::cerr << s << '=';
-                    j->second->dump();
+                         errormsg <<    "\t(With ";}
+                    else errormsg << ", ";
+                    errormsg << s << '=';
+                    j->second->dump(errormsg);
                 }
-                if(!first)std::cerr << ")\n";
+                if(!first)errormsg << ")\n";
             }
-            std::exit(-1);
+
+            //std::cerr << file << '[' << func << "]:" << line << ":" << errormsg.str();
+            //abort();
+            __assert_fail(errormsg.str().c_str(), file, line, func);
+            //std::exit(-1);
         }
+
+        assert_mutex.Unlock();
     }
 }
+#endif

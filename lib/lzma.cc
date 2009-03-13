@@ -178,21 +178,22 @@ static ISzAlloc LZMAalloc = { SzAlloc, SzFree };
 class MemReader: public ISeqInStream
 {
 public:
-    const std::vector<unsigned char>& inbuf;
+    const unsigned char* const indata;
+    const size_t         inlength;
     size_t pos;
 public:
-    MemReader(const std::vector<unsigned char>& buf)
-        : ISeqInStream(), inbuf(buf), pos(0)
+    MemReader(const unsigned char* d, size_t l)
+        : ISeqInStream(), indata(d), inlength(l), pos(0)
     {
         Read = ReadMethod;
     }
     static SRes ReadMethod(void *pp, void *buf, size_t *size)
     {
         MemReader& p = *(MemReader*)pp;
-        size_t rem = p.inbuf.size()-p.pos;
+        size_t rem = p.inlength-p.pos;
         size_t read = *size;
         if(read > rem) read= rem;
-        std::memcpy(buf, &p.inbuf[p.pos], read);
+        std::memcpy(buf, &p.indata[p.pos], read);
         *size = read;
         p.pos += read;
         return SZ_OK;
@@ -214,23 +215,23 @@ public:
     }
 };
 
-const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& buf,
+const std::vector<unsigned char> LZMACompress(const unsigned char* data, size_t length,
     unsigned pb,
     unsigned lp,
     unsigned lc)
 {
-    return LZMACompress(buf, pb,lp,lc,
-        SelectDictionarySizeFor(buf.size()));
+    return LZMACompress(data,length, pb,lp,lc,
+        SelectDictionarySizeFor(length));
 }
 
 const std::vector<unsigned char> LZMACompress(
-    const std::vector<unsigned char>& buf,
+    const unsigned char* data, size_t length,
     unsigned pb,
     unsigned lp,
     unsigned lc,
     unsigned dictionarysize)
 {
-    if(buf.empty()) return buf;
+    if(!length) return std::vector<unsigned char>();
 
     CLzmaEncProps props;
     LzmaEncProps_Init(&props);
@@ -285,9 +286,9 @@ const std::vector<unsigned char> LZMACompress(
     res = LzmaEnc_WriteProperties(p, propsEncoded, &propsSize);
     if(res != SZ_OK) goto Error;
 
-    MemReader is(buf);
+    MemReader is(data, length);
     MemWriter os;
-    W64(propsEncoded+LZMA_PROPS_SIZE, buf.size());
+    W64(propsEncoded+LZMA_PROPS_SIZE, length);
     os.buf.insert(os.buf.end(), propsEncoded, propsEncoded+LZMA_PROPS_SIZE+8);
 
     res = LzmaEnc_Encode(p, &os, &is, 0, &LZMAalloc, &LZMAalloc);
@@ -296,9 +297,9 @@ const std::vector<unsigned char> LZMACompress(
     return os.buf;
 }
 
-const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& buf)
+const std::vector<unsigned char> LZMACompress(const unsigned char* data, size_t length)
 {
-    return LZMACompress(buf,
+    return LZMACompress(data, length,
         LZMA_PosStateBits,
         LZMA_LiteralPosStateBits,
         LZMA_LiteralContextBits);
@@ -307,16 +308,16 @@ const std::vector<unsigned char> LZMACompress(const std::vector<unsigned char>& 
 #undef RC_NORMALIZE
 
 const std::vector<unsigned char> LZMADeCompress
-    (const std::vector<unsigned char>& buf, bool& ok)
+    (const unsigned char* data, size_t length, bool& ok)
 {
-    if(buf.size() <= LZMA_PROPS_SIZE+8)
+    if(length <= LZMA_PROPS_SIZE+8)
     {
     /*clearly_not_ok:*/
         ok = false;
         return std::vector<unsigned char> ();
     }
 
-    uint_least64_t out_sizemax = R64(&buf[LZMA_PROPS_SIZE]);
+    uint_least64_t out_sizemax = R64(&data[LZMA_PROPS_SIZE]);
 
     /*if(out_sizemax >= (size_t)~0ULL)
     {
@@ -328,32 +329,35 @@ const std::vector<unsigned char> LZMADeCompress
 
     ELzmaStatus status;
     SizeT destlen = result.size();
-    SizeT srclen = buf.size()-(LZMA_PROPS_SIZE+8);
+    SizeT srclen = length-(LZMA_PROPS_SIZE+8);
     int res = LzmaDecode(
         &result[0], &destlen,
-        &buf[LZMA_PROPS_SIZE+8], &srclen,
-        &buf[0], LZMA_PROPS_SIZE,
+        &data[LZMA_PROPS_SIZE+8], &srclen,
+        &data[0], LZMA_PROPS_SIZE,
         LZMA_FINISH_END,
         &status,
         &LZMAalloc);
 
     /*
-    fprintf(stderr, "res=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
-        res, (int)in_done, (int)buf.size(),
-             (int)out_done, (int)out_sizemax);
+    fprintf(stderr, "res=%d, status=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
+        res,
+        (int)status,
+        (int)srclen, (int)length,
+        (int)destlen, (int)out_sizemax);
     */
 
     ok = res == SZ_OK && (status == LZMA_STATUS_FINISHED_WITH_MARK
                        || status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK)
-      && srclen == (buf.size()-LZMA_PROPS_SIZE) && destlen == out_sizemax;
+      && srclen == (length-(LZMA_PROPS_SIZE+8))
+      && destlen == out_sizemax;
     return result;
 }
 
 const std::vector<unsigned char> LZMADeCompress
-    (const std::vector<unsigned char>& buf)
+    (const unsigned char* data, size_t length)
 {
     bool ok_unused;
-    return LZMADeCompress(buf, ok_unused);
+    return LZMADeCompress(data, length, ok_unused);
 }
 
 #if 0
@@ -367,7 +371,7 @@ int main(void)
 }
 #endif
 
-const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned char>& buf,
+const std::vector<unsigned char> LZMACompressHeavy(const unsigned char* data, size_t length,
     const char* why)
 {
     std::vector<unsigned char> bestresult;
@@ -375,7 +379,7 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
     bool first = true;
     if(LZMA_verbose >= 1)
     {
-        fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)buf.size());
+        fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)length);
         fflush(stderr);
     }
 
@@ -393,8 +397,8 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
 
         std::vector<unsigned char>
             result = use_small_dict
-                ? LZMACompress(buf,pb,lp,lc, 4096)
-                : LZMACompress(buf,pb,lp,lc);
+                ? LZMACompress(data,length,pb,lp,lc, 4096)
+                : LZMACompress(data,length,pb,lp,lc);
 
       #pragma omp critical (lzmacompressheavy_updatestatistics)
        {
@@ -459,7 +463,7 @@ const std::vector<unsigned char> LZMACompressHeavy(const std::vector<unsigned ch
     {
         fprintf(stderr, "Best LZMA for %s(%u->%u): %s\n",
             why,
-            (unsigned)buf.size(),
+            (unsigned)length,
             (unsigned)bestresult.size(),
             best);
     }
@@ -661,7 +665,8 @@ private:
 };
 
 static void LZMACompressAutoHelper(
-    const std::vector<unsigned char>& buf, bool use_small_dict,
+    const unsigned char* data, size_t length,
+    bool use_small_dict,
     const char* why,
     unsigned& pb, unsigned& lp, unsigned& lc,
     unsigned& which_iterate, ParabolicFinder& finder,
@@ -690,8 +695,8 @@ static void LZMACompressAutoHelper(
                 why,try_pb,try_lp,try_lc);
 
         std::vector<unsigned char> result = use_small_dict
-            ? LZMACompress(buf,try_pb,try_lp,try_lc, 65536)
-            : LZMACompress(buf,try_pb,try_lp,try_lc);
+            ? LZMACompress(data,length,try_pb,try_lp,try_lc, 65536)
+            : LZMACompress(data,length,try_pb,try_lp,try_lc);
 
         if(LZMA_verbose >= 2)
             fprintf(stderr, "%s:       pb%u lp%u lc%u -> %u\n",
@@ -712,18 +717,18 @@ static void LZMACompressAutoHelper(
 }
 
 
-const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned char>& buf,
+const std::vector<unsigned char> LZMACompressAuto(const unsigned char* data, size_t length,
     const char* why)
 {
     if(LZMA_verbose >= 1)
     {
-        fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)buf.size());
+        fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)length);
         fflush(stderr);
     }
 
     unsigned backup_algorithm = LZMA_AlgorithmNo;
 
-    bool use_small_dict = false;//buf.size() >= 1048576;
+    bool use_small_dict = false;//length >= 1048576;
 
     if(use_small_dict) LZMA_AlgorithmNo = 0;
 
@@ -746,27 +751,27 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
      */
 
     /* step 1: find best value in pb axis */
-    LZMACompressAutoHelper(buf,use_small_dict,why,
+    LZMACompressAutoHelper(data,length,use_small_dict,why,
         pb, lp, lc,
         pb, pb_finder, first, bestresult);
 
     #pragma omp barrier
 
-    #pragma omp single
+    #pragma omp single /* implicit barrier after this statement */
     lp_finder.GotResult(lp, bestresult.size());
 
     /* step 2: find best value in lp axis */
-    LZMACompressAutoHelper(buf,use_small_dict,why,
+    LZMACompressAutoHelper(data,length,use_small_dict,why,
         pb, lp, lc,
         lp, lp_finder, first, bestresult);
 
     #pragma omp barrier
 
-    #pragma omp single
+    #pragma omp single /* implicit barrier after this statement */
     lc_finder.GotResult(lc, bestresult.size());
 
     /* step 3: find best value in lc axis */
-    LZMACompressAutoHelper(buf,use_small_dict,why,
+    LZMACompressAutoHelper(data,length,use_small_dict,why,
         pb, lp, lc,
         lc, lc_finder, first, bestresult);
    }
@@ -775,14 +780,14 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
     if(use_small_dict || LZMA_AlgorithmNo != backup_algorithm)
     {
         LZMA_AlgorithmNo = backup_algorithm;
-        bestresult = LZMACompress(buf, pb,lp,lc);
+        bestresult = LZMACompress(data,length, pb,lp,lc);
     }
 
     if(LZMA_verbose >= 1)
     {
         fprintf(stderr, "Best LZMA for %s(%u->%u): pb%u lp%u lc%u\n",
             why,
-            (unsigned)buf.size(),
+            (unsigned)length,
             (unsigned)bestresult.size(),
             pb,lp,lc);
     }
@@ -793,9 +798,10 @@ const std::vector<unsigned char> LZMACompressAuto(const std::vector<unsigned cha
 
 const std::vector<unsigned char>
     DoLZMACompress(int HeavyLevel,
-        const std::vector<unsigned char>& data, const char* why)
+        const unsigned char* data, size_t length,
+        const char* why)
 {
-    if(HeavyLevel >= 2) return LZMACompressHeavy(data, why);
-    if(HeavyLevel >= 1) return LZMACompressAuto(data, why);
-    return LZMACompress(data);
+    if(HeavyLevel >= 2) return LZMACompressHeavy(data,length, why);
+    if(HeavyLevel >= 1) return LZMACompressAuto(data,length, why);
+    return LZMACompress(data,length);
 }

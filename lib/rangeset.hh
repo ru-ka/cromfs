@@ -57,7 +57,7 @@ public:
     void erase(const Key& lo, const Key& up) { data.erase(lo, up); }
 
     /* Erase a single value */
-    void erase(const Key& lo) { data.erase(lo, lo+1); }
+    void erase(const Key& value) { data.erase(value); }
 
     void erase_before(const Key& lo) { data.erase_before(lo); }
     void erase_after(const Key& up) { data.erase_after(up); }

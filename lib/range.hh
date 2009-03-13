@@ -43,7 +43,8 @@ template<typename Key, typename Valueholder, typename Allocator = std::allocator
 class rangecollection
 {
     typedef std::map<Key, Valueholder, std::less<Key>,
-      typename Allocator::template rebind<std::pair<Key, Valueholder> >::other
+      //typename Allocator::template rebind<std::pair<const Key, Valueholder> >::other
+                                                       Allocator
                     > Cont;
     Cont data;
 public:
@@ -52,6 +53,7 @@ public:
     template<typename Valuetype>
     void set(const Key& lo, const Key& up, const Valuetype& val);
     void erase(const Key& lo, const Key& up);
+    void erase(const Key& value) { erase(value, value+1); }
 
     void erase_before(const Key& lo);
     void erase_after(const Key& up);

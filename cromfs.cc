@@ -1,5 +1,5 @@
 /*
-cromfs - Copyright (C) 1992,2008 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL3
 
 cromfs.cc: The cromfs filesystem engine.
@@ -558,6 +558,11 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
 
     uint_fast64_t inode_blocktable_offset = GetInodeOffset(inodenum) + INODE_HEADER_SIZE();
 
+    if(nblocks > 100000000)
+    {
+        /* Assume that a file having more than 100e6 blocks is corrupt. */
+        return result;
+    }
     result.blocklist.resize(nblocks);
 
     const unsigned b = BLOCKNUM_SIZE_BYTES();
@@ -697,6 +702,8 @@ int_fast64_t cromfs::read_file_data_from_one_fblock_only(
         const uint_fast64_t consume_bytes = std::min(endpos-pos, remain_block_bytes);
 
         const cromfs_blocknum_t blocknum = inode.blocklist[begin_block_index];
+        if(blocknum >= blktab.size()) break; // throw EIO;
+
         const cromfs_block_internal& block = blktab[blocknum];
         const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
 
@@ -804,6 +811,7 @@ int_fast64_t cromfs::read_file_data(
             const uint_fast64_t consume_bytes = std::min(endpos-pos, remain_block_bytes);
 
             const cromfs_blocknum_t blocknum = inode.blocklist[begin_block_index];
+            if(blocknum >= blktab.size()) break; // throw EIO;
             const cromfs_block_internal& block = blktab[blocknum];
             const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
 
