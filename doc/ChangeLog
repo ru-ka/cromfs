@@ -4,7 +4,7 @@ cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-1.5.8 <wip>
+1.5.8 2009-03-13 Joel Yliluoma <bisqwit@iki.fi>
 - Fixed a bug that caused vsnprintf not to be used even if it existed.
 - Fixed a random crashing bug (race condition) in unmkcromfs (it was
   introduced in version 1.5.6, commit 274443a59d977d021b24ca10c0b1d81f4d4d6b7b).
