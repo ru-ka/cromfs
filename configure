@@ -252,20 +252,6 @@ if [ "$HAS_LZO2" = "" ]; then
   #MKCROMFS_LZO_OBJ="../lib/lzo/lzo1x_1o.o ../lib/lzo/lzo1x_d1.o"
 fi
 
-do_echo -n "Checking for fuse (static)... "
-fusetry="`pkg-config --cflags --libs fuse`"
-if cc_check '<fuse_lowlevel.h>' "-static -DFUSE_USE_VERSION=25 $fusetry" ''; then
-  do_echo Yes
-  FUSE_STATIC=1
-else
-  do_echo No
-  do_echo "Note: cromfs-driver-static will not be built, because"
-  do_echo "your system does not have a statically linked Fuse library."
-  do_echo "You can still use the dynamically linked cromfs-driver."
-  FUSE_STATIC=0
-fi
-
-
 
 
 do_echo -n "Checking for vsnprintf... "

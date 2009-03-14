@@ -248,6 +248,8 @@ namespace cromfs_creator
     {
     public:
         MutexType lock;
+
+        dircollection(): std::vector<direntry>(),lock() {}
     };
 
     /* Reads the contents of one directory. Put rudimentary dircollection
@@ -333,8 +335,10 @@ namespace cromfs_creator
      */
     static void WalkDir_Recursive
        (const std::string& path,
-        dircollection& collection,
-        cromfs_dirinfo& result_dirinfo)
+        // Collection and result_dirinfo are made pointers instead
+        // of references so that they can be used in omp task.
+        dircollection* const collection,
+        cromfs_dirinfo* const result_dirinfo)
     {
         // Step 1: Scan the contents of this directory.
         //         Ignore entries which were not wanted (through MatchFile).
@@ -343,17 +347,17 @@ namespace cromfs_creator
         dircollection tmpcollection;
         CollectOneDir(path, tmpcollection);
 
-        collection.lock.Lock();
-        const size_t collection_begin_pos = collection.size();
-        collection.insert(collection.end(),
+        collection->lock.Lock();
+        const size_t collection_begin_pos = collection->size();
+        collection->insert(collection->end(),
                           tmpcollection.begin(),
                           tmpcollection.end());
-        const size_t collection_end_pos = collection.size();
-        collection.lock.Unlock();
+        const size_t collection_end_pos = collection->size();
+        collection->lock.Unlock();
     #else
-        const size_t collection_begin_pos = collection.size();
+        const size_t collection_begin_pos = collection->size();
         CollectOneDir(path, collection);
-        const size_t collection_end_pos = collection.size();
+        const size_t collection_end_pos = collection->size();
     #endif
         // Step 2: Sort the contents of the directory according
         //         to the filename.
@@ -361,11 +365,11 @@ namespace cromfs_creator
         // numbers assigned in their name order.
         {
     #ifdef USE_RECURSIVE_OMP_READDIR
-        ScopedLock lck(collection.lock);
+        ScopedLock lck(collection->lock);
     #endif
         MAYBE_PARALLEL_NS::sort(
-            &collection[collection_begin_pos],
-            &collection[collection_end_pos],
+            &(*collection)[collection_begin_pos],
+            &(*collection)[collection_end_pos],
             std::mem_fun_ref(&direntry::CompareName));
         }
 
@@ -388,17 +392,17 @@ namespace cromfs_creator
                 #ifdef USE_RECURSIVE_OMP_READDIR
                 // We don't want our references to collection[]
                 // to be moved to other location in RAM unexpectedly.
-                ScopedLock lck(collection.lock);
+                ScopedLock lck(collection->lock);
                 #endif
 
                 /* Scan subdirectory, if one exists. */
-                direntry& ent = collection[p];
+                direntry& ent = (*collection)[p];
                 const struct stat64& st = ent.st;
                 bytesize = st.st_size; // Take file size
                 if(S_ISDIR(st.st_mode))
                 {
                     ent.dirinfo = new cromfs_dirinfo;
-                    cromfs_dirinfo& subdir = *ent.dirinfo;
+                    cromfs_dirinfo* const subdir = ent.dirinfo;
 
                     // Make a copy of the path name, because references
                     // to it from inside WalkDir_Recursive won't be valid after
@@ -426,17 +430,17 @@ namespace cromfs_creator
             if(true) // scope
             {
             #ifdef USE_RECURSIVE_OMP_READDIR
-                ScopedLock lck(collection.lock);
+                ScopedLock lck(collection->lock);
             #endif
 
-                direntry& ent = collection[p];
+                direntry& ent = (*collection)[p];
                 ent.bytesize   = bytesize;
                 /* This inserts the entry in the directory
                  * listing, assigns it a dummy inode number (which
                  * will be filled later), and remembers the pointer
                  * to that inode number.
                  */
-                ent.inonum = &(result_dirinfo[ent.name] = 0);
+                ent.inonum = &((*result_dirinfo)[ent.name] = 0);
             }
         #ifdef USE_RECURSIVE_OMP_READDIR
           } // omp task
@@ -495,7 +499,7 @@ namespace cromfs_creator
         #pragma omp single
         {
     #endif
-        WalkDir_Recursive(path, collection, root_dirinfo); // Step 1.
+        WalkDir_Recursive(path, &collection, &root_dirinfo); // Step 1.
     #ifdef USE_RECURSIVE_OMP_READDIR
        } // omp single
       } // omp parallel
@@ -580,7 +584,9 @@ namespace cromfs_creator
             /* Inode offset in inotab */
             const uint_fast32_t block_size = CalcBSIZEfor(ent.pathname);
             const uint_fast64_t inotab_offset = GetInodeOffset(inonum);
+            #ifndef NDEBUG
             const uint_fast32_t num_blocks = CalcSizeInBlocks(ent.bytesize, block_size);
+            #endif
 
             if(DisplayFiles)
             {

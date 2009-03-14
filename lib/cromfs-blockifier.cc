@@ -873,7 +873,7 @@ public:
     typedef schedule_item sched_item_t;
 public:
     schedule_cache(std::vector<schedule_item>& s)
-        : schedule(s), open_list(), can_close(true), n_open(0), lock()
+        : schedule(s), open_list(), n_open(0), lock(), can_close(true)
     {
     }
     ~schedule_cache()
@@ -1945,7 +1945,8 @@ void cromfs_blockifier::EnablePackedBlocksIfPossible()
 }
 
 #include <sstream>
-const std::string cromfs_blockifier::autoindex_t::GetStatistics() const
+template<typename K,typename V>
+const std::string block_index_stack_simple<K,V>::GetStatistics() const
 {
     std::stringstream out;
     out << "siz=" << added << ",del=" << deleted;

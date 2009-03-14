@@ -24,10 +24,12 @@ void ThreadWorkEngine<WorkType>::RunTasks(
      */
     bool cancel = false;
 
- #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805)
+ #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805 && 0)
     /* OPENMP 3.0 VERSION and NO OPENMP version */
     /* However, ICC's implementation of omp tasks leaks memory,
      * so it is disabled here if ICC is used.
+     * GCC version is also disabled because of compilation problems.
+     * And it is disabled in general because we can't test it yet.
      */
   #pragma omp parallel firstprivate(num_workunits) shared(cancel,workparams)
   {
@@ -37,7 +39,7 @@ void ThreadWorkEngine<WorkType>::RunTasks(
      {
        #pragma omp flush(cancel)
        if(cancel) break;
-       #pragma omp task firstprivate(a) shared(cancel)
+       #pragma omp task firstprivate(a) shared(cancel,workparams)
        {
          /* Check the cancel flag again, because there's a possibility
           * that time elapsed between the last check and the actual
@@ -298,10 +300,12 @@ void ThreadWorkEngine<WorkType>::RunUntil(
    *
    * TODO: Create a pthread version
    */
-  #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805)
+  #if !defined(_OPENMP) || (!defined(__ICC) && _OPENMP >= 200805 && 0)
     /* OPENMP 3.0 and no OPENMP versions */
     /* However, ICC's implementation of omp tasks leaks memory,
      * so it is disabled here if ICC is used.
+     * GCC version is also disabled because of compilation problems.
+     * And it is disabled in general because we can't test it yet.
      */
     #pragma omp parallel
     {
