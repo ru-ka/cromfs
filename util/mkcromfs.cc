@@ -383,7 +383,7 @@ namespace cromfs_creator
         for(size_t p=collection_begin_pos; p<collection_end_pos; ++p)
         {
         #ifdef USE_RECURSIVE_OMP_READDIR
-          #pragma omp task
+          #pragma omp task firstprivate(p,collection,result_dirinfo) shared(path)
           {
         #endif
             uint_fast64_t bytesize = 0;
