@@ -356,7 +356,7 @@ namespace cromfs_creator
         collection->lock.Unlock();
     #else
         const size_t collection_begin_pos = collection->size();
-        CollectOneDir(path, collection);
+        CollectOneDir(path, *collection);
         const size_t collection_end_pos = collection->size();
     #endif
         // Step 2: Sort the contents of the directory according

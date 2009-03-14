@@ -1,4 +1,4 @@
-VERSION=1.5.8.1
+VERSION=1.5.8.2
 
 include Makefile.sets
 
