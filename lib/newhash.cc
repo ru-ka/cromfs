@@ -267,7 +267,7 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     c64 c_cast = (uint_fast64_t)c; {
     unsigned long len = size;
     c64 a(UINT64_C(0x9e3779b97f4a7c13)); // 2^64 / ((1+sqrt(5))/2)
-    a += c_cast + c64(size);
+    a += c_cast + c64(uint64_t(size));
     c64 b(a), c(a);
     while(len >= 8*3)
     {

@@ -28,7 +28,7 @@ int main(int argc, char** argv)
         }
         fclose(fp);
     }
-    
+
     {
       std::map<std::string, unsigned> new_prev_lines;
       fp = popen(argv[1], "r");
@@ -38,9 +38,9 @@ int main(int argc, char** argv)
           if(!fgets(Buf, sizeof Buf, fp)) break;
           strtok(Buf, "\r");
           strtok(Buf, "\n");
-          
+
           std::string line = Buf;
-          
+
           std::map<std::string, unsigned>::const_iterator
               i = prev_lines.find(line);
 
@@ -50,25 +50,25 @@ int main(int argc, char** argv)
               new_prev_lines[i->first] = i->second;
               continue;
           }
-          
+
           found.push_back(line);
       }
       prev_lines.swap(new_prev_lines);
     }
-    
+
     for(size_t a=0; a<found.size(); ++a)
     {
         const std::string& line = found[a];
-        
+
         unsigned lineno = 0;
         while(used_lines.find(lineno) != used_lines.end())
             ++lineno;
-        
+
         used_lines.insert( std::make_pair(lineno, line) );
         prev_lines[line] = lineno;
     }
     pclose(fp);
-    
+
     unsigned lineno = 0;
     for(std::map<unsigned, std::string>::const_iterator
         i = used_lines.begin();
@@ -79,7 +79,7 @@ int main(int argc, char** argv)
         puts(i->second.c_str());
         ++lineno;
     }
-    
+
     fp = fopen(".watch_keep.state", "wb");
     if(fp)
     {

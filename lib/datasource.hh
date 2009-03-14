@@ -116,10 +116,13 @@ struct datasource_file: public datasource_t
 private:
     enum { BufSize = 1024*256, FailSafeMMapLength = 1048576 };
 protected:
-    datasource_file(int fild, uint_fast64_t s): fd(fild),siz(s), buffer(),bufpos(0) { }
+    datasource_file(int fild, uint_fast64_t s)
+        : fd(fild),siz(s), buffer(),bufpos(0),
+          map_base(),map_length(),mmapping() { }
 public:
     datasource_file(int fild)
-        : fd(fild), siz(stat_get_size(fild)), buffer(),bufpos(0)
+        : fd(fild), siz(stat_get_size(fild)), buffer(),bufpos(0),
+          map_base(),map_length(),mmapping()
     {
         FadviseSequential(fd, 0, siz);
     }
