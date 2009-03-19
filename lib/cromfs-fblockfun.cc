@@ -298,14 +298,14 @@ void mkcromfs_fblock::Decompress()
             std::vector<unsigned char> decompressed = LZMADeCompress(rdbuf.Buffer, filesize);
             Unmap();
             EnsureOpen();
-            ( LongFileWrite(fd, 0, filesize=decompressed.size(), false) );
+            ( LongFileWrite(fd, 0, filesize=decompressed.size(), &decompressed[0], false) );
         }
         else
         {
             EnsureOpen();
             LongFileRead rdr(fd, 0, filesize);
             std::vector<unsigned char> decompressed = LZMADeCompress(rdr.GetAddr(), filesize);
-            ( LongFileWrite(fd, 0, filesize=decompressed.size(), false) );
+            ( LongFileWrite(fd, 0, filesize=decompressed.size(), &decompressed[0], false) );
         }
         ftruncate(fd, filesize);
         is_compressed = false;
