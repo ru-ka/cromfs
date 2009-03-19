@@ -38,6 +38,11 @@ private:
     /* no copies */
     void operator=(const LongFileWrite&);
     LongFileWrite(const LongFileWrite&);
+private:
+    // Avoid an accidental use of LongFileWrite with an invalid pointer
+    explicit LongFileWrite(int fild, uint_fast64_t offset,
+                           uint_fast64_t size,
+                           bool);
 };
 
 class FileOutputter

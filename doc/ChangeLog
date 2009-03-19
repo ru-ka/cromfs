@@ -4,6 +4,11 @@ cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.8.4 2009-03-19 Joel Yliluoma <bisqwit@iki.fi>
+- Fixed a crash bug introduced to mkcromfs
+  in version 1.5.8, commit 3401942402870ded3eae2251dd029702dc3fc78b.
+- mkcromfs: Changed the default value of the -r option to 20000.
+
 1.5.8.3 2009-03-14 Joel Yliluoma <bisqwit@iki.fi>
 - Fixed a crash bug introduced in 1.5.8.1 (happens on ICC)
 
