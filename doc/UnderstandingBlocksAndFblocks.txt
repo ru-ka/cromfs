@@ -1,0 +1,87 @@
+cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
+License: GPL3
+Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+Understanding how files are stored in cromfs archives.
+
+--------------------------------
+
+This simple example shows how mkcromfs stores files.
+Let's assume the following input parameters:
+
+Our block size  = 5 bytes  (-b option in mkcromfs)
+Our fblock size = 20 bytes (-f option in mkcromfs)
+
+Our input is two files, containing the following data:
+    File1: "My hissing little kitten that ate a big fish"
+    File2: "Jim's big dog is chasing cars"
+(Let's assume there are no directories etc. to be encoded)
+
+First, this data is split into blocks.
+  File1 data:
+    "My hi"
+    "ssing"
+    " litt"
+    "le ki"
+    "tten "
+    "that "
+    "ate a"
+    " big "
+    "fish"
+  File2 data:
+    "Jim's"
+    " big "
+    "dog i"
+    "s cha"
+    "sing "
+    "cars"
+
+Then, mkcromfs figures out how to all block data exactly once.
+
+The resulting fblocks are:
+
+           01234567890123456789
+Fblock 0: "My hissing little ki"
+Fblock 1: "tten that ate a big "
+Fblock 2: "fishJim'sdog is cha"
+Fblock 3: "cars"
+
+The resulting block table is:
+
+Block 0:  Fblock 0, offset 0  ("My hi")
+Block 1:  Fblock 0, offset 5  ("ssing")
+Block 2:  Fblock 0, offset 10 (" litt")
+Block 3:  Fblock 0, offset 15 ("le ki")
+Block 4:  Fblock 1, offset 0  ("tten ")
+Block 5:  Fblock 1, offset 5  ("that ")
+Block 6:  Fblock 1, offset 10 ("ate a")
+Block 7:  Fblock 1, offset 15 (" big ")
+Block 8:  Fblock 2, offset 0  ("fish")
+Block 9:  Fblock 2, offset 4  ("Jim's")
+Block 10: Fblock 2, offset 9  ("dog i")
+Block 11: Fblock 2, offset 14 ("s cha")
+Block 12: Fblock 0, offset 6  ("sing ")
+Block 13: Fblock 3, offset 0  ("cars")
+
+How?
+
+First, "My hi" is stored. It has never been seen before,
+so it's just appended to a fblock, Fblock 0.
+Similarly for all the subsequent blocks of File1.
+
+When " big " is met the second time (in File2), mkcromfs knows
+it has already encoded this block (see BlockIndexing.txt), so
+it will just reuse the same block pointer (Block 7, see above).
+
+When "sing " is met in File2, mkcromfs finds that the string
+"sing " is already found in Fblock 0, because it was saved
+there as part of File1, so Block 12 becomes a pointer to
+the existing data.
+
+The resulting inodes corresponding to File1 and File2 are:
+
+  File1: length 44 bytes, block list: 0, 1, 2, 3, 4, 5, 6, 7, 8
+  File2: length 29 bytes, block list: 9, 7, 10, 11, 12, 13
+
+Last, the cromfs archive is constructed by compressing
+the inode table, the block table, and each fblock.

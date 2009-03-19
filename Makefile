@@ -14,6 +14,7 @@ ARCHFILES=\
 	doc/ChangeLog \
 	doc/ImplementationGuide.txt \
 	doc/SoftwareArchitecture.txt \
+	doc/UnderstandingBlocksAndFblocks.txt \
 	doc/WritingFrontends.txt \
 	doc/WriteAccess.txt \
 	doc/BlockIndexing.txt \

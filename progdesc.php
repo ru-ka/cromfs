@@ -651,7 +651,10 @@ is located at \"/home/myself/books.cromfs\"):
 
 ", 'vocabulary:1. Understanding the concepts' => "
 
-Skip over this section if you don't think yourself as technically inclined.
+Skip over this section if you don't think yourself as technically inclined.<br/>
+<br/>
+cromfs workings are explained in a nutshell
+<a href=\"http://bisqwit.iki.fi/src/cromfs-understandingblocksandfblocks.txt\">here</a>.
 
 ", 'concept_inode:1.1.1. Inode' => "
 
