@@ -18,8 +18,10 @@
 class cromfs_blockifier
 {
 public:
-    cromfs_blockifier()
-        : schedule(), blocks(), fblocks(), fblock_totalsize(0),
+    cromfs_blockifier(std::vector<cromfs_block_internal>& blocks_vec)
+        : schedule(),
+          blocks(blocks_vec),
+          fblocks(), fblock_totalsize(0),
           last_autoindex_length(), autoindex()
     {
         /* Set up the global pointer to our block_index
@@ -207,7 +209,7 @@ private:
 
 public:
     // Data locators written into filesystem. Indexed by block number.
-    std::vector<cromfs_block_internal> blocks;
+    std::vector<cromfs_block_internal>& blocks;
 
     // The fblocks written into filesystem. Indexed by data locators.
     mkcromfs_fblockset fblocks;

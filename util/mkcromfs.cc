@@ -3,6 +3,7 @@
 #include "cromfs-defs.hh"
 #include "threadfun.hh"
 #include "assert++.hh"
+#include "autodealloc.hh"
 
 #include <vector>
 #include <cstdio>
@@ -42,6 +43,7 @@
 #include "longfilewrite.hh"
 #include "util.hh"
 #include "fnmatch.hh"
+#include "mmap_vector.hh"
 
 /* Settings */
 #include "mkcromfs_sets.hh"
@@ -741,14 +743,19 @@ namespace cromfs_creator
         std::vector<unsigned char> compressed_inotab_inode;
         std::vector<unsigned char> compressed_blktab;
 
-        cromfs_blockifier blockifier;
+        mmap_storage mmap_file(out_fd, 0);
+
+        std::vector<cromfs_block_internal>* blocks = new std::vector<cromfs_block_internal>;
+        autodealloc<std::vector<cromfs_block_internal> > blocks_dealloc(blocks);
+
+        cromfs_blockifier blockifier(*blocks);
 
         if(true) // scope for inotab
         {
             // This array will collect all inodes of the filesystem. In the
             // end, it will be written as a file to the filesystem (split
             // into fblocks).
-            std::vector<unsigned char> inotab;
+            std::vector<unsigned char> inotab; //(mmap_file);
 
             if(true) // scope for root_inode
             {
@@ -873,7 +880,6 @@ namespace cromfs_creator
         } // end scope for inotab
 
         mkcromfs_fblockset& fblocks                = blockifier.fblocks;
-        std::vector<cromfs_block_internal>& blocks = blockifier.blocks;
 
         if(true) // scope for raw_blktab
         {
@@ -883,26 +889,26 @@ namespace cromfs_creator
             if(DisplayEndProcess)
             {
                 std::printf("Compressing %u block records (%u bytes each, total %s)\n",
-                    (unsigned)blocks.size(), onesize, ReportSize(blocks.size() * onesize).c_str());
-                fflush(stdout);
+                    (unsigned)blocks->size(), onesize, ReportSize(blocks->size() * onesize).c_str());
+                std::fflush(stdout);
             }
 
-            std::vector<unsigned char> raw_blktab(blocks.size() * onesize);
+            std::vector<unsigned char> raw_blktab(blocks->size() * onesize);
             if(storage_opts & CROMFS_OPT_PACKED_BLOCKS)
-                for(unsigned a=0; a<blocks.size(); ++a)
+                for(unsigned a=0; a<blocks->size(); ++a)
                 {
-                    uint_fast32_t fblocknum = blocks[a].get_fblocknum(BSIZE,FSIZE);
-                    uint_fast32_t startoffs = blocks[a].get_startoffs(BSIZE,FSIZE);
+                    uint_fast32_t fblocknum = (*blocks)[a].get_fblocknum(BSIZE,FSIZE);
+                    uint_fast32_t startoffs = (*blocks)[a].get_startoffs(BSIZE,FSIZE);
 
                     //fprintf(stderr, "Writing P block %u = %u:%u\n", a,fblocknum,startoffs);
 
                     W32(&raw_blktab[a*onesize], fblocknum * FSIZE + startoffs);
                 }
             else
-                for(unsigned a=0; a<blocks.size(); ++a)
+                for(unsigned a=0; a<blocks->size(); ++a)
                 {
-                    uint_fast32_t fblocknum = blocks[a].get_fblocknum(BSIZE,FSIZE);
-                    uint_fast32_t startoffs = blocks[a].get_startoffs(BSIZE,FSIZE);
+                    uint_fast32_t fblocknum = (*blocks)[a].get_fblocknum(BSIZE,FSIZE);
+                    uint_fast32_t startoffs = (*blocks)[a].get_startoffs(BSIZE,FSIZE);
 
                     //fprintf(stderr, "Writing NP block %u = %u:%u\n", a,fblocknum,startoffs);
 
@@ -930,6 +936,9 @@ namespace cromfs_creator
             {
                 std::printf(" compressed into %s\n", ReportSize(compressed_blktab.size()).c_str()); fflush(stdout);
             }
+
+            delete blocks;
+            blocks = 0;
         } // end scope for raw_blktab and blocks
 
         blockifier.NoMoreBlockifying();

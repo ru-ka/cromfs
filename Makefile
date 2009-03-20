@@ -66,6 +66,7 @@ ARCHFILES=\
 	lib/sparsewrite.cc lib/sparsewrite.hh \
 	lib/longfileread.hh \
 	lib/longfilewrite.hh lib/longfilewrite.cc \
+	lib/mmap_vector.hh \
 	lib/boyermooreneedle.hh \
 	lib/boyermoore.hh lib/boyermoore.cc \
 	lib/fsballocator.hh \
