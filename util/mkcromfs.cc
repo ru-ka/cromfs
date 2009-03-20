@@ -459,7 +459,7 @@ namespace cromfs_creator
     static
     cromfs_dirinfo WalkRootDir(
         const std::string& path,
-        std::vector<unsigned char>& inotab,
+        mmap_vector<unsigned char>& inotab,
         uint_fast64_t& bytes_of_files,
         cromfs_blockifier& blockifier
     )
@@ -552,7 +552,7 @@ namespace cromfs_creator
         }
 
         if(inotab.size() < inotab_size)
-            inotab.resize(inotab_size);
+            inotab.Resize(inotab_size);
 
         /* Now that the inode numbers have been assigned, we can
          * sort the entry list in the order in which we want to
@@ -755,7 +755,7 @@ namespace cromfs_creator
             // This array will collect all inodes of the filesystem. In the
             // end, it will be written as a file to the filesystem (split
             // into fblocks).
-            std::vector<unsigned char> inotab; //(mmap_file);
+            mmap_vector<unsigned char> inotab(mmap_file);
 
             if(true) // scope for root_inode
             {
@@ -833,7 +833,7 @@ namespace cromfs_creator
                  */
 
                 datasource_t* datasrc =
-                    new datasource_vector_ref(inotab, "INOTAB");
+                    new datasource_vector_ref(inotab.GetAndRelease(), "INOTAB");
 
                 PutInodeSize(inotab_inode, datasrc->size());
 
