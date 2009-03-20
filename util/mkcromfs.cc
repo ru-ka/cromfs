@@ -805,10 +805,13 @@ namespace cromfs_creator
                     &inotab[0], &inotab[inotab.size()]);
                 std::printf("Root inode spans %p..%p\n",
                     &raw_root_inode[headersize], &raw_root_inode[raw_root_inode.size()]);
+                std::fflush(stdout);
+
                 blockifier.FlushBlockifyRequests("Files and directories");
 
+                std::fflush(stdout);
                 if(DisplayEndProcess)
-                    printf("Compressing raw rootdir inode (%s)\n",
+                    std::printf("Compressing raw rootdir inode (%s)\n",
                         ReportSize(raw_root_inode.size()).c_str());
 
                 compressed_root_inode
@@ -856,7 +859,11 @@ namespace cromfs_creator
                 // blockify inotab, write block numbers in raw_inotab_inode.
                 std::printf("Inotab inode spans %p..%p\n",
                     &raw_inotab_inode[headersize], &raw_inotab_inode[raw_inotab_inode.size()]);
+                std::fflush(stdout);
+
                 blockifier.FlushBlockifyRequests("INOTAB");
+
+                std::fflush(stdout);
 
                 blockifier.EnablePackedBlocksIfPossible();
 
@@ -864,19 +871,20 @@ namespace cromfs_creator
                 // been changed since the last write due to EnablePackedBlocks.
                 W32(&raw_inotab_inode[0], storage_opts);
 
+                std::fflush(stdout);
+
                 if(DisplayEndProcess)
-                    printf("Compressing raw inotab inode (%s)\n",
+                    std::printf("Compressing raw inotab inode (%s)\n",
                         ReportSize(raw_inotab_inode.size()).c_str());
 
                 compressed_inotab_inode
                     = DoLZMACompress(LZMA_HeavyCompress, raw_inotab_inode, "raw_inotab_inode");
 
                 if(DisplayEndProcess)
-                    printf(" compressed into %s\n",
+                    std::printf(" compressed into %s\n",
                         ReportSize(compressed_inotab_inode.size()).c_str());
 
             } // end scope for inotab_inode
-
         } // end scope for inotab
 
         mkcromfs_fblockset& fblocks                = blockifier.fblocks;
@@ -888,6 +896,7 @@ namespace cromfs_creator
             unsigned onesize = DATALOCATOR_SIZE_BYTES();
             if(DisplayEndProcess)
             {
+                std::fflush(stdout);
                 std::printf("Compressing %u block records (%u bytes each, total %s)\n",
                     (unsigned)blocks->size(), onesize, ReportSize(blocks->size() * onesize).c_str());
                 std::fflush(stdout);
@@ -934,7 +943,7 @@ namespace cromfs_creator
 
             if(DisplayEndProcess)
             {
-                std::printf(" compressed into %s\n", ReportSize(compressed_blktab.size()).c_str()); fflush(stdout);
+                std::printf(" compressed into %s\n", ReportSize(compressed_blktab.size()).c_str()); std::fflush(stdout);
             }
 
             delete blocks;
@@ -963,17 +972,17 @@ namespace cromfs_creator
         sblock.WriteToBuffer(Superblock);
 
         ftruncate64(out_fd, 0);
-        lseek64(out_fd, 0, SEEK_SET);
-
-        write(out_fd, Superblock, sblock.GetSize());
 
       #pragma omp parallel sections
       {
         #pragma omp section
-        { //fprintf(stderr, "root goes at %llX\n", lseek64(out_fd,0,SEEK_CUR));
+        {
+        SparseWrite(out_fd, Superblock, sblock.GetSize(), 0); }
+        #pragma omp section
+        { //fprintf(stderr, "root goes at %llX\n", sblock.rootdir_offs);
         SparseWrite(out_fd, &compressed_root_inode[0],   compressed_root_inode.size(), sblock.rootdir_offs); }
         #pragma omp section
-        { //fprintf(stderr, "inotab goes at %llX\n", lseek64(out_fd,0,SEEK_CUR));
+        { //fprintf(stderr, "inotab goes at %llX\n", sblock.inotab_offs);
         SparseWrite(out_fd, &compressed_inotab_inode[0], compressed_inotab_inode.size(), sblock.inotab_offs); }
         #pragma omp section
         { SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs); }
@@ -1032,11 +1041,15 @@ namespace cromfs_creator
 
           #pragma omp ordered
           {
-            const std::vector<unsigned char> fblock_lzma = fblock.get_compressed();
+            DataReadBuffer lzma_buffer;
+            uint_fast32_t  lzma_length;
+
+            fblock.InitCompressedDataReadBuffer(lzma_buffer, lzma_length);
+
             if(true)
             {
                 bool is_ok = true;
-                LZMADeCompress(fblock_lzma, is_ok);
+                LZMADeCompress(lzma_buffer.Buffer, lzma_length, is_ok);
                 if(!is_ok)
                 {
                     std::fprintf(stderr,
@@ -1050,16 +1063,16 @@ namespace cromfs_creator
             }
 
             { unsigned char Buf[64];
-              W32(Buf, fblock_lzma.size());
+              W32(Buf, lzma_length);
               SparseWrite(out_fd, Buf, 4, fblk_offset);
               fblk_offset += 4;
             }
 
-            SparseWrite(out_fd, &fblock_lzma[0], fblock_lzma.size(), fblk_offset);
+            SparseWrite(out_fd, lzma_buffer.Buffer, lzma_length, fblk_offset);
 
             if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
             {
-                if(fblock_lzma.size() > (size_t)FSIZE)
+                if(lzma_length > (size_t)FSIZE)
                 {
                     std::printf("\n");
                     std::fflush(stdout);
@@ -1077,19 +1090,20 @@ namespace cromfs_creator
             }
             else
             {
-                fblk_offset += fblock_lzma.size();
+                fblk_offset += lzma_length;
             }
-
-            std::fflush(stdout);
 
             // Ensure the data is written before deleting the fblock
             // So that if the computer happens to crash, a recovery
             // with --finish-interrupted is possible.
 
             fdatasync(out_fd);
+            fblock.Unmap();
             fblock.Close();
             //fblock.Delete();
             std::printf("You may now delete %s if you want\n", fblock.getfn().c_str());
+
+            std::fflush(stdout);
           next_for:;
           }
         }
@@ -1197,21 +1211,24 @@ namespace cromfs_creator
                     FinalCompressFblock(fblocknum, fblock, com, uncom);
                 }
 
-                const std::vector<unsigned char> fblock_lzma = fblock.get_compressed();
+                DataReadBuffer lzma_buffer;
+                uint_fast32_t  lzma_length;
+
+                fblock.InitCompressedDataReadBuffer(lzma_buffer, lzma_length);
 
                 std::printf(" writing fblock %u (%u bytes) at 0x%lX\n",
-                    (int)fblocknum, (unsigned) fblock_lzma.size(),
+                    (int)fblocknum, (unsigned) lzma_length,
                     (unsigned long)fblock_pos);
 
                 { unsigned char SizeBuffer[64];
-                  W32(SizeBuffer, fblock_lzma.size());
+                  W32(SizeBuffer, lzma_length);
                   LongFileWrite(out_fd, fblock_pos, 4, SizeBuffer); }
 
-                SparseWrite(out_fd, &fblock_lzma[0], fblock_lzma.size(), fblock_pos+4);
+                SparseWrite(out_fd, lzma_buffer.Buffer, lzma_length, fblock_pos+4);
 
                 if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)
                 {
-                    if(fblock_lzma.size() > (size_t)FSIZE)
+                    if(lzma_length > (size_t)FSIZE)
                     {
                         std::printf("\n");
                         std::fflush(stdout);
@@ -1227,7 +1244,7 @@ namespace cromfs_creator
                 }
                 else
                 {
-                    fblock_pos += 4 + fblock_lzma.size();
+                    fblock_pos += 4 + lzma_length;
                 }
 
                 std::fflush(stdout);

@@ -30,8 +30,8 @@ public:
     MutexType& GetMutex() const { return lock; }
     size_t size() const { Decompress(); return filesize; }
 
-    void EnsureMMapped() const; // For efficient InitDataReadBuffer access
-    void EnsureMMapped();
+    void EnsureMMapped(bool decompressed=true) const; // For efficient InitDataReadBuffer access
+    void EnsureMMapped(bool decompressed=true);
 
     void InitDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size,
                             uint_fast32_t req_offset,
@@ -50,8 +50,11 @@ public:
     void put_compressed(const std::vector<unsigned char>& data);
     std::vector<unsigned char> get_compressed();
 
+    void InitCompressedDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size);
+
     void Delete();
     bool Close();
+    void Unmap();
 
     uint_fast32_t getfilesize() const { return filesize; }
     bool          is_uncompressed() const { return !is_compressed; }
@@ -64,10 +67,11 @@ private:
     void Decompress();
     void EnsureOpen();
 
+    void SetFileContent(const unsigned char* ptr, uint_fast32_t length);
+
 protected:
     friend class mkcromfs_fblockset;
     void Compress();
-    void Unmap();
 
 private:
     mkcromfs_fblock(const mkcromfs_fblock&);
