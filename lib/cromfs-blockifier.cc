@@ -1680,7 +1680,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                    );
         std::fflush(stdout);
 
-        blocks.reserve(blocks.size() + blocks_done - identical_list.size());
+        blocks.Reserve(blocks.size() + blocks_done - identical_list.size());
     }
 
     if(true)

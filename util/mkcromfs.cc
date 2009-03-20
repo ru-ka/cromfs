@@ -745,8 +745,8 @@ namespace cromfs_creator
 
         mmap_storage mmap_file(out_fd, 0);
 
-        std::vector<cromfs_block_internal>* blocks = new std::vector<cromfs_block_internal>;
-        autodealloc<std::vector<cromfs_block_internal> > blocks_dealloc(blocks);
+        mmap_vector<cromfs_block_internal>* blocks = new mmap_vector<cromfs_block_internal> (mmap_file);
+        autodealloc<mmap_vector<cromfs_block_internal> > blocks_dealloc(blocks);
 
         cromfs_blockifier blockifier(*blocks);
 

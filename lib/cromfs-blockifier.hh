@@ -6,6 +6,8 @@
 #include "newhash.h"
 #include "autoptr"
 
+#include "mmap_vector.hh"
+
 #include <map>
 #include <list>
 #include <deque>
@@ -18,7 +20,7 @@
 class cromfs_blockifier
 {
 public:
-    cromfs_blockifier(std::vector<cromfs_block_internal>& blocks_vec)
+    cromfs_blockifier(mmap_vector<cromfs_block_internal>& blocks_vec)
         : schedule(),
           blocks(blocks_vec),
           fblocks(), fblock_totalsize(0),
@@ -209,7 +211,7 @@ private:
 
 public:
     // Data locators written into filesystem. Indexed by block number.
-    std::vector<cromfs_block_internal>& blocks;
+    mmap_vector<cromfs_block_internal>& blocks;
 
     // The fblocks written into filesystem. Indexed by data locators.
     mkcromfs_fblockset fblocks;
