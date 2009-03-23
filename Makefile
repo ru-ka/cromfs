@@ -40,6 +40,7 @@ ARCHFILES=\
 	lib/cromfs-fblockfun.cc lib/cromfs-fblockfun.hh \
 	lib/cromfs-blockindex.tcc lib/cromfs-blockindex.hh \
 	lib/cromfs-blockifier.cc lib/cromfs-blockifier.hh \
+	lib/cromfs-blockfun.cc lib/cromfs-blockfun.hh \
 	\
 	lib/endian.hh \
 	lib/simd.hh \
@@ -167,6 +168,7 @@ LDLIBS   += `pkg-config --libs fuse`
 OBJS=\
 	cromfs.o fuse-ops.o fuse-main.o \
 	lib/cromfs-inodefun.o \
+	lib/cromfs-blockfun.o \
 	lib/fadvise.o lib/util.o \
 	lib/lzma/C/LzmaDec.o
 

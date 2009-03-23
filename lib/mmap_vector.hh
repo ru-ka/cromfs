@@ -357,6 +357,14 @@ public:
         return * (T*) ptr;
     }
 
+    const inline T& operator[] (size_t n) const
+    {
+        mmap_vector_base& b = const_cast<mmap_vector_base&> (backing);
+
+        const unsigned char* ptr = &b.GetRef( n * sizeof(T), sizeof(T) );
+        return * (const T*) ptr;
+    }
+
     void push_back(const T& item)
     {
         size_t end = size();

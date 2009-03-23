@@ -40,6 +40,7 @@
 #include "cromfs-inodefun.hh"
 #include "cromfs-directoryfun.hh"
 #include "cromfs-blockifier.hh"
+#include "cromfs-blockfun.hh"
 #include "longfileread.hh"
 #include "longfilewrite.hh"
 #include "nocopyarray.hh"
@@ -924,44 +925,8 @@ namespace cromfs_creator
                 std::fflush(stdout);
             }
 
-            std::vector<unsigned char> raw_blktab(blocks->size() * onesize);
-            if(storage_opts & CROMFS_OPT_PACKED_BLOCKS)
-                for(unsigned a=0; a<blocks->size(); ++a)
-                {
-                    uint_fast32_t fblocknum = (*blocks)[a].get_fblocknum(BSIZE,FSIZE);
-                    uint_fast32_t startoffs = (*blocks)[a].get_startoffs(BSIZE,FSIZE);
-
-                    //fprintf(stderr, "Writing P block %u = %u:%u\n", a,fblocknum,startoffs);
-
-                    W32(&raw_blktab[a*onesize], fblocknum * FSIZE + startoffs);
-                }
-            else
-                for(unsigned a=0; a<blocks->size(); ++a)
-                {
-                    uint_fast32_t fblocknum = (*blocks)[a].get_fblocknum(BSIZE,FSIZE);
-                    uint_fast32_t startoffs = (*blocks)[a].get_startoffs(BSIZE,FSIZE);
-
-                    //fprintf(stderr, "Writing NP block %u = %u:%u\n", a,fblocknum,startoffs);
-
-                    W32(&raw_blktab[a*onesize+0], fblocknum);
-                    W32(&raw_blktab[a*onesize+4], startoffs);
-                }
-
-            if(LZMA_HeavyCompress==2)
-            {
-                compressed_blktab = LZMACompressHeavy(raw_blktab, "raw_blktab");
-            }
-            else
-            {
-                /* Make an educated guess of the optimal parameters for blocktab compression */
-                const unsigned blktab_periodicity
-                    = (DATALOCATOR_SIZE_BYTES() == 4) ? 2 : 3;
-
-                compressed_blktab = LZMACompress(raw_blktab,
-                    blktab_periodicity,
-                    blktab_periodicity,
-                    0);
-            }
+            compressed_blktab
+                = CompressBlockTable(*blocks, storage_opts, FSIZE, LZMA_HeavyCompress);
 
             if(DisplayEndProcess)
             {
