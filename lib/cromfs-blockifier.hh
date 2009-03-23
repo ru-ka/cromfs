@@ -4,7 +4,8 @@
 #include "cromfs-fblockfun.hh"
 #include "fsballocator.hh"
 #include "newhash.h"
-#include "autoptr"
+
+#include "mmap_vector.hh"
 
 #include <map>
 #include <list>
@@ -18,8 +19,10 @@
 class cromfs_blockifier
 {
 public:
-    cromfs_blockifier()
-        : schedule(), blocks(), fblocks(), fblock_totalsize(0),
+    cromfs_blockifier(mmap_vector<cromfs_block_internal>& blocks_vec)
+        : schedule(),
+          blocks(blocks_vec),
+          fblocks(), fblock_totalsize(0),
           last_autoindex_length(), autoindex()
     {
         /* Set up the global pointer to our block_index
@@ -185,18 +188,15 @@ private:
 
         schedule_item& operator= (const schedule_item& b)
         {
-            if(&b != this)
-            {
-                source = b.source;
-                target = b.target;
-                dataclass = b.dataclass;
-                blocksize = b.blocksize;
-            }
+            source = b.source;
+            target = b.target;
+            dataclass = b.dataclass;
+            blocksize = b.blocksize;
             return *this;
         }
 
     private:
-        autoptr<datasource_t> source;
+        datasource_t* source;
 
         unsigned char*     target;
         SchedulerDataClass dataclass;
@@ -207,7 +207,7 @@ private:
 
 public:
     // Data locators written into filesystem. Indexed by block number.
-    std::vector<cromfs_block_internal> blocks;
+    mmap_vector<cromfs_block_internal>& blocks;
 
     // The fblocks written into filesystem. Indexed by data locators.
     mkcromfs_fblockset fblocks;

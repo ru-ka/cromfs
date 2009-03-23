@@ -1,4 +1,4 @@
-VERSION=1.5.8.4
+VERSION=1.5.8.5
 
 include Makefile.sets
 
@@ -50,6 +50,7 @@ OBJS_MK += mkcromfs.o \
 	   ../lib/cromfs-blockifier.o \
 	   ../lib/cromfs-hashmap_lzo.o \
 	   ../lib/cromfs-hashmap_lzo_sparse.o \
+	   ../lib/cromfs-blockfun.o \
 	   $(MKCROMFS_LZO_OBJ) \
 	   ../lib/boyermoore.o \
 	   ../lib/stringsearchutil.o
@@ -59,7 +60,9 @@ OBJS_UN += unmkcromfs.o ../cromfs.o \
 	   ../lib/fadvise.o \
 	   ../lib/util.o ../lib/fnmatch.o \
 	   ../lib/sparsewrite.o \
-	   ../lib/longfilewrite.o ../lib/cromfs-inodefun.o \
+	   ../lib/longfilewrite.o \
+	   ../lib/cromfs-inodefun.o \
+	   ../lib/cromfs-blockfun.o \
 	   $(OBJS_LZMADEC)
 
 OBJS_CV += $(OBJS_LZMA)

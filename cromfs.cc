@@ -32,6 +32,7 @@ extern "C" {
 }
 
 #include "lib/longfileread.hh"
+#include "lib/cromfs-blockfun.hh"
 #include "lib/cromfs-inodefun.hh"
 #include "lib/fadvise.hh"
 #include "lib/util.hh"
@@ -163,8 +164,8 @@ const std::string cromfs::DumpBlock(const cromfs_block_internal& block) const
 {
     std::stringstream s;
 
-    s << "fblocknum(" << block.get_fblocknum(CROMFS_BSIZE, CROMFS_FSIZE)
-      << ")startoffs(" << block.get_startoffs(CROMFS_BSIZE, CROMFS_FSIZE)
+    s << "fblocknum(" << block.fblocknum
+      << ")startoffs(" << block.startoffs
       << ")";
 
     return s.str();
@@ -396,33 +397,14 @@ void cromfs::reread_blktab()
      */
     FadviseDontNeed(fd, sblock.blktab_offs, sblock.blktab_size);
 
-    /* Decode the blktab. */
-
-    unsigned onesize = DATALOCATOR_SIZE_BYTES();
-    if(storage_opts & CROMFS_OPT_PACKED_BLOCKS)
-    {
-        blktab.resize(blktab_data.size() / onesize);
-        for(unsigned a=0; a<blktab.size(); ++a)
-        {
-            uint_fast32_t value = R32(&blktab_data[a*onesize]);
-            uint_fast32_t fblocknum = value / CROMFS_FSIZE,
-                          startoffs = value % CROMFS_FSIZE;
-
-            //fprintf(stderr, "P block %u defined as %u:%u\n", a, (unsigned)fblocknum, (unsigned)startoffs);
-            blktab[a].define(fblocknum, startoffs/*, CROMFS_BSIZE,CROMFS_FSIZE*/);
-        }
-    }
-    else
-    {
-        blktab.resize(blktab_data.size() / onesize);
-        for(unsigned a=0; a<blktab.size(); ++a)
-        {
-            uint_fast32_t fblocknum = R32(&blktab_data[a*onesize+0]),
-                          startoffs = R32(&blktab_data[a*onesize+4]);
-            //fprintf(stderr, "NP block %u defined as %u:%u\n", a, (unsigned)fblocknum, (unsigned)startoffs);
-            blktab[a].define(fblocknum, startoffs/*, CROMFS_BSIZE,CROMFS_FSIZE*/);
-        }
-    }
+    /* Decode the blktab.
+     * Destruct + construct in place, faster than assignment,
+     *              better optimized by the compiler as well.
+     * Probably not exception-safe though.
+     */
+    blktab.~vector<cromfs_block_internal>();
+    new( (void*)&blktab) std::vector<cromfs_block_internal>
+        ( DecodeBlockTable(blktab_data, CROMFS_FSIZE, storage_opts) );
 
 #if READBLOCK_DEBUG >= 2
     for(unsigned a=0; a<blktab.size(); ++a)
@@ -609,11 +591,10 @@ void cromfs::read_block(cromfs_blocknum_t ind,
         DumpBlock(block).c_str());
 #endif
 
-    cromfs_cached_fblock& fblock =
-        read_fblock(block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE));
+    cromfs_cached_fblock& fblock = read_fblock(block.fblocknum);
 
     const uint_fast32_t startoffs =
-        block.get_startoffs(CROMFS_BSIZE,CROMFS_FSIZE)
+        block.startoffs
          + offset;
 
     if(startoffs < fblock.size())
@@ -705,7 +686,7 @@ int_fast64_t cromfs::read_file_data_from_one_fblock_only(
         if(blocknum >= blktab.size()) break; // throw EIO;
 
         const cromfs_block_internal& block = blktab[blocknum];
-        const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
+        const cromfs_fblocknum_t fblocknum = block.fblocknum;
 
         if(fblocknum != allowed_fblocknum)
         {
@@ -813,7 +794,7 @@ int_fast64_t cromfs::read_file_data(
             const cromfs_blocknum_t blocknum = inode.blocklist[begin_block_index];
             if(blocknum >= blktab.size()) break; // throw EIO;
             const cromfs_block_internal& block = blktab[blocknum];
-            const cromfs_fblocknum_t fblocknum = block.get_fblocknum(CROMFS_BSIZE,CROMFS_FSIZE);
+            const cromfs_fblocknum_t fblocknum = block.fblocknum;
 
             if(fblocknum < fblktab.size())
             {

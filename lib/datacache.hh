@@ -49,6 +49,45 @@ public:
         }
     }
 
+    class iterator
+    {
+        typename std::map<KeyType, std::pair<time_t, ValueType> >::iterator rep;
+    public:
+        iterator() : rep() { }
+        iterator(const typename std::map<KeyType, std::pair<time_t, ValueType> >::iterator& i)
+            : rep(i) { }
+
+        const KeyType& GetKey() const { return rep->first; }
+        const ValueType& GetValue() const { return rep->second.second; }
+        ValueType& GetValue() { return rep->second.second; }
+
+        bool operator==(const iterator& b) const { return rep==b.rep; }
+        bool operator!=(const iterator& b) const { return rep!=b.rep; }
+        iterator& operator++ () { ++rep; return *this; }
+    };
+
+    class const_iterator
+    {
+        typename std::map<KeyType, std::pair<time_t, ValueType> >::const_iterator rep;
+    public:
+        const_iterator() : rep() { }
+        const_iterator(
+            const typename std::map<KeyType, std::pair<time_t, ValueType> >::const_iterator& i)
+            : rep(i) { }
+
+        const KeyType& GetKey() const { return rep->first; }
+        const ValueType& GetValue() const { return rep->second.second; }
+
+        bool operator==(const const_iterator& b) const { return rep==b.rep; }
+        bool operator!=(const const_iterator& b) const { return rep!=b.rep; }
+        const_iterator& operator++ () { ++rep; return *this; }
+    };
+
+    //iterator begin() { return data.begin(); }
+    //iterator end() { return data.end(); }
+    const_iterator begin() const { return data.begin(); }
+    const_iterator end()   const { return data.end(); }
+
     ValueType* Find(const KeyType key)
     {
         it i = data.find(key);

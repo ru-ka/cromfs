@@ -54,6 +54,7 @@ In CROMFS03, the INOTAB inode contains flag bits in the inode's "mode" field:
       00000000 000000mb 0000vk23 0000000f
       f:
       	1 = fblocks are stored sparsely (padded to FSIZE)
+      	      (this also causes inotab to be stored sparsely)
       	0 = fblocks are stored tightly (no padding)
       23:
         00 = blocknums in inodes are 32-bit

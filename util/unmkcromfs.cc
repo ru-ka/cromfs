@@ -19,6 +19,10 @@
 #include <stdarg.h>
 #include <cstring>
 
+#ifdef HAS_LUTIMES
+ #include <sys/time.h>
+#endif
+
 #include <getopt.h>
 
 #include "fnmatch.hh"
@@ -557,6 +561,8 @@ public:
                 }
             }
 
+            /* permission bits are not defined for symlinks */
+
             if(!S_ISLNK(ino.mode)
             && chmod( target.c_str(), ino.mode & 07777) < 0)
             {
@@ -612,6 +618,16 @@ public:
             const cromfs_inode_internal ino = read_inode(inonum);
             const std::string target = GetTargetPath(targetdir, i->first);
 
+        #ifdef HAS_LUTIMES
+            struct timeval tv[2] = { { ino.time, 0 }, { ino.time, 0 } };
+            if(lutimes(target.c_str(), tv) < 0)
+            {
+                if(!S_ISLNK(ino.mode) && errno == ENOSYS) goto try_utime;
+                perror(target.c_str());
+            }
+            continue;
+        #endif
+        try_utime:;
             struct utimbuf data = { ino.time, ino.time };
 
             /* Note: It is not possible to use utime() to change symlinks' modtime */
@@ -872,8 +888,8 @@ public:
                     }
                     const cromfs_block_internal& block = blktab[ino.blocklist[a]];
 
-                    const uint_fast32_t block_fblocknum = block.get_fblocknum(BSIZE,FSIZE);
-                    const uint_fast32_t block_startoffs = block.get_startoffs(BSIZE,FSIZE);
+                    const uint_fast32_t block_fblocknum = block.fblocknum;
+                    const uint_fast32_t block_startoffs = block.startoffs;
 
                     // Only write data from this fblock that is being handled now.
                     if(block_fblocknum != fblocknum) continue;
@@ -1012,19 +1028,22 @@ private:
         const std::string& entname,
         const cromfs_inodenum_t inonum,
         const cromfs_inode_internal& ino,
-        const std::set<cromfs_fblocknum_t>& fblist) const
+        const std::set<cromfs_fblocknum_t>& fblist,
+        const std::string& linkdetail = "") const
     {
         if(verbose >= 1)
         {
             if(verbose >= 2) std::printf("%6u ", (unsigned)inonum);
-            std::printf("%s%3u %u/%-3u %11llu %s %s\n",
+            std::printf("%s%3u %u/%-3u %11llu %s %s%s%s\n",
                 TranslateMode(ino.mode).c_str(),
                 (unsigned)fblist.size(),
                 (unsigned)ino.uid,
                 (unsigned)ino.gid,
                 (unsigned long long)ino.bytesize,
                 DumpTime(ino.time).c_str(),
-                entname.c_str()
+                entname.c_str(),
+                linkdetail.empty() ? "" : " -> ",
+                linkdetail.c_str()
                        );
         }
         else if(verbose >= 0)
@@ -1065,7 +1084,7 @@ private:
             cromfs_inode_internal ino = read_inode_and_blocks(inonum);
             std::set<cromfs_fblocknum_t> fblist;
             for(unsigned a=0; a<ino.blocklist.size(); ++a)
-                fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                fblist.insert(blktab[ino.blocklist[a]].fblocknum);
 
             ListingDisplayInode(entname, inonum, ino, fblist);
         }
@@ -1083,7 +1102,7 @@ private:
             std::set<cromfs_fblocknum_t> fblist;
             for(unsigned a=0; a<ino.blocklist.size(); ++a)
                 if(ino.blocklist[a] < blktab.size())
-                    fblist.insert(blktab[ino.blocklist[a]].get_fblocknum(BSIZE,FSIZE));
+                    fblist.insert(blktab[ino.blocklist[a]].fblocknum);
                 else
                 {
                     fprintf(stderr, "Inode %llu (%s) is corrupt. It refers to block %u which does not exist (%u blocks exist).\n",
@@ -1097,7 +1116,18 @@ private:
 
             if(namematch && listing_mode)
             {
-                ListingDisplayInode(entname, inonum, ino, fblist);
+                std::string link_detail;
+
+                if(verbose >= 1 && S_ISLNK(ino.mode))
+                {
+                    std::vector<unsigned char> linktargetbuffer(ino.bytesize);
+                    read_file_data(ino, 0, &linktargetbuffer[0], ino.bytesize, entname.c_str());
+                    link_detail.assign(
+                        (const char*)&linktargetbuffer[0],
+                        (const char*)&linktargetbuffer[ino.bytesize]);
+                }
+
+                ListingDisplayInode(entname, inonum, ino, fblist, link_detail);
             }
 
             if(inonum == 1) continue;

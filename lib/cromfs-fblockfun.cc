@@ -166,18 +166,18 @@ void mkcromfs_fblock::Delete()
     unlink(getfn().c_str());
 }
 
-void mkcromfs_fblock::EnsureMMapped() const
+void mkcromfs_fblock::EnsureMMapped(bool decompressed) const
 {
-    (const_cast<mkcromfs_fblock*>(this))->EnsureMMapped();
+    (const_cast<mkcromfs_fblock*>(this))->EnsureMMapped(decompressed);
 }
 
-void mkcromfs_fblock::EnsureMMapped()
+void mkcromfs_fblock::EnsureMMapped(bool want_decompressed)
 {
-    if(is_compressed) Decompress();
+    if(is_compressed && want_decompressed) Decompress();
     if(!mapped)
     {
         EnsureOpen();
-        mapped.SetMap(fd, 0, filesize);
+        mapped.SetMap(fd, 0, filesize, true);
         if(mapped) Close();
     }
 }
@@ -287,6 +287,66 @@ void mkcromfs_fblock::
     }
 }
 
+void mkcromfs_fblock::InitCompressedDataReadBuffer(DataReadBuffer& Buffer, uint_fast32_t& size)
+{
+    if(!is_compressed)
+    {
+        DataReadBuffer buf; //uint_fast32_t size;
+        InitDataReadBuffer(buf, size);
+        std::vector<unsigned char> compressed = DoLZMACompress(LZMA_HeavyCompress,
+            buf.Buffer, size,
+            "fblock");
+        put_compressed(compressed);
+
+        // Try map it
+        EnsureMMapped(false);
+        if(mapped)
+            Buffer.AssignRefFrom(mapped.get_ptr(), size = filesize);
+        else
+            Buffer.AssignCopyFrom(&compressed[0], size = filesize);
+        return;
+    }
+    // It's compressed.
+    EnsureMMapped(false);
+    if(!mapped)
+    {
+        // Failed to map it.
+        Buffer.LoadFrom(fd, 0, size = filesize);
+    }
+    // It's compressed and mapped.
+    Buffer.AssignRefFrom(mapped.get_ptr(), size = filesize);
+}
+
+void mkcromfs_fblock::SetFileContent(const unsigned char* ptr, uint_fast32_t length)
+{
+    Unmap();
+    EnsureOpen();
+#if 1
+    /* Disable this function until it can be tested properly */
+    if(filesize >= length)
+    {
+        // There's enough backing storage for writing the updated contents into the file
+        if(mapped)
+            if(!mapped.ReMapIfNecessary(fd, 0, filesize=length))
+                Unmap();
+
+        if(!mapped)
+            mapped.SetMap(fd, 0, filesize = length, true);
+
+        if(mapped)
+        {
+            std::memcpy(mapped.get_write_ptr(), ptr, length);
+            mapped.Sync();
+            ftruncate(fd, filesize);
+            Close();
+            return;
+        }
+    }
+#endif
+    ( LongFileWrite(fd, 0, filesize=length, ptr, false) );
+    ftruncate(fd, filesize);
+}
+
 void mkcromfs_fblock::Decompress()
 {
     if(is_compressed)
@@ -297,17 +357,15 @@ void mkcromfs_fblock::Decompress()
             rdbuf.AssignRefFrom(mapped.get_ptr(), filesize);
             std::vector<unsigned char> decompressed = LZMADeCompress(rdbuf.Buffer, filesize);
             Unmap();
-            EnsureOpen();
-            ( LongFileWrite(fd, 0, filesize=decompressed.size(), &decompressed[0], false) );
+            SetFileContent(&decompressed[0], decompressed.size());
         }
         else
         {
             EnsureOpen();
             LongFileRead rdr(fd, 0, filesize);
             std::vector<unsigned char> decompressed = LZMADeCompress(rdr.GetAddr(), filesize);
-            ( LongFileWrite(fd, 0, filesize=decompressed.size(), &decompressed[0], false) );
+            SetFileContent(&decompressed[0], decompressed.size());
         }
-        ftruncate(fd, filesize);
         is_compressed = false;
     }
 }
@@ -352,11 +410,8 @@ void mkcromfs_fblock::Unmap()
 
 void mkcromfs_fblock::put_compressed(const std::vector<unsigned char>& data)
 {
-    Unmap();
-    EnsureOpen();
     is_compressed = true;
-    ( LongFileWrite(fd, 0, filesize=data.size(), &data[0], false) );
-    ftruncate(fd, filesize);
+    SetFileContent(&data[0], data.size());
 }
 
 void mkcromfs_fblock::put_appended_raw(
@@ -375,7 +430,14 @@ void mkcromfs_fblock::put_appended_raw(
 
     EnsureOpen(); // ensure we can write to it
 
-    ( LongFileWrite(fd, append.AppendBaseOffset, length, data, false) );
+    size_t amount_added        = append.AppendBaseOffset + length - filesize;
+    size_t amount_alreadythere = length - amount_added;
+
+    ( LongFileWrite(fd,
+                    append.AppendBaseOffset + amount_alreadythere,
+                    amount_added,
+                    data + amount_alreadythere,
+                    false) );
 
     if(append.AppendBaseOffset + length > filesize)
     {
@@ -385,6 +447,10 @@ void mkcromfs_fblock::put_appended_raw(
     if(mapped)
     {
         // Ensure the memory mapping covers the full size of the file.
-        mapped.ReMapIfNecessary(fd, 0, filesize);
+        if(!mapped.ReMapIfNecessary(fd, 0, filesize))
+        {
+            // Remapping failed, unmap the file.
+            mapped.Unmap();
+        }
     }
 }

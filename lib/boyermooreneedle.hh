@@ -19,13 +19,12 @@
 #include <algorithm>
 #include <cstring>
 
-#include "autoptr"
 #include "threadfun.hh"
 
 #include "boyermoore.hh"
 #include "stringsearchutil.hh"
 
-class BoyerMooreNeedle: public ptrable
+class BoyerMooreNeedle/*: public ptrable*/
 {
 public:
     typedef BoyerMooreSearch::occtable_type  occtable_type;

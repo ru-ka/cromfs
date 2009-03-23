@@ -118,7 +118,7 @@ public:
                 io_event& ep = events[a];
                 struct iocb* ios = ep.obj;
 
-                /* FIXME:
+                /* PROBLEM:
                  *
                  * For some reason,  this does not work.
                  * Nothing gets written into files.
@@ -126,6 +126,7 @@ public:
                  * Randomly, fildes contains zero or the actual fd.
                  * I don't understand why.
                  *
+                 * As a consequence, we must not use USE_LIBAIO.
                  */
 
                 int fd = ios->aio_fildes;

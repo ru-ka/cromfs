@@ -123,8 +123,8 @@ struct BlkTabConverter: public BlockToucher
             Buffer.resize(NumBlocks * NewBlockSize);
             for(unsigned a=0; a<NumBlocks; ++a)
             {
-                uint_fast32_t fblocknum = blktab[a].get_fblocknum(bsize,fsize);
-                uint_fast32_t startoffs = blktab[a].get_startoffs(bsize,fsize);
+                uint_fast32_t fblocknum = blktab[a].fblocknum;
+                uint_fast32_t startoffs = blktab[a].startoffs;
                 if(WantPacked)
                     W32(&Buffer[a*4],
                         fblocknum * fsize

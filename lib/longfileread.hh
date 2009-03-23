@@ -1,3 +1,6 @@
+#ifndef bqtLongFileReadHH
+#define bqtLongFileReadHH
+
 #include "endian.hh"
 #include "mmapping.hh"
 #include "datareadbuf.hh"
@@ -43,3 +46,5 @@ private:
     LongFileRead(const LongFileRead&);
     void operator=(const LongFileRead&);
 };
+
+#endif

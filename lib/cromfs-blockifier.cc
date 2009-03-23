@@ -123,8 +123,8 @@ static bool FindAutoIndexNext_unlocked(AutoIndexFinderParams& params, cromfs_blo
 
 static bool TestAutoIndexMatch(AutoIndexFinderParams& params, const cromfs_block_internal& auto_match)
 {
-    const mkcromfs_fblock& fblock = params.fblocks[auto_match.get_fblocknum(BSIZE,FSIZE)];
-    const uint_fast32_t my_offs = auto_match.get_startoffs(BSIZE,FSIZE);
+    const mkcromfs_fblock& fblock = params.fblocks[auto_match.fblocknum];
+    const uint_fast32_t my_offs = auto_match.startoffs;
 
     /* Notice: my_offs + data_size may be larger than the fblock size.
      * This can happen if there is a collision in the checksum index. A smaller
@@ -461,8 +461,8 @@ cromfs_blocknum_t cromfs_blockifier::Execute(const ReusingPlan& plan, uint_fast3
 {
     const cromfs_block_internal& block = plan.block;
 
-    const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
-    const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
+    const cromfs_fblocknum_t fblocknum = block.fblocknum;
+    const uint_fast32_t startoffs      = block.startoffs;
 
     /* If this match didn't have a real block yet, create one */
     cromfs_blocknum_t blocknum = CreateNewBlock(block);
@@ -1123,9 +1123,7 @@ private:
 
 void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 {
-    // Note: using __gnu_parallel in this sort() will crash the program.
-    // Probably because of autoptr not being threadsafe.
-    std::stable_sort(schedule.begin(), schedule.end(),
+    MAYBE_PARALLEL_NS::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
 
     uint_fast64_t total_size = 0, blocks_total = 0;
@@ -1680,7 +1678,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                    );
         std::fflush(stdout);
 
-        blocks.reserve(blocks.size() + blocks_done - identical_list.size());
+        blocks.Reserve(blocks.size() + blocks_done - identical_list.size());
     }
 
     if(true)
@@ -1814,8 +1812,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     {
                         const cromfs_block_internal& block = blocks[blocknum];
 
-                        const cromfs_fblocknum_t fblocknum = block.get_fblocknum(BSIZE,FSIZE);
-                        const uint_fast32_t startoffs      = block.get_startoffs(BSIZE,FSIZE);
+                        const cromfs_fblocknum_t fblocknum = block.fblocknum;
+                        const uint_fast32_t startoffs      = block.startoffs;
 
                         std::printf("block %u == (%u) [%u @ %u] (reused block)\n",
                             (unsigned)blocknum,

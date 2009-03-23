@@ -1,3 +1,6 @@
+#ifndef bqtLongFileWriteHH
+#define bqtLongFileWriteHH
+
 #include "endian.hh"
 #include <vector>
 #include <cerrno>
@@ -66,3 +69,5 @@ private:
 };
 
 void FileOutputFlushAll();
+
+#endif

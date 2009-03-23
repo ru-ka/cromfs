@@ -257,7 +257,16 @@ fi
 do_echo -n "Checking for vsnprintf... "
 if cc_check '<cstdio>' '' 'char Buf[10];using namespace std; va_list ap;vsnprintf(Buf,sizeof Buf,"gruu",ap);'; then
   do_echo Yes
-  OPTIM="$OPTIM -DHAS_VSNPRINTF"
+  CPPFLAGS="$CPPFLAGS -DHAS_VSNPRINTF"
+else
+  do_echo No
+fi
+
+
+do_echo -n "Checking for lutimes... "
+if cc_check '<sys/time.h>' '' 'struct timeval tv[2]; lutimes(__FILE__, tv);'; then
+  do_echo Yes
+  CPPFLAGS="$CPPFLAGS -DHAS_LUTIMES"
 else
   do_echo No
 fi
@@ -266,35 +275,35 @@ fi
 
 if func_check stdint.h \
    '<stdint.h>' '' 'typedef int x;'; \
-   then OPTIM="$OPTIM -DHAS_STDINT_H"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS_STDINT_H"; fi
 
 if func_check inttypes.h \
    '<inttypes.h>' '' 'typedef int x;'; \
-   then OPTIM="$OPTIM -DHAS_INTTYPES_H"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS_INTTYPES_H"; fi
 
 if func_check readdir_r \
    '<dirent.h>' '' 'DIR*dir=opendir(".");dirent e,*ep;readdir_r(dir,&e,&ep);'; \
-   then OPTIM="$OPTIM -DHAS_READDIR_R"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS_READDIR_R"; fi
 
 if func_check uint16_t \
    '<stdint.h>' '' 'typedef uint16_t x;'; \
-   then OPTIM="$OPTIM -DHAS_UINT16_T"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS_UINT16_T"; fi
 
 if func_check u_int16_t \
    '<stdint.h>' '' 'typedef u_int16_t x;'; \
-   then OPTIM="$OPTIM -DHAS_U_INT16_T"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS_U_INT16_T"; fi
 
 if func_check __uint16_t \
    '<stdint.h>' '' 'typedef _uint16_t x;'; \
-   then OPTIM="$OPTIM -DHAS___UINT16_T"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS___UINT16_T"; fi
 
 if func_check long\ long \
    '<stdint.h>' '' 'typedef long long x;'; \
-   then OPTIM="$OPTIM -DHAS_LONG_LONG"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS_LONG_LONG"; fi
 
 if func_check sys/types.h \
    '<sys/types.h>' '' 'typedef int x;'; \
-   then OPTIM="$OPTIM -DHAS_SYS_TYPES_H"; fi
+   then CPPFLAGS="$CPPFLAGS -DHAS_SYS_TYPES_H"; fi
 
 WARNINGS=""
 CWARNINGS=""

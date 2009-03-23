@@ -68,29 +68,21 @@ struct cromfs_fblock_internal
     uint_fast32_t length;
 };
 
-struct cromfs_block_internal /* optimized for size, because mkcromfs needs it */
+struct cromfs_block_internal
 {
-    uint_least32_t fblocknum __attribute__((packed));
-    uint_least32_t startoffs __attribute__((packed));
+    uint_least32_t fblocknum;
+    uint_least32_t startoffs;
 public:
     void define(uint_fast32_t fb, uint_fast32_t so)
     {
         fblocknum = fb;
         startoffs = so;
     }
-    inline uint_fast32_t get_startoffs(uint_fast32_t /*bsize*/, uint_fast32_t /*fsize*/) const
-    {
-        return startoffs;
-    }
-    inline uint_fast32_t get_fblocknum(uint_fast32_t /*bsize*/, uint_fast32_t /*fsize*/) const
-    {
-        return fblocknum;
-    }
     bool operator==(const cromfs_block_internal& b) const
     {
         return fblocknum == b.fblocknum && startoffs == b.startoffs;
     }
-} __attribute__((packed));
+};
 
 struct cromfs_superblock_internal
 {
@@ -188,8 +180,6 @@ struct cromfs_superblock_internal
     }
 };
 
-typedef std::vector<unsigned char> cromfs_datablock;
-typedef std::vector<unsigned char> cromfs_cached_fblock;
 typedef std::map<std::string, cromfs_inodenum_t> cromfs_dirinfo;
 
 #define BLOCKNUM_SIZE_BYTES() \

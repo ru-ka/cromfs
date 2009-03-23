@@ -1,4 +1,4 @@
-#include "cromfs-defs.hh"
+#include "../cromfs-defs.hh"
 #include <vector>
 
 size_t
