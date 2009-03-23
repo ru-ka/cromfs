@@ -263,6 +263,15 @@ else
 fi
 
 
+do_echo -n "Checking for lutimes... "
+if cc_check '<sys/time.h>' '' 'struct timeval tv[2]; lutimes(__FILE__, tv);'; then
+  do_echo Yes
+  OPTIM="$OPTIM -DHAS_LUTIMES"
+else
+  do_echo No
+fi
+
+
 
 if func_check stdint.h \
    '<stdint.h>' '' 'typedef int x;'; \

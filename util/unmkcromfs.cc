@@ -19,6 +19,10 @@
 #include <stdarg.h>
 #include <cstring>
 
+#ifdef HAS_LUTIMES
+ #include <sys/time.h>
+#endif
+
 #include <getopt.h>
 
 #include "fnmatch.hh"
@@ -557,6 +561,8 @@ public:
                 }
             }
 
+            /* permission bits are not defined for symlinks */
+
             if(!S_ISLNK(ino.mode)
             && chmod( target.c_str(), ino.mode & 07777) < 0)
             {
@@ -612,6 +618,16 @@ public:
             const cromfs_inode_internal ino = read_inode(inonum);
             const std::string target = GetTargetPath(targetdir, i->first);
 
+        #ifdef HAS_LUTIMES
+            struct timeval tv[2] = { { ino.time, 0 }, { ino.time, 0 } };
+            if(lutimes(target.c_str(), tv) < 0)
+            {
+                if(!S_ISLNK(ino.mode) && errno == ENOSYS) goto try_utime;
+                perror(target.c_str());
+            }
+            continue;
+        #endif
+        try_utime:;
             struct utimbuf data = { ino.time, ino.time };
 
             /* Note: It is not possible to use utime() to change symlinks' modtime */
