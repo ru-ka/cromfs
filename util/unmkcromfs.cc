@@ -1012,19 +1012,22 @@ private:
         const std::string& entname,
         const cromfs_inodenum_t inonum,
         const cromfs_inode_internal& ino,
-        const std::set<cromfs_fblocknum_t>& fblist) const
+        const std::set<cromfs_fblocknum_t>& fblist,
+        const std::string& linkdetail = "") const
     {
         if(verbose >= 1)
         {
             if(verbose >= 2) std::printf("%6u ", (unsigned)inonum);
-            std::printf("%s%3u %u/%-3u %11llu %s %s\n",
+            std::printf("%s%3u %u/%-3u %11llu %s %s%s%s\n",
                 TranslateMode(ino.mode).c_str(),
                 (unsigned)fblist.size(),
                 (unsigned)ino.uid,
                 (unsigned)ino.gid,
                 (unsigned long long)ino.bytesize,
                 DumpTime(ino.time).c_str(),
-                entname.c_str()
+                entname.c_str(),
+                linkdetail.empty() ? "" : " -> ",
+                linkdetail.c_str()
                        );
         }
         else if(verbose >= 0)
@@ -1097,7 +1100,18 @@ private:
 
             if(namematch && listing_mode)
             {
-                ListingDisplayInode(entname, inonum, ino, fblist);
+                std::string link_detail;
+
+                if(verbose >= 1 && S_ISLNK(ino.mode))
+                {
+                    std::vector<unsigned char> linktargetbuffer(ino.bytesize);
+                    read_file_data(ino, 0, &linktargetbuffer[0], ino.bytesize, entname.c_str());
+                    link_detail.assign(
+                        (const char*)&linktargetbuffer[0],
+                        (const char*)&linktargetbuffer[ino.bytesize]);
+                }
+
+                ListingDisplayInode(entname, inonum, ino, fblist, link_detail);
             }
 
             if(inonum == 1) continue;
