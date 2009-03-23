@@ -34,7 +34,8 @@ const std::vector<unsigned char>
 
 void put_inode(unsigned char* inodata,
                const cromfs_inode_internal& inode,
-               uint_fast32_t storage_opts)
+               uint_fast32_t storage_opts,
+               bool and_blocks)
 {
     uint_fast32_t rdev_links = inode.links;
     if(S_ISCHR(inode.mode) || S_ISBLK(inode.mode)) rdev_links = inode.rdev;
@@ -51,9 +52,12 @@ void put_inode(unsigned char* inodata,
 
     /* Endianess safe. */
 
-    const unsigned b = BLOCKNUM_SIZE_BYTES(), headersize = INODE_HEADER_SIZE();
-    for(unsigned a=0; a<inode.blocklist.size(); ++a)
-        Wn(&inodata[headersize+a*b], inode.blocklist[a], b);
+    if(and_blocks)
+    {
+        const unsigned b = BLOCKNUM_SIZE_BYTES(), headersize = INODE_HEADER_SIZE();
+        for(unsigned a=0; a<inode.blocklist.size(); ++a)
+            Wn(&inodata[headersize+a*b], inode.blocklist[a], b);
+    }
 }
 
 void get_inode
@@ -105,7 +109,7 @@ void get_inode
     }
 }
 
-void increment_inode_linkcount(unsigned char* inodata)
+void increment_inode_linkcount(unsigned char* inodata, int by_value)
 {
     uint_fast32_t mode  = R32(&inodata[0x00]);
     if(S_ISCHR(mode) || S_ISBLK(mode))
@@ -115,13 +119,19 @@ void increment_inode_linkcount(unsigned char* inodata)
     }
 
     uint_fast32_t links = R32(&inodata[0x08]);
-    ++links;
+    links += by_value;
     W32(&inodata[0x08], links);
 }
 
 uint_fast64_t CalcSizeInBlocks(uint_fast64_t filesize, uint_fast32_t bsize)
 {
     return (filesize + bsize-1) / bsize;
+}
+
+uint_fast32_t CalcEncodedInodeSize(const cromfs_inode_internal& inode, uint_fast32_t storage_opts)
+{
+    return INODE_HEADER_SIZE()
+         + BLOCKNUM_SIZE_BYTES() * CalcSizeInBlocks(inode.bytesize, inode.blocksize);
 }
 
 void PutInodeSize(cromfs_inode_internal& inode, uint_fast64_t bytesize)
