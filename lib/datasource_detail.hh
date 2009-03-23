@@ -188,8 +188,8 @@ protected:
 
 struct datasource_file_name: public datasource_file
 {
-    datasource_file_name(const std::string& nam):
-        datasource_file(-1, stat_get_size(nam)), path( new char [nam.size()+1] )
+    datasource_file_name(const std::string& nam, uint_fast64_t size):
+        datasource_file(-1, size), path( new char [nam.size()+1] )
     {
         std::strcpy(path, nam.c_str());
     }

@@ -105,47 +105,6 @@ uint_fast32_t storage_opts = 0x00000000;
 
 typedef std::pair<dev_t,ino_t> hardlinkdata;
 
-static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
-    mkcromfs_fblock& fblock,
-    uint_fast64_t& compressed_total,
-    uint_fast64_t& uncompressed_total)
-{
-    DataReadBuffer buf; uint_fast32_t fblock_rawlength;
-    fblock.InitDataReadBuffer(buf, fblock_rawlength);
-
-    char why[512];std::sprintf(why,"fblock %u", (unsigned)fblocknum);
-    std::vector<unsigned char>
-        fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, buf.Buffer,fblock_rawlength, why);
-
-    if(false)
-    {
-        bool is_ok = true;
-        LZMADeCompress(fblock_lzma, is_ok);
-        if(!is_ok)
-        {
-            std::fprintf(stderr,
-                "Error: LZMA compression produced invalid LZMA data!\n"
-                "       This should never happen. Sorry.\n");
-        }
-    }
-
-    fblock.put_compressed(fblock_lzma);
-
-    if(DisplayEndProcess)
-    {
-        std::printf(" [%d] %u -> %u\n",
-            (int)fblocknum,
-            (unsigned)fblock_rawlength,
-            (unsigned)fblock_lzma.size());
-        std::fflush(stdout);
-    }
-
-  #pragma omp atomic
-    uncompressed_total += fblock_rawlength;
-  #pragma omp atomic
-    compressed_total   += fblock_lzma.size();
-}
-
 long CalcBSIZEfor(const std::string& pathfn)
 {
     long result = BSIZE;
@@ -168,6 +127,47 @@ namespace cromfs_creator
     /*******************/
     /* Private methods */
     /*******************/
+
+    static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
+        mkcromfs_fblock& fblock,
+        uint_fast64_t& compressed_total,
+        uint_fast64_t& uncompressed_total)
+    {
+        DataReadBuffer buf; uint_fast32_t fblock_rawlength;
+        fblock.InitDataReadBuffer(buf, fblock_rawlength);
+
+        char why[512];std::sprintf(why,"fblock %u", (unsigned)fblocknum);
+        std::vector<unsigned char>
+            fblock_lzma = DoLZMACompress(LZMA_HeavyCompress, buf.Buffer,fblock_rawlength, why);
+
+        if(false)
+        {
+            bool is_ok = true;
+            LZMADeCompress(fblock_lzma, is_ok);
+            if(!is_ok)
+            {
+                std::fprintf(stderr,
+                    "Error: LZMA compression produced invalid LZMA data!\n"
+                    "       This should never happen. Sorry.\n");
+            }
+        }
+
+        fblock.put_compressed(fblock_lzma);
+
+        if(DisplayEndProcess)
+        {
+            std::printf(" [%d] %u -> %u\n",
+                (int)fblocknum,
+                (unsigned)fblock_rawlength,
+                (unsigned)fblock_lzma.size());
+            std::fflush(stdout);
+        }
+
+      #pragma omp atomic
+        uncompressed_total += fblock_rawlength;
+      #pragma omp atomic
+        compressed_total   += fblock_lzma.size();
+    }
 
     struct DataSourceList
     {
@@ -199,10 +199,10 @@ namespace cromfs_creator
         return datasources.vectors.push_construct(a, b);
     }
 
-    template<typename T1>
-    static inline datasource_t* NewFilenameDatasource(const T1& a)
+    template<typename T1,typename T2>
+    static inline datasource_t* NewFilenameDatasource(const T1& a, const T2& b)
     {
-        return datasources.filenames.push_construct(a);
+        return datasources.filenames.push_construct(a, b);
     }
 
     template<typename T1,typename T2>
@@ -666,6 +666,9 @@ namespace cromfs_creator
             inode.gid      = st.st_gid;
             inode.blocksize = block_size;
 
+            datasource_t* datasrc_for_blockify = 0;
+            char          dataclass            = 0;
+
             if(S_ISDIR(st.st_mode))
             {
                 cromfs_dirinfo& dirinfo = *ent.dirinfo;
@@ -674,58 +677,39 @@ namespace cromfs_creator
                  * the number of entries in the directory.
                  */
                 inode.links = dirinfo.size();
-                datasource_t* datasrc =
-                    NewVectorDatasource(encode_directory(dirinfo), pathname);
-                PutInodeSize(inode, datasrc->size());
 
-                const uint_fast64_t headersize = INODE_HEADER_SIZE();
-
-                ScopedLock lck(blockify_lock);
-                blockifier.ScheduleBlockify(
-                    datasrc,
-                    DataClassOrder.Directory,
-                    &inotab[inotab_offset + headersize],
-                    inode.blocksize);
-                // If you remove blockify_lock, make this atomic.
-                bytes_of_files += inode.bytesize;
+                dataclass = DataClassOrder.Directory;
+                datasrc_for_blockify = NewVectorDatasource(encode_directory(dirinfo), pathname);
             }
             else if(S_ISLNK(st.st_mode))
             {
-                datasource_t* datasrc =
-                    NewSymlinkDatasource(pathname, st.st_size);
-                PutInodeSize(inode, datasrc->size());
-
-                const uint_fast64_t headersize = INODE_HEADER_SIZE();
-
-                ScopedLock lck(blockify_lock);
-                blockifier.ScheduleBlockify(
-                    datasrc,
-                    DataClassOrder.Symlink,
-                    &inotab[inotab_offset + headersize],
-                    inode.blocksize);
-                // If you remove blockify_lock, make this atomic.
-                bytes_of_files += inode.bytesize;
+                dataclass = DataClassOrder.Symlink;
+                datasrc_for_blockify = NewSymlinkDatasource(pathname, st.st_size);
             }
             else if(S_ISREG(st.st_mode))
             {
-                datasource_t* datasrc =
-                    NewFilenameDatasource(pathname);
-                PutInodeSize(inode, datasrc->size());
-
-                const uint_fast64_t headersize = INODE_HEADER_SIZE();
-
-                ScopedLock lck(blockify_lock);
-                blockifier.ScheduleBlockify(
-                    datasrc,
-                    DataClassOrder.File,
-                    &inotab[inotab_offset + headersize],
-                    inode.blocksize);
-                // If you remove blockify_lock, make this atomic.
-                bytes_of_files += inode.bytesize;
+                dataclass = DataClassOrder.File;
+                datasrc_for_blockify = NewFilenameDatasource(pathname, st.st_size);
             }
             else if(S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode))
             {
                 inode.rdev = st.st_rdev;
+            }
+
+            if(datasrc_for_blockify)
+            {
+                PutInodeSize(inode, datasrc_for_blockify->size());
+
+                const uint_fast64_t headersize = INODE_HEADER_SIZE();
+
+                ScopedLock lck(blockify_lock);
+                blockifier.ScheduleBlockify(
+                    datasrc_for_blockify,
+                    dataclass,
+                    &inotab[inotab_offset + headersize], // block table target
+                    inode.blocksize);
+                // If you remove blockify_lock, make this atomic.
+                bytes_of_files += inode.bytesize;
             }
 
             assertbegin();
@@ -830,7 +814,7 @@ namespace cromfs_creator
                 blockifier.ScheduleBlockify(
                     datasrc,
                     DataClassOrder.Directory,
-                    &raw_root_inode[headersize],
+                    &raw_root_inode[headersize], // root inode's block table goes here
                     root_inode.blocksize);
 
                 if(DisplayFiles)
@@ -859,8 +843,7 @@ namespace cromfs_creator
                 if(DisplayEndProcess)
                     printf(" compressed into %s\n",
                         ReportSize(compressed_root_inode.size()).c_str());
-
-            } // end scope for root_inode
+            } // end scope for root_inode (also ends the blockifying of everything)
 
             if(true) // scope for inotab_inode
             {
