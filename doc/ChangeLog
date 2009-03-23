@@ -4,10 +4,11 @@ cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
-<dev>
+1.5.8.5 2009-03-23 Joel Yliluoma <bisqwit@iki.fi>
 - Added support for lutimes(), which makes it possible
   to change the timestamps of symlinks (unmkcromfs)
 - Further improved the memory efficiency of mkcromfs
+- Some minor code refactoring
 
 1.5.8.4 2009-03-19 Joel Yliluoma <bisqwit@iki.fi>
 - Fixed a crash bug introduced to mkcromfs
