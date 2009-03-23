@@ -4,7 +4,6 @@
 #include "cromfs-fblockfun.hh"
 #include "fsballocator.hh"
 #include "newhash.h"
-#include "autoptr"
 
 #include "mmap_vector.hh"
 
@@ -189,18 +188,15 @@ private:
 
         schedule_item& operator= (const schedule_item& b)
         {
-            if(&b != this)
-            {
-                source = b.source;
-                target = b.target;
-                dataclass = b.dataclass;
-                blocksize = b.blocksize;
-            }
+            source = b.source;
+            target = b.target;
+            dataclass = b.dataclass;
+            blocksize = b.blocksize;
             return *this;
         }
 
     private:
-        autoptr<datasource_t> source;
+        datasource_t* source;
 
         unsigned char*     target;
         SchedulerDataClass dataclass;

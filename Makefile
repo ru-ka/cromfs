@@ -53,6 +53,7 @@ ARCHFILES=\
 	lib/stringsearchutil.hh \
 	lib/stringsearchutil_backwardsmatch.tcc \
 	lib/datasource.hh \
+	lib/datasource_detail.hh \
 	lib/datareadbuf.hh \
 	lib/datacache.hh \
 	lib/mmapping.hh \
@@ -69,6 +70,7 @@ ARCHFILES=\
 	lib/mmap_vector.hh \
 	lib/boyermooreneedle.hh \
 	lib/boyermoore.hh lib/boyermoore.cc \
+	lib/nocopyarray.hh \
 	lib/fsballocator.hh \
 	lib/autodealloc.hh \
 	lib/autoptr \
@@ -126,7 +128,7 @@ ARCHFILES=\
 	lib/lzma/lzma.txt \
 	\
 	tests/run.sh \
-	tests/a/fblock.hh tests/a/lzma.hh \
+	tests/a/fblock.hh tests/a/lzma.hh tests/a/lzma_copy.hh \
 	tests/a/md5-copy.hh tests/a/md5.hh \
 	tests/a/util.hh \
 	tests/a/fifo tests/a/fifo-copy \

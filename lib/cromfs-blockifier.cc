@@ -1123,9 +1123,7 @@ private:
 
 void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 {
-    // Note: using __gnu_parallel in this sort() will crash the program.
-    // Probably because of autoptr not being threadsafe.
-    std::stable_sort(schedule.begin(), schedule.end(),
+    MAYBE_PARALLEL_NS::stable_sort(schedule.begin(), schedule.end(),
        std::mem_fun_ref(&schedule_item::CompareSchedulingOrder) );
 
     uint_fast64_t total_size = 0, blocks_total = 0;

@@ -36,11 +36,13 @@
 
 #include "lzma.hh"
 #include "datasource.hh"
+#include "datasource_detail.hh"
 #include "cromfs-inodefun.hh"
 #include "cromfs-directoryfun.hh"
 #include "cromfs-blockifier.hh"
 #include "longfileread.hh"
 #include "longfilewrite.hh"
+#include "nocopyarray.hh"
 #include "util.hh"
 #include "fnmatch.hh"
 #include "mmap_vector.hh"
@@ -166,6 +168,48 @@ namespace cromfs_creator
     /*******************/
     /* Private methods */
     /*******************/
+
+    struct DataSourceList
+    {
+        NoCopyArray<datasource_vector_ref> vector_refs;
+        NoCopyArray<datasource_file_name>  filenames;
+        NoCopyArray<datasource_vector>     vectors;
+        NoCopyArray<datasource_symlink>    links;
+
+        DataSourceList() : vector_refs(),filenames(),vectors(),links() { }
+
+        void clear()
+        {
+            vector_refs.clear();
+            filenames.clear();
+            vectors.clear();
+            links.clear();
+        }
+    } datasources;
+
+    template<typename T1,typename T2>
+    static inline datasource_t* NewVectorRefDatasource(const T1& a, const T2& b)
+    {
+        return datasources.vector_refs.push_construct(a, b);
+    }
+
+    template<typename T1,typename T2>
+    static inline datasource_t* NewVectorDatasource(const T1& a, const T2& b)
+    {
+        return datasources.vectors.push_construct(a, b);
+    }
+
+    template<typename T1>
+    static inline datasource_t* NewFilenameDatasource(const T1& a)
+    {
+        return datasources.filenames.push_construct(a);
+    }
+
+    template<typename T1,typename T2>
+    static inline datasource_t* NewSymlinkDatasource(const T1& a, const T2& b)
+    {
+        return datasources.links.push_construct(a, b);
+    }
 
     /***********************************/
     /* Filesystem traversal functions. *
@@ -631,7 +675,7 @@ namespace cromfs_creator
                  */
                 inode.links = dirinfo.size();
                 datasource_t* datasrc =
-                    new datasource_vector(encode_directory(dirinfo), pathname);
+                    NewVectorDatasource(encode_directory(dirinfo), pathname);
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
@@ -647,13 +691,8 @@ namespace cromfs_creator
             }
             else if(S_ISLNK(st.st_mode))
             {
-                std::vector<unsigned char> Buf(4096);
-                int res = readlink(pathname.c_str(), (char*)&Buf[0], Buf.size());
-                if(res < 0) { std::perror(pathname.c_str()); continue; }
-                Buf.resize(res);
-
                 datasource_t* datasrc =
-                    new datasource_vector(Buf, pathname+" (link target)");
+                    NewSymlinkDatasource(pathname, st.st_size);
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
@@ -670,7 +709,7 @@ namespace cromfs_creator
             else if(S_ISREG(st.st_mode))
             {
                 datasource_t* datasrc =
-                    new datasource_file_name(pathname);
+                    NewFilenameDatasource(pathname);
                 PutInodeSize(inode, datasrc->size());
 
                 const uint_fast64_t headersize = INODE_HEADER_SIZE();
@@ -774,7 +813,7 @@ namespace cromfs_creator
                 root_inode.blocksize = BSIZE;
 
                 datasource_t* datasrc =
-                    new datasource_vector(encode_directory(dirinfo), "root dir");
+                    NewVectorDatasource(encode_directory(dirinfo), "root dir");
 
                 PutInodeSize(root_inode, datasrc->size());
 
@@ -836,7 +875,7 @@ namespace cromfs_creator
                  */
 
                 datasource_t* datasrc =
-                    new datasource_vector_ref(inotab.GetAndRelease(), "INOTAB");
+                    NewVectorRefDatasource(inotab.GetAndRelease(), "INOTAB");
 
                 PutInodeSize(inotab_inode, datasrc->size());
 
@@ -951,6 +990,7 @@ namespace cromfs_creator
         } // end scope for raw_blktab and blocks
 
         blockifier.NoMoreBlockifying();
+        datasources.clear();
 
         cromfs_superblock_internal sblock;
         sblock.sig          = CROMFS_SIGNATURE;
