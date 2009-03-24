@@ -24,7 +24,7 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Mon Mar 23 14:36:20 EET 2009
+# at Tue Mar 24 09:33:34 EET 2009
 # for Linux chii 2.6.27.10 #1 SMP Tue Dec 23 10:36:45 EET 2008 x86_64 GNU/Linux
 # To change, run ./configure again.
 #

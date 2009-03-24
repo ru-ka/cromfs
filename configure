@@ -136,7 +136,9 @@ DISABLE_THREADS=""
 HAS_OPENMP=0
 do_echo -n "Checking if your compiler supports OpenMP... "
 if [ "$CC" = "icc" ] && \
-    cc_check '<'$DISABLE_THREADS'stdio.h>' '-openmp' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+    cc_check '<'$DISABLE_THREADS'stdio.h>' '-openmp' 'int x,y[100];
+#pragma omp parallel for
+for(x=0; x<100;++x)y[x]=5;'; then
   do_echo Yes
   do_echo "- Will use OpenMP (-openmp), not checking for -pthread"
   CPPFLAGS="$CPPFLAGS -openmp"
