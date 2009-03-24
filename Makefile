@@ -213,6 +213,10 @@ clean: FORCE
 	rm -f cromfs-driver-static.??? configure.log
 	make -C util clean
 
+distclean: clean
+	rm -f {,lib,util}/.{lib,}depend
+	rm -f Makefile.sets configure.log
+
 install: $(PROGS) FORCE
 	- mkdir install install/progs install/docs
 	cp -p $(PROGS) install/progs/
