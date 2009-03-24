@@ -827,12 +827,12 @@ int_fast64_t cromfs::read_file_data(
     for(unsigned a=0, b=required_fblocks_uncached.size(); a<b; ++a)
     {
         const cromfs_fblocknum_t fblocknum = required_fblocks_uncached[a];
-        fprintf(stderr, " %u (cached)", (unsigned)required_fblocks_uncached[a]);
+        fprintf(stderr, " %u (uncached)", (unsigned)required_fblocks_uncached[a]);
     }
     for(unsigned a=0, b=required_fblocks_cached.size(); a<b; ++a)
     {
         const cromfs_fblocknum_t fblocknum = required_fblocks_cached[a];
-        fprintf(stderr, " %u (uncached)", (unsigned)required_fblocks_cached[a]);
+        fprintf(stderr, " %u (cached)", (unsigned)required_fblocks_cached[a]);
     }
     fprintf(stderr, "\n");
 #endif
