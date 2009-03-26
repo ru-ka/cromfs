@@ -12,108 +12,123 @@
 
 #include <vector>
 
-struct datasource_named: public datasource_t
+struct datasource_vector: public datasource_t
 {
-protected:
-    explicit datasource_named(const std::string& nam = "")
-        : datasource_t(), name( new char[ nam.size()+1 ] )
+    datasource_vector(const std::vector<unsigned char>& vec, const std::string& nam = "")
+        : data(vec), name( new char[ nam.size()+1 ] ), pos(0)
     {
         std::strcpy(name, nam.c_str());
     }
 
-    virtual ~datasource_named()
+    virtual ~datasource_vector()
     {
         delete[] name;
     }
 
+    virtual void rewind(uint_fast64_t p) { pos = p; }
     virtual const std::string getname() const { return name; }
-
-private:
-    datasource_named(const datasource_named&);
-    datasource_named& operator=(const datasource_named&);
-
-protected:
-    char* name;
-};
-
-template<typename Base>
-struct datasource_with_pos: public Base
-{
-protected:
-    template<typename T>
-    explicit datasource_with_pos(const T& baseinit)
-        : Base(baseinit), pos(0)
-    {
-    }
-
-    virtual void rewind(uint_fast64_t p=0) { pos = p; }
-
-    virtual void read(DataReadBuffer& buf, uint_fast64_t n, uint_fast64_t pos) = 0;
-
     virtual void read(DataReadBuffer& buf, uint_fast64_t n)
     {
-        read(buf, n, pos);
+        buf.AssignRefFrom(&data[pos], n);
         pos += n;
     }
-
-private:
-    uint_fast64_t pos;
-};
-
-template<typename Cont>
-struct datasource_vector_base: public datasource_with_pos<datasource_named>
-{
-    datasource_vector_base(const std::vector<unsigned char>& vec,
-                           const std::string& nam = "")
-        : datasource_with_pos<datasource_named> (nam), data(vec)
-    {
-    }
-
     virtual void read(DataReadBuffer& buf, uint_fast64_t n, uint_fast64_t p)
     {
-        /*
-        if(pos > siz)   pos = siz;
-        if(pos+n > siz) n = siz-pos;
-        */
         buf.AssignRefFrom(&data[p], n);
     }
     virtual uint_fast64_t size() const { return data.size(); }
 
 private:
-    Cont data;
+    datasource_vector(const datasource_vector&);
+    void operator=(const datasource_vector&);
+
+private:
+    const std::vector<unsigned char> data;
+    char* name;
+    uint_fast64_t pos;
 };
 
-typedef datasource_vector_base<const std::vector<unsigned char> >  datasource_vector;
-typedef datasource_vector_base<const std::vector<unsigned char>&>  datasource_vector_ref;
+struct datasource_vector_ref: public datasource_t
+{
+    datasource_vector_ref(const std::vector<unsigned char>& vec, const std::string& nam = "")
+        : data(vec), name( new char[ nam.size()+1 ] ), pos(0)
+    {
+        std::strcpy(name, nam.c_str());
+    }
 
-template<typename Base>
-struct datasource_file: public datasource_with_pos<Base>
+    virtual ~datasource_vector_ref()
+    {
+        delete[] name;
+    }
+
+    virtual void rewind(uint_fast64_t p) { pos = p; }
+    virtual const std::string getname() const { return name; }
+    virtual void read(DataReadBuffer& buf, uint_fast64_t n)
+    {
+        buf.AssignRefFrom(&data[pos], n);
+        pos += n;
+    }
+    virtual void read(DataReadBuffer& buf, uint_fast64_t n, uint_fast64_t p)
+    {
+        buf.AssignRefFrom(&data[p], n);
+    }
+    virtual uint_fast64_t size() const { return data.size(); }
+
+private:
+    datasource_vector_ref(const datasource_vector_ref&);
+    void operator=(const datasource_vector_ref&);
+
+private:
+    const std::vector<unsigned char>& data;
+    char* name;
+    uint_fast64_t pos;
+};
+
+struct datasource_file: public datasource_t
 {
 private:
     enum { BufSize = 1024*256, FailSafeMMapLength = 1048576 };
-public:
-    template<typename T>
-    datasource_file(int fild, uint_fast64_t s, const T& baseinit)
-        : datasource_with_pos<Base> (baseinit),
-          fd(fild),siz(s),
+protected:
+    datasource_file(int fild, uint_fast64_t s)
+        : fd(fild),siz(s), pos(0),
           map_base(),map_length(),mmapping() { }
-
+public:
+    datasource_file(int fild)
+        : fd(fild), siz(stat_get_size(fild)), pos(0),
+          map_base(),map_length(),mmapping()
+    {
+        FadviseSequential(fd, 0, siz);
+    }
     virtual bool open()
     {
         mmapping.SetMap(fd, map_base = 0, map_length = siz);
         // if mmapping the entire file failed, try mmapping just a section of it
         if(!mmapping && siz >= FailSafeMMapLength)
             mmapping.SetMap(fd, map_base = 0, map_length = FailSafeMMapLength);
-        rewind(0);
+        rewind();
         return true;
     }
     virtual void close()
     {
         if(mmapping)
             mmapping.Unmap();
+        pos = 0;
     }
 
+    virtual void rewind(uint_fast64_t p=0)
+    {
+        pos=p;
+        if(!mmapping)
+        {
+            ::lseek(fd, p, SEEK_SET);
+        }
+    }
     virtual const std::string getname() const { return "file"; }
+    virtual void read(DataReadBuffer& buf, uint_fast64_t n)
+    {
+        read(buf, n, pos);
+        pos += n;
+    }
     virtual void read(DataReadBuffer& buf, uint_fast64_t n, uint_fast64_t p)
     {
         if(mmapping && n <= map_length)
@@ -167,25 +182,27 @@ private:
 
 protected:
     int fd;
-    uint_fast64_t siz, map_base, map_length;
+    uint_fast64_t siz, pos, map_base, map_length;
     MemMappingType<true> mmapping;
 };
 
-struct datasource_file_name: public datasource_file<datasource_named>
+struct datasource_file_name: public datasource_file
 {
     datasource_file_name(const std::string& nam, uint_fast64_t size):
-        datasource_file<datasource_named> (-1, size, nam)
+        datasource_file(-1, size), path( new char [nam.size()+1] )
     {
+        std::strcpy(path, nam.c_str());
     }
     virtual ~datasource_file_name()
     {
         close();
+        delete[] path;
     }
 
     virtual bool open()
     {
-        fd = ::open(name, O_RDONLY | O_LARGEFILE);
-        if(fd < 0) { std::perror(name); return false; }
+        fd = ::open(path, O_RDONLY | O_LARGEFILE);
+        if(fd < 0) { std::perror(path); return false; }
         FadviseSequential(fd, 0, siz);
         FadviseNoReuse(fd, 0, siz);
         return datasource_file::open();
@@ -195,13 +212,21 @@ struct datasource_file_name: public datasource_file<datasource_named>
         datasource_file::close();
         if(fd >= 0) { ::close(fd); fd = -1; }
     }
+    virtual const std::string getname() const { return path; }
+
+private:
+    datasource_file_name(const datasource_file_name&);
+    void operator=(const datasource_file_name&);
+private:
+    char* path;
 };
 
-struct datasource_symlink: public datasource_with_pos<datasource_named>
+struct datasource_symlink: public datasource_t
 {
     datasource_symlink(const std::string& nam, uint_fast64_t size):
-        datasource_with_pos<datasource_named> (nam), linkbuf(0), siz(size)
+        path( new char [nam.size()+1] ), linkbuf(0), siz(size), pos(0)
     {
+        std::strcpy(path, nam.c_str());
     }
 
     virtual uint_fast64_t size() const { return siz; }
@@ -209,40 +234,50 @@ struct datasource_symlink: public datasource_with_pos<datasource_named>
     virtual ~datasource_symlink()
     {
         close();
+        delete[] path;
         delete[] linkbuf;
     }
-
     virtual const std::string getname() const
-    {
-        return datasource_named::getname() + " (link label)";
-    }
+        { return std::string(path) + " (link target)"; }
 
-    virtual void read(DataReadBuffer& buf, uint_fast64_t n, uint_fast64_t p)
+    virtual void rewind(uint_fast64_t p=0)
     {
-        /*
-        if(p > siz)   p = siz;
-        if(p+n > siz) n = siz-p;
-        */
-        buf.AssignRefFrom(linkbuf + p, n);
+        pos=p;
+    }
+    virtual void read(DataReadBuffer& buf, uint_fast64_t n)
+    {
+        read(buf, n, pos);
+        pos += n;
+    }
+    virtual void read(DataReadBuffer& buf, uint_fast64_t n, uint_fast64_t pos)
+    {
+        if(pos > siz)   pos = siz;
+        if(pos+n > siz) n = siz-pos;
+        buf.AssignRefFrom(linkbuf + pos, n);
     }
 
     virtual bool open()
     {
         if(!linkbuf) linkbuf = new unsigned char[siz];
-        int res = readlink(name, (char*) linkbuf, siz);
+        int res = readlink(path, (char*) linkbuf, siz);
         if(res < 0 || uint_fast64_t(res) != siz)
-            { std::perror(name); return false; }
-        rewind(0);
+            { std::perror(path); return false; }
+        pos = 0;
         return true;
     }
     virtual void close()
     {
         delete[] linkbuf; linkbuf = 0;
+        pos = 0;
     }
 
 private:
+    datasource_symlink(const datasource_symlink&);
+    void operator=(const datasource_symlink&);
+private:
+    char* path;
     unsigned char* linkbuf;
-    uint_fast64_t siz;
+    uint_fast64_t siz, pos;
 };
 
 #endif
