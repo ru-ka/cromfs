@@ -129,6 +129,30 @@ namespace cromfs_creator
     /* Private methods */
     /*******************/
 
+    static const std::vector<unsigned char> CompressBlockTable
+        (const std::vector<unsigned char>& raw_blktab,
+         uint_fast32_t storage_opts,
+         int heavy_option)
+    {
+        unsigned onesize = DATALOCATOR_SIZE_BYTES();
+
+        if(heavy_option == 2)
+        {
+            return LZMACompressHeavy(raw_blktab, "raw_blktab");
+        }
+        else
+        {
+            /* Make an educated guess of the optimal parameters for blocktab compression */
+            const unsigned blktab_periodicity
+                = (DATALOCATOR_SIZE_BYTES() == 4) ? 2 : 3;
+
+            return LZMACompress(raw_blktab,
+                blktab_periodicity,
+                blktab_periodicity,
+                0);
+        }
+    }
+
     static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
         mkcromfs_fblock& fblock,
         uint_fast64_t& compressed_total,
@@ -430,7 +454,7 @@ namespace cromfs_creator
         for(size_t p=collection_begin_pos; p<collection_end_pos; ++p)
         {
         #ifdef USE_RECURSIVE_OMP_READDIR
-          #pragma omp task firstprivate(p,collection,result_dirinfo) shared(path)
+          #pragma omp task firstprivate(p) shared(path)
           {
         #endif
             uint_fast64_t bytesize = 0;
@@ -926,7 +950,9 @@ namespace cromfs_creator
             }
 
             compressed_blktab
-                = CompressBlockTable(*blocks, storage_opts, FSIZE, LZMA_HeavyCompress);
+                = CompressBlockTable(
+                    EncodeBlockTable(*blocks, storage_opts, FSIZE),
+                    storage_opts, LZMA_HeavyCompress);
 
             if(DisplayEndProcess)
             {
