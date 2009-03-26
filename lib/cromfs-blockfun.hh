@@ -3,11 +3,10 @@
 
 /* Encode + compress a block table. */
 template<typename VecType>
-const std::vector<unsigned char> CompressBlockTable
+const std::vector<unsigned char> EncodeBlockTable
     (const VecType& blocks,
      uint_fast32_t storage_opts,
-     long FSIZE,
-     int heavy_option)
+     long FSIZE)
 {
     unsigned onesize = DATALOCATOR_SIZE_BYTES();
 
@@ -34,23 +33,8 @@ const std::vector<unsigned char> CompressBlockTable
             W32(&raw_blktab[a*onesize+4], startoffs);
         }
 
-    if(heavy_option == 2)
-    {
-        return LZMACompressHeavy(raw_blktab, "raw_blktab");
-    }
-    else
-    {
-        /* Make an educated guess of the optimal parameters for blocktab compression */
-        const unsigned blktab_periodicity
-            = (DATALOCATOR_SIZE_BYTES() == 4) ? 2 : 3;
-
-        return LZMACompress(raw_blktab,
-            blktab_periodicity,
-            blktab_periodicity,
-            0);
-    }
+    return raw_blktab;
 }
-
 
 /* Decode a block table.
  * Decompression is assumed to have already been done.

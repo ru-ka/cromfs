@@ -126,10 +126,10 @@ public:
         if(pos == data.end())
         {
             fprintf(stderr, "OUCH, offset %lu, size %lu is beyond limit pretend=%lu,intent=%lu,real=%lu\n",
-                offset, size,
-                size_reported,
-                size_lazy_alloc,
-                size_real);
+                (unsigned long) offset, (unsigned long) size,
+                (unsigned long) size_reported,
+                (unsigned long) size_lazy_alloc,
+                (unsigned long) size_real);
         }
 
         unsigned char* ptr =
@@ -303,6 +303,8 @@ private:
         MemMappingType<false>      map;
         std::vector<unsigned char> data;
         uint_fast64_t fileoffset;
+        
+        MapData() : offset(),length(),map(),data(),fileoffset() { }
     };
 
     struct MapOffsetComparator

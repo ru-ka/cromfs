@@ -8,7 +8,7 @@ template<typename Key, typename Valueholder, typename Allocator>
 size_t rangecollection<Key,Valueholder,Allocator>::erase(const Key& lo, const Key& up)
 {
     size_t n_removed = 0;
-    
+
     typename Cont::iterator next_thing = data.lower_bound(up);
     if(next_thing != data.end() && next_thing->first == up)
     {

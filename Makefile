@@ -1,4 +1,4 @@
-VERSION=1.5.8.5
+VERSION=1.5.8.6
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -212,6 +212,10 @@ clean: FORCE
 	rm -rf $(OBJS) $(PROGS) install *.pchi
 	rm -f cromfs-driver-static.??? configure.log
 	make -C util clean
+
+distclean: clean
+	rm -f {,lib,util}/.{lib,}depend
+	rm -f Makefile.sets configure.log
 
 install: $(PROGS) FORCE
 	- mkdir install install/progs install/docs
