@@ -303,7 +303,7 @@ private:
         MemMappingType<false>      map;
         std::vector<unsigned char> data;
         uint_fast64_t fileoffset;
-        
+
         MapData() : offset(),length(),map(),data(),fileoffset() { }
     };
 

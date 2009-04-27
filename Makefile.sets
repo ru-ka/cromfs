@@ -24,19 +24,19 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Mon Apr 13 19:35:59 EEST 2009
-# for Linux oktober 2.6.27.5-gentoo #2 SMP Sun Nov 9 20:49:30 EET 2008 i686 AMD Athlon(tm) XP 2400+ AuthenticAMD GNU/Linux
+# at Mon Apr 27 10:48:15 EEST 2009
+# for Linux chii 2.6.27.10 #1 SMP Tue Dec 23 10:36:45 EET 2008 x86_64 GNU/Linux
 # To change, run ./configure again.
 #
-CC=icc
-CPP=icc
-CXX=icc
-OPTIM +=  -inline-level=2 -xK
-CPPFLAGS +=  -w1 -openmp -DUSE_PTHREADS=0 -DHAS_LZO2=1 -DHAS_ASM_LZO2=1 -DHAS_VSNPRINTF -DHAS_LUTIMES -DHAS_STDINT_H -DHAS_INTTYPES_H -DHAS_READDIR_R -DHAS_UINT16_T -DHAS_LONG_LONG -DHAS_SYS_TYPES_H
-LDFLAGS +=  -L/opt/intel/cc/10.0.026/bin/lib -lirc -lstdc++ -openmp -lguide -lpthread -Bstatic -llzo2 -Bdynamic
-WARNINGS += 
-CWARNINGS += 
-CXXWARNINGS += 
+CC=gcc
+CPP=cpp
+CXX=g++
+OPTIM +=  -minline-stringops-dynamically -ftree-vectorize -ffast-math -ftree-switch-conversion -mmmx -msse -msse2 -mssse3
+CPPFLAGS +=  -fopenmp -DUSE_PTHREADS=0 -DHAS_LZO2=1 -DHAS_ASM_LZO2=0 -DHAS_VSNPRINTF -DHAS_LUTIMES -DHAS_STDINT_H -DHAS_INTTYPES_H -DHAS_READDIR_R -DHAS_UINT16_T -DHAS_LONG_LONG -DHAS_SYS_TYPES_H
+LDFLAGS +=  -fopenmp
+WARNINGS +=  -Wall -Wundef -Wcast-qual -Wpointer-arith -Wconversion -Wwrite-strings -Wsign-compare -Wredundant-decls -Winit-self -Wextra -Wparentheses -Wcast-align -Wformat -Wno-conversion
+CWARNINGS +=  -Waggregate-return -Wshadow -Winline -Wstrict-prototypes -Wmissing-prototypes
+CXXWARNINGS +=  -Woverloaded-virtual -Weffc++ -Wno-non-virtual-dtor
 
 
 FUSE_STATIC=1

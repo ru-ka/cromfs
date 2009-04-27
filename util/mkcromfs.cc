@@ -144,7 +144,7 @@ namespace cromfs_creator
         {
             /* Make an educated guess of the optimal parameters for blocktab compression */
             const unsigned blktab_periodicity
-                = (DATALOCATOR_SIZE_BYTES() == 4) ? 2 : 3;
+                = (onesize == 4) ? 2 : 3;
 
             return LZMACompress(raw_blktab,
                 blktab_periodicity,

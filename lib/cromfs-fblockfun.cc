@@ -150,7 +150,8 @@ std::string mkcromfs_fblock::getfn() const
 }
 
 mkcromfs_fblock::mkcromfs_fblock(int id)
-    : fblock_disk_id(id), filesize(0), mapped(), fd(-1), is_compressed(false)
+    : lock(),
+      fblock_disk_id(id), filesize(0), mapped(), fd(-1), is_compressed(false)
 {
 }
 
