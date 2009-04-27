@@ -144,7 +144,7 @@ namespace cromfs_creator
         {
             /* Make an educated guess of the optimal parameters for blocktab compression */
             const unsigned blktab_periodicity
-                = (DATALOCATOR_SIZE_BYTES() == 4) ? 2 : 3;
+                = (onesize == 4) ? 2 : 3;
 
             return LZMACompress(raw_blktab,
                 blktab_periodicity,
@@ -637,7 +637,7 @@ namespace cromfs_creator
         MutexType blockify_lock;
 
         #pragma omp parallel for schedule(guided)
-        for(size_t p=0; p<collection.size(); ++p) // Step 4.
+        for(long p=0; p < (long)collection.size(); ++p) // Step 4.
         {
             direntry& ent = collection[p];
             const struct stat64& st = ent.st;

@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <vector>
 
+#include <cstdio>
+
 int LZMA_HeavyCompress = 0;
 double RootDirInflateFactor = 1;
 double InotabInflateFactor  = 1;
@@ -245,7 +247,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
             break;
         default:
         {
-            fprintf(stderr, "%s has unsupported signature\n", fsfile.c_str());
+            std::fprintf(stderr, "%s has unsupported signature\n", fsfile.c_str());
             goto ErrorExit;
         }
     }
@@ -270,7 +272,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     );
 
     std::printf("Converting the root directory inode...\n- ");
-    //fprintf(stderr, "root goes at %llX\n", write_offs);
+    //std::fprintf(stderr, "root goes at %llX\n", write_offs);
     sblock.rootdir_size =
         ConvertBuffer(infd, outfd,
                      sblock.rootdir_offs,
@@ -292,7 +294,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     ReadWriteInotabAttrs.read_old  = OrigVer >= 3;
     ReadWriteInotabAttrs.write_new = Ver >= 3;
 
-    //fprintf(stderr, "inotab goes at %llX\n", write_offs);
+    //std::fprintf(stderr, "inotab goes at %llX\n", write_offs);
     sblock.inotab_size =
         ConvertBuffer(infd, outfd,
                      sblock.inotab_offs,
@@ -619,15 +621,15 @@ int main(int argc, char** argv)
                     {
                         case 0: // pb
                             LZMA_PosStateBits = value;
-                            //fprintf(stderr, "pb=%ld\n", value);
+                            //std::fprintf(stderr, "pb=%ld\n", value);
                             break;
                         case 1: // lp
                             LZMA_LiteralPosStateBits = value;
-                            //fprintf(stderr, "lp=%ld\n", value);
+                            //std::fprintf(stderr, "lp=%ld\n", value);
                             break;
                         case 2: // lc
                             LZMA_LiteralContextBits = value;
-                            //fprintf(stderr, "lc=%ld\n", value);
+                            //std::fprintf(stderr, "lc=%ld\n", value);
                             max=8;
                             break;
                     }

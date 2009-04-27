@@ -24,6 +24,8 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include <sstream>
 #include <deque>
 
+#include <cstdio>
+
 #include <sys/time.h>
 #include <sys/stat.h>
 
@@ -982,7 +984,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
                   )
                 {
                 error_entry:
-                    fprintf(stderr, "Entry %u: offs is %d, prev is %d, next is %d\n",
+                    std::fprintf(stderr, "Entry %u: offs is %d, prev is %d, next is %d\n",
                         a,
                         entry_offsets[a],
                         a>0 ? entry_offsets[a-1] : 0,
@@ -1006,7 +1008,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
                                 name_room);
                 if(!nul_pointer)
                 {
-                    fprintf(stderr, "Entry %u has no nul pointer\n", a);
+                    std::fprintf(stderr, "Entry %u has no nul pointer\n", a);
                     goto error_entry;
                 }
 
@@ -1155,7 +1157,7 @@ cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
 
 void cromfs::DumpRAMusage() const
 {
-    fprintf(stderr,
+    std::fprintf(stderr,
         "-- cromfs RAM use report --\n"
         "rootdir inode size: %s (%u blocks)\n"
         "inotab inode size: %s (%u blocks)\n"

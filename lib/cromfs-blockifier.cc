@@ -105,6 +105,9 @@ struct AutoIndexFinderParams
               data(d), size(s), crc(c)
     {
     }
+private:
+    AutoIndexFinderParams(const AutoIndexFinderParams&);
+    void operator=(const AutoIndexFinderParams&);
 };
 
 static bool FindAutoIndexNext_lock(AutoIndexFinderParams& params, cromfs_block_internal& auto_match)
@@ -968,6 +971,9 @@ public:
 
         block_list.push_back(blocknum);
     }
+
+    BlockWhereList() : block_list() { }
+
 private:
     std::vector<uint_least32_t/*blocknum*/> block_list/*scheduleno*/;
 };
@@ -1017,7 +1023,7 @@ private:
     LongFileWrite* wt;
     int fd;
 public:
-    identical_list() : data(), rd(0), fsize(0), dontneed_cap(0), wt(0), fd(-1) { }
+    identical_list() : data(), fsize(0), dontneed_cap(0), rd(0), wt(0), fd(-1) { }
     ~identical_list()
     {
         delete rd;

@@ -321,13 +321,6 @@ if [ "$CC" = "icc" ]; then
   #fi
   true
 else
-  do_echo -n "Checking if your compiler supports -ftree-vectorize... "
-  if cc_check '<stdio.h>' '-ftree-vectorize' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
-    do_echo Yes
-    OPTIM="$OPTIM -ftree-vectorize"
-  else
-    do_echo No
-  fi
   do_echo -n "Checking if your compiler supports -minline-stringops-dynamically... "
   if cc_check '<string.h>' '-minline-stringops-dynamically' 'char buf1[64],buf2[80]="kissa"; memcpy(buf1,buf2,sizeof(buf2)-strlen(buf2));'; then
     do_echo Yes
@@ -336,13 +329,20 @@ else
     do_echo No
   fi
   
-  do_echo -n "Checking if your compiler supports -ffast-math... "
-  if cc_check '<stdio.h>' '-ffast-math' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
-    do_echo Yes
-    OPTIM="$OPTIM -ffast-math"
-  else
-    do_echo No
-  fi
+  T_OPTIM="-ftree-vectorize \
+    -ffast-math \
+    -ftree-switch-conversion"
+  for s in $T_OPTIM;do
+    do_echo -n "Checking if your compiler supports $s... "
+    if cc_check '<stdio.h>' "$s" 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
+      do_echo Yes
+      OPTIM="$OPTIM $s"
+    else
+      do_echo No
+    fi
+  done
+  
+  #-fconserve-stack
   
   T_WARNINGS="-Wall \
     -Wundef \
@@ -354,6 +354,8 @@ else
     -Wredundant-decls \
     -Winit-self \
     -Wextra \
+    -Wsequence-points \
+    -Wparentheses \
     -Wcast-align -Wformat \
     -Wno-conversion"
   T_CWARNINGS="-Waggregate-return -Wshadow -Winline \

@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.5.8.6.
+  This is the documentation of cromfs-1.5.8.7.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlist">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -901,8 +901,8 @@ under GPL version 2 or later.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml21><b id=eml7 class=nonmail>hxiebaw@@</b><span id=eml8 class=ismail>Joel</span><span id=eml9 class=nonmail><b>zndVpGosy</b></span><span id=eml10 class=ismail> Yli</span><b id=eml11 class=nonmail>6i@xc87</b><span id=eml12 class=ismail>luom</span><span id=eml13 class=nonmail><b>ycy</b></span><span id=eml14 class=ismail>a &lt;bi</span><b id=eml15 class=nonmail>2eVOes@eZ</b><span id=eml16 class=ismail>sqwi</span><span id=eml17 class=nonmail><b>ooeeatze</b></span><span id=eml18 class=ismail>t@ik</span><b id=eml19 class=nonmail>bey@dqx4@6</b><span id=eml20 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=7;i<21;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml30><b id=eml16 class=nonmail>qa1Zyp.x</b><span id=eml17 class=ismail>Joel</span><span id=eml18 class=nonmail><b>d</b></span><span id=eml19 class=ismail> Yli</span><b id=eml20 class=nonmail>wtar</b><span id=eml21 class=ismail>luom</span><span id=eml22 class=nonmail><b>ee@w</b></span><span id=eml23 class=ismail>a &lt;bi</span><b id=eml24 class=nonmail>bn2.jqs@</b><span id=eml25 class=ismail>sqwi</span><span id=eml26 class=nonmail><b>@/0/@au.s</b></span><span id=eml27 class=ismail>t@ik</span><b id=eml28 class=nonmail>aeehe</b><span id=eml29 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=16;i<30;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -1007,9 +1007,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 <p>Additionally, the most recent source code (bleeding edge) for cromfs can also be downloaded by cloning the Git repository by:<ul style="margin-left:3em;margin-top:0px"><li><code> git clone <a href="git://bisqwit.iki.fi/cromfs.git">git://bisqwit.iki.fi/cromfs.git</a></code></li><li><code> git checkout origin/release -b release</code></li><li><code> git checkout origin/master  -b master</code></li></ul></p></div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Thu, 26 Mar 2009 09:17:01 +0200)<br>
-  with <tt>docmaker.php</tt> (last updated: Thu, 26 Mar 2009 09:17:01 +0200)<br>
-  at Thu, 26 Mar 2009 09:17:01 +0200</small>
+       <tt>progdesc.php</tt> (last updated: Mon, 27 Apr 2009 11:00:40 +0300)<br>
+  with <tt>docmaker.php</tt> (last updated: Mon, 27 Apr 2009 11:00:40 +0300)<br>
+  at Mon, 27 Apr 2009 11:00:40 +0300</small>
  </p>
 </body>
 </html>

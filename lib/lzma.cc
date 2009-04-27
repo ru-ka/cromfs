@@ -13,6 +13,9 @@ extern "C" {
 #include <string>
 #include <cstring> // std::memcpy
 
+
+#include <cstdio>
+
 #include <stdint.h>
 
 int LZMA_verbose = 0;
@@ -339,7 +342,7 @@ const std::vector<unsigned char> LZMADeCompress
         &LZMAalloc);
 
     /*
-    fprintf(stderr, "res=%d, status=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
+    std::fprintf(stderr, "res=%d, status=%d, in_done=%d (buf=%d), out_done=%d (max=%d)\n",
         res,
         (int)status,
         (int)srclen, (int)length,
@@ -379,8 +382,8 @@ const std::vector<unsigned char> LZMACompressHeavy(const unsigned char* data, si
     bool first = true;
     if(LZMA_verbose >= 1)
     {
-        fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)length);
-        fflush(stderr);
+        std::fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)length);
+        std::fflush(stderr);
     }
 
     unsigned minresultsize=0, maxresultsize=0;
@@ -411,7 +414,7 @@ const std::vector<unsigned char> LZMACompressHeavy(const unsigned char* data, si
             sprintf(best, "pb%u lp%u lc%u",
                 pb,lp,lc);
             if(LZMA_verbose >= 1)
-                fprintf(stderr, "Yay result with %s: %u\n", best, (unsigned)result.size());
+                std::fprintf(stderr, "Yay result with %s: %u\n", best, (unsigned)result.size());
             bestresult.swap(result);
             first = false;
         }
@@ -421,11 +424,11 @@ const std::vector<unsigned char> LZMACompressHeavy(const unsigned char* data, si
             sprintf(tmp, "pb%u lp%u lc%u",
                 pb,lp,lc);
             if(LZMA_verbose >= 2)
-                fprintf(stderr, "Blaa result with %s: %u\n", tmp, (unsigned)result.size());
+                std::fprintf(stderr, "Blaa result with %s: %u\n", tmp, (unsigned)result.size());
         }
         if(LZMA_verbose >= 2)
         {
-            fprintf(stderr, "%*s\n", (5 * (4+9+2)), "");
+            std::fprintf(stderr, "%*s\n", (5 * (4+9+2)), "");
             /* Visualize the size map: */
             std::string lines[6] = {};
             for(unsigned pbt = 0; pbt <= 4; ++pbt)
@@ -451,23 +454,23 @@ const std::vector<unsigned char> LZMACompressHeavy(const unsigned char* data, si
                     lines[1 + lpt] += line + "  ";
                 }
             }
-            for(unsigned a=0; a<6; ++a) fprintf(stderr, "%s\n", lines[a].c_str());
-            fprintf(stderr, "\33[%uA", 7);
+            for(unsigned a=0; a<6; ++a) std::fprintf(stderr, "%s\n", lines[a].c_str());
+            std::fprintf(stderr, "\33[%uA", 7);
         }
        }
     }
     if(LZMA_verbose >= 2)
-        fprintf(stderr, "\n\n\n\n\n\n\n\n");
+        std::fprintf(stderr, "\n\n\n\n\n\n\n\n");
 
     if(LZMA_verbose >= 1)
     {
-        fprintf(stderr, "Best LZMA for %s(%u->%u): %s\n",
+        std::fprintf(stderr, "Best LZMA for %s(%u->%u): %s\n",
             why,
             (unsigned)length,
             (unsigned)bestresult.size(),
             best);
     }
-    fflush(stderr);
+    std::fflush(stderr);
     return bestresult;
 }
 
@@ -558,13 +561,13 @@ public:
       #pragma omp critical(LZMA_ParabolicFinderState)
       {
         /*
-        fprintf(stderr, "NextInstruction...");
+        std::fprintf(stderr, "NextInstruction...");
         for(unsigned a=0; a<state.size(); ++a)
-            fprintf(stderr, " %u=%s", a,
+            std::fprintf(stderr, " %u=%s", a,
                 state[a]==Unknown?"??"
                :state[a]==Done?"Ok"
                :"..");
-        fprintf(stderr, "\n");*/
+        std::fprintf(stderr, "\n");*/
 
         if(CountUnknown() == 0)
         {
@@ -691,7 +694,7 @@ static void LZMACompressAutoHelper(
         const unsigned try_lc = &which_iterate == &lc ? t : lc;
 
         if(LZMA_verbose >= 2)
-            fprintf(stderr, "%s:Trying pb%u lp%u lc%u\n",
+            std::fprintf(stderr, "%s:Trying pb%u lp%u lc%u\n",
                 why,try_pb,try_lp,try_lc);
 
         std::vector<unsigned char> result = use_small_dict
@@ -699,7 +702,7 @@ static void LZMACompressAutoHelper(
             : LZMACompress(data,length,try_pb,try_lp,try_lc);
 
         if(LZMA_verbose >= 2)
-            fprintf(stderr, "%s:       pb%u lp%u lc%u -> %u\n",
+            std::fprintf(stderr, "%s:       pb%u lp%u lc%u -> %u\n",
                 why,try_pb,try_lp,try_lc, (unsigned)result.size());
 
         finder.GotResult(t, result.size());
@@ -722,8 +725,8 @@ const std::vector<unsigned char> LZMACompressAuto(const unsigned char* data, siz
 {
     if(LZMA_verbose >= 1)
     {
-        fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)length);
-        fflush(stderr);
+        std::fprintf(stderr, "Start LZMA(%s, %u bytes)\n", why, (unsigned)length);
+        std::fflush(stderr);
     }
 
     unsigned backup_algorithm = LZMA_AlgorithmNo;
@@ -785,13 +788,13 @@ const std::vector<unsigned char> LZMACompressAuto(const unsigned char* data, siz
 
     if(LZMA_verbose >= 1)
     {
-        fprintf(stderr, "Best LZMA for %s(%u->%u): pb%u lp%u lc%u\n",
+        std::fprintf(stderr, "Best LZMA for %s(%u->%u): pb%u lp%u lc%u\n",
             why,
             (unsigned)length,
             (unsigned)bestresult.size(),
             pb,lp,lc);
     }
-    fflush(stderr);
+    std::fflush(stderr);
 
     return bestresult;
 }
