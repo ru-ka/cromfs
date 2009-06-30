@@ -806,7 +806,8 @@ Theoretical requirements to use cromfs in the root filesystem:
    since version 1.2.2).</li>
  <li>An initrd, that contains the cromfs-driver program</li>
  <li>Fuse driver in the kernel (it may be loaded from the initrd).</li>
- <li>Use of pivot_root to change the root into the mounted image</li>
+ <li>Constructing an <code>unionfs</code> mount from a ramdisk
+     and the cromfs mountpoint to form a writable root</li>
  </li>
 </ul>
 
