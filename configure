@@ -329,9 +329,13 @@ else
     do_echo No
   fi
   
-  T_OPTIM="-ftree-vectorize \
-    -ffast-math \
-    -ftree-switch-conversion"
+  # Removed from the list:
+  # -ftree-switch-conversion (new in GCC 4.4, automatically turned on by -O2)
+  # -ftree-vectorize (new in GCC 4.0, automatically turned on by -O3 at least since GCC 4.3)
+
+  T_OPTIM="\
+    -fwhole-program \
+    -ffast-math -mrecip"
   for s in $T_OPTIM;do
     do_echo -n "Checking if your compiler supports $s... "
     if cc_check '<stdio.h>' "$s" 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
@@ -403,6 +407,8 @@ if [ ! "$CC" = "icc" ]; then
   cpu_check SSE2  sse2  -msse2  __SSE2__
   cpu_check SSE3  sse3  -msse3  __SSE3__
   cpu_check SSSE3 ssse3 -mssse3 __SSSE3__
+  #cpu_check ABM   abm   -abm    __SSE4_2__
+  cpu_check sahf  lahf_lm -msahf HAS_SAHF
 else
   # ICC can only take one (1) cpu feature flag, so we test these options
   # in age succession and choose the options from the last succeeding test.

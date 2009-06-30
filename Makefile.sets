@@ -24,14 +24,14 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Mon Apr 27 10:48:15 EEST 2009
-# for Linux chii 2.6.27.10 #1 SMP Tue Dec 23 10:36:45 EET 2008 x86_64 GNU/Linux
+# at Wed May 27 19:49:53 EEST 2009
+# for Linux hikaru 2.6.29.2-52.fc10.i686 #1 SMP Mon Apr 27 16:29:14 EDT 2009 i686 athlon i386 GNU/Linux
 # To change, run ./configure again.
 #
 CC=gcc
 CPP=cpp
 CXX=g++
-OPTIM +=  -minline-stringops-dynamically -ftree-vectorize -ffast-math -ftree-switch-conversion -mmmx -msse -msse2 -mssse3
+OPTIM +=  -minline-stringops-dynamically -fwhole-program -ffast-math -mrecip -mmmx -m3dnow -msse -msse2
 CPPFLAGS +=  -fopenmp -DUSE_PTHREADS=0 -DHAS_LZO2=1 -DHAS_ASM_LZO2=0 -DHAS_VSNPRINTF -DHAS_LUTIMES -DHAS_STDINT_H -DHAS_INTTYPES_H -DHAS_READDIR_R -DHAS_UINT16_T -DHAS_LONG_LONG -DHAS_SYS_TYPES_H
 LDFLAGS +=  -fopenmp
 WARNINGS +=  -Wall -Wundef -Wcast-qual -Wpointer-arith -Wconversion -Wwrite-strings -Wsign-compare -Wredundant-decls -Winit-self -Wextra -Wparentheses -Wcast-align -Wformat -Wno-conversion
@@ -39,5 +39,5 @@ CWARNINGS +=  -Waggregate-return -Wshadow -Winline -Wstrict-prototypes -Wmissing
 CXXWARNINGS +=  -Woverloaded-virtual -Weffc++ -Wno-non-virtual-dtor
 
 
-FUSE_STATIC=1
+FUSE_STATIC=0
 MKCROMFS_LZO_OBJ=
