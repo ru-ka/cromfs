@@ -92,7 +92,7 @@ LDFLAGS=""
 OPTIM=""
 
 do_echo -n "Determining compiler version to use... "
-select_tool CXX g++    icc  `(IFS=':'; for s in $PATH;do cd "$s"&&echo g++-*;done) 2>/dev/null`
+select_tool CXX g++    icc `(IFS=':'; for s in $PATH;do cd "$s"&&echo g++-*;done) 2>/dev/null`
 select_tool CPP cpp    icc `(IFS=':'; for s in $PATH;do cd "$s"&&echo cpp-*;done) 2>/dev/null`
 select_tool CC  gcc cc icc `(IFS=':'; for s in $PATH;do cd "$s"&&echo gcc-*;done) 2>/dev/null`
 do_echo ""

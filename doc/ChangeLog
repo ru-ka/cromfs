@@ -4,6 +4,9 @@ cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.8.8 2009-07-21 Joel Yliluoma <bisqwit@iki.fi>
+- Compilation fixes for GCC 4.4 (thanks Gaetan Bisson)
+
 1.5.8.7 2009-04-27 Joel Yliluoma <bisqwit@iki.fi>
 - Compilation fixes for GCC 4.4
 
