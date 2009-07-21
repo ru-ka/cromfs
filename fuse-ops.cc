@@ -19,6 +19,7 @@ the fuse_reply_err() function.
 #include <cstring>
 #include <sys/statvfs.h>
 #include <cstring> /* for std::memset */
+#include <cstdio> /* fprintf */
 
 
 #define CROMFS_CTXP(obj,userdata) \
