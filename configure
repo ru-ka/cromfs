@@ -332,9 +332,12 @@ else
   # Removed from the list:
   # -ftree-switch-conversion (new in GCC 4.4, automatically turned on by -O2)
   # -ftree-vectorize (new in GCC 4.0, automatically turned on by -O3 at least since GCC 4.3)
+  
+  # -fwhole-program (new in GCC-4.4, makes compiler assume that
+  #                  the included source files consist of entire
+  #                  program, messing link semantics)
 
   T_OPTIM="\
-    -fwhole-program \
     -ffast-math -mrecip"
   for s in $T_OPTIM;do
     do_echo -n "Checking if your compiler supports $s... "
