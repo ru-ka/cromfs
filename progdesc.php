@@ -589,6 +589,11 @@ To improve the filesystem generation speed, try these tips:
      same guidelines apply as with the -j in GNU make. Currently
      this option does not affect compression power, so it is
      recommended to use it.</li>
+   <li>Use \"--lzmabits 2,0,3\" (or other values of your choice) to
+     make LZMA compression about 27 times faster, with a slight
+     cost of compression power. The default option is \"auto\",
+     which tests a number of different lzmabits values to end
+     up with hopefully optimal compression.</li>
 </ul>
 
 ", '1.1.1. To control the memory usage' => "

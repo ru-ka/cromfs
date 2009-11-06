@@ -24,14 +24,14 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Wed May 27 19:49:53 EEST 2009
-# for Linux hikaru 2.6.29.2-52.fc10.i686 #1 SMP Mon Apr 27 16:29:14 EDT 2009 i686 athlon i386 GNU/Linux
+# at Fri Jul 31 18:13:20 EEST 2009
+# for Linux hikaru 2.6.29.5-84.fc10.i686 #1 SMP Tue Jun 16 12:11:02 EDT 2009 i686 athlon i386 GNU/Linux
 # To change, run ./configure again.
 #
 CC=gcc
 CPP=cpp
 CXX=g++
-OPTIM +=  -minline-stringops-dynamically -fwhole-program -ffast-math -mrecip -mmmx -m3dnow -msse -msse2
+OPTIM +=  -minline-stringops-dynamically -ffast-math -mrecip -mmmx -m3dnow -msse -msse2
 CPPFLAGS +=  -fopenmp -DUSE_PTHREADS=0 -DHAS_LZO2=1 -DHAS_ASM_LZO2=0 -DHAS_VSNPRINTF -DHAS_LUTIMES -DHAS_STDINT_H -DHAS_INTTYPES_H -DHAS_READDIR_R -DHAS_UINT16_T -DHAS_LONG_LONG -DHAS_SYS_TYPES_H
 LDFLAGS +=  -fopenmp
 WARNINGS +=  -Wall -Wundef -Wcast-qual -Wpointer-arith -Wconversion -Wwrite-strings -Wsign-compare -Wredundant-decls -Winit-self -Wextra -Wparentheses -Wcast-align -Wformat -Wno-conversion
