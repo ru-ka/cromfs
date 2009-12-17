@@ -241,7 +241,7 @@ static void FindOverlap(
         return;
     }
 
-    if(AutoIndexPeriod == 1 && BSIZE == data.size())
+    if(AutoIndexPeriod == 1 && (size_t)BSIZE == data.size())
     {
         // If autoindexperiod covers all possible full overlaps,
         // then we need to only search for appends.
@@ -1727,8 +1727,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             for(uint_fast64_t offset=0; offset<nbytes; offset += blocksize)
             {
                 assertbegin();
-                const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
-                const void* tgt_end  = (const void*)target_end;
+                //const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
+                //const void* tgt_end  = (const void*)target_end;
                 assert2var(tgt_next, tgt_end);
                 assert(tgt_next <= tgt_end);
                 assertflush();

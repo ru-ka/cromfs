@@ -66,7 +66,7 @@ void LongFileWrite::write
         }
         else
         {
-            if(pwrite64(fd, buf, size, offset) != size)
+            if(pwrite64(fd, buf, size, offset) != (ssize_t)size)
                 throw errno;
         }
     }
@@ -75,7 +75,7 @@ void LongFileWrite::write
 void LongFileWrite::FlushBuffer()
 {
     if(Buffer.empty()) return;
-    if(pwrite64(fd, &Buffer[0], Buffer.size(), bufpos) != Buffer.size())
+    if(pwrite64(fd, &Buffer[0], Buffer.size(), bufpos) != (ssize_t)Buffer.size())
         throw errno;
     Buffer.clear();
 }

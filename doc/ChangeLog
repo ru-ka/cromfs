@@ -4,6 +4,16 @@ cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
+1.5.9 2009-12-17 Joel Yliluoma <bisqwit@iki.fi>
+- Update LZMA version (no relevant changes)
+- Add a few new gcc options when supported:
+    -fvpt
+    -ffunction-cse
+    -ffunction-sections
+    -fdata-sections
+    -Xlinker --gc-sections
+- Eliminate some compiler warnings
+
 1.5.8.9 2009-07-31 Joel Yliluoma <bisqwit@iki.fi>
 - Compilation fixes for GCC 4.4 (thanks Gaetan Bisson)
 
