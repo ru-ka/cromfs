@@ -321,6 +321,8 @@ if [ "$CC" = "icc" ]; then
   #fi
   true
 else
+  LDFLAGS="$LDFLAGS -Xlinker --gc-sections"
+
   do_echo -n "Checking if your compiler supports -minline-stringops-dynamically... "
   if cc_check '<string.h>' '-minline-stringops-dynamically' 'char buf1[64],buf2[80]="kissa"; memcpy(buf1,buf2,sizeof(buf2)-strlen(buf2));'; then
     do_echo Yes
@@ -338,7 +340,7 @@ else
   #                  program, messing link semantics)
 
   T_OPTIM="\
-    -ffast-math -mrecip"
+    -ffast-math -mrecip -fvpt -ffunction-cse -ffunction-sections -fdata-sections"
   for s in $T_OPTIM;do
     do_echo -n "Checking if your compiler supports $s... "
     if cc_check '<stdio.h>' "$s" 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
