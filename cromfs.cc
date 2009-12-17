@@ -30,12 +30,12 @@ See doc/FORMAT for the documentation of the filesystem structure.
 #include <sys/stat.h>
 
 extern "C" {
-#include "lib/lzma/C/LzmaDec.h"
+#include "lib/lzma/C/LzmaDec.h" /* For LZMA_PROPS_SIZE */
 }
 
 #include "lib/longfileread.hh"
-#include "lib/cromfs-blockfun.hh"
 #include "lib/cromfs-inodefun.hh"
+#include "lib/cromfs-blockfun.hh"
 #include "lib/fadvise.hh"
 #include "lib/util.hh"
 #include "cromfs.hh"
@@ -306,22 +306,19 @@ void cromfs::reread_fblktab()
 {
     fblktab.clear();
 
+    uint_fast64_t eofpos   = lseek64(fd, 0, SEEK_END);
     uint_fast64_t startpos = sblock.fblktab_offs;
-    for(;;)
+    while(startpos + (4+LZMA_PROPS_SIZE+8) < eofpos)
     {
-        unsigned char Buf[17];
-        /* TODO: LongFileRead here... but catch EOF somehow? */
-        ssize_t r = pread64(fd, Buf, 17, startpos);
-        if(r == 0) break;
-        if(r < 0) throw errno;
-        if(r < 17) throw EINVAL;
+        LongFileRead fbreader(fd, startpos, 4+LZMA_PROPS_SIZE+8);
+        const unsigned char* Buf = fbreader.GetAddr();
 
         cromfs_fblock_internal fblock;
         fblock.filepos = startpos+4;
         fblock.length  = R32(Buf);
         //uint_fast64_t orig_length = R64(Buf+9); // <- not interesting
 
-        if(fblock.length <= 13)
+        if(fblock.length <= LZMA_PROPS_SIZE+8)
         {
             throw EINVAL;
         }
@@ -636,7 +633,7 @@ cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t fblocknum) 
     const uint_fast64_t filepos   = fblktab[fblocknum].filepos;
 
 #if FBLOCK_DEBUG
-    fprintf(stderr, "- - - - reading fblock %u (%u bytes) from %llu\n",
+    fprintf(stderr, "- - - - reading fblock %u (%u bytes) from filepos = %llu\n",
         (unsigned)fblocknum, (unsigned)comp_size,
         (unsigned long long)filepos);
 #endif
@@ -651,7 +648,7 @@ int_fast64_t cromfs::read_file_data(
     throw (cromfs_exception, std::bad_alloc)
 {
     return read_file_data(
-        inonum==1 ? get_root_inode () : read_inode_and_blocks(inonum),
+        inonum==0 ? inotab : read_inode_and_blocks(inonum),
         offset, target, size, purpose);
 }
 
