@@ -26,9 +26,8 @@ LDOPTS += $(OPTIM)
 
 CPPFLAGS += -I../lib -I.. -I../lib/lzo
 
-# multithread versions of lzma -- Windows only
-#CPPFLAGS += -DCOMPRESS_MF_MT
-#CPPFLAGS += -DCOMPRESS_MT
+# singlethreaded version of lzma
+CPPFLAGS += -D_7ZIP_ST
 
 OBJS_LZMADEC += ../lib/lzma/C/LzmaDec.o
 OBJS_LZMA += $(OBJS_LZMADEC)

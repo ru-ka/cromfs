@@ -15,9 +15,8 @@ CPPFLAGS += -I.. -I../lib -I../lib/lzo
 #OPTIM += -O1 -pg -g
 #LDOPTS += -pg
 
-# multithread versions of lzma -- Windows only
-#CPPFLAGS += -DCOMPRESS_MF_MT
-#CPPFLAGS += -DCOMPRESS_MT
+# singlethreaded version of lzma
+CPPFLAGS += -D_7ZIP_ST
 
 tags: FORCE
 	make -C .. tags

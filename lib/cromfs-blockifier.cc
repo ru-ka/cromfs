@@ -1180,7 +1180,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
         DataReadBuffer buf;
         #pragma omp parallel for schedule(guided) private(buf) shared(n_unique,n_collisions)
-        for(size_t a=0; a < schedule.size(); ++a)
+        //for(size_t a=0; a < schedule.size(); ++a)
+        for(long a=0; a < (long)schedule.size(); ++a) // use "long" so ICC 10.0 won't complain
         {
             schedule_item& s = schedule[a];
             datasource_t* source  = s.GetDataSource();

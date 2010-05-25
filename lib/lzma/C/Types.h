@@ -1,5 +1,5 @@
 /* Types.h -- Basic types
-2009-08-14 : Igor Pavlov : Public domain */
+2010-03-11 : Igor Pavlov : Public domain */
 
 #ifndef __7Z_TYPES_H
 #define __7Z_TYPES_H
@@ -95,6 +95,12 @@ typedef int Bool;
 #define False 0
 
 
+#ifdef _WIN32
+#define MY_STD_CALL __stdcall
+#else
+#define MY_STD_CALL
+#endif
+
 #ifdef _MSC_VER
 
 #if _MSC_VER >= 1300
@@ -104,19 +110,27 @@ typedef int Bool;
 #endif
 
 #define MY_CDECL __cdecl
-#define MY_STD_CALL __stdcall
-#define MY_FAST_CALL MY_NO_INLINE __fastcall
+#define MY_FAST_CALL __fastcall
 
 #else
 
 #define MY_CDECL
-#define MY_STD_CALL
 #define MY_FAST_CALL
 
 #endif
 
 
 /* The following interfaces use first parameter as pointer to structure */
+
+typedef struct
+{
+  Byte (*Read)(void *p); /* reads one byte, returns 0 in case of EOF or error */
+} IByteIn;
+
+typedef struct
+{
+  void (*Write)(void *p, Byte b);
+} IByteOut;
 
 typedef struct ISeqInStream
 {
@@ -158,7 +172,7 @@ typedef struct
 
 typedef struct
 {
-  SRes (*Look)(void *p, void **buf, size_t *size);
+  SRes (*Look)(void *p, const void **buf, size_t *size);
     /* if (input(*size) != 0 && output(*size) == 0) means end_of_stream.
        (output(*size) > input(*size)) is not allowed
        (output(*size) < input(*size)) is allowed */

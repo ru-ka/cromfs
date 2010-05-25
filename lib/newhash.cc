@@ -295,7 +295,8 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
   #endif
    }
 #else
-    uint_least32_t a,b;
+    typedef uint_least32_t c32;
+    c32 a,b;
     unsigned long len = size;
     c += size + UINT32_C(0x9e3779b9); // 2^32 / ((1+sqrt(5))/2
     a = b = c;
