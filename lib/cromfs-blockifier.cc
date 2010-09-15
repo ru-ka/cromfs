@@ -1710,9 +1710,10 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             unsigned char* target = s.GetBlockTarget();
             uint_fast64_t nbytes  = source->size();
             uint_fast64_t blocksize = s.GetBlockSize();
-            //unsigned char* target_end =
-            //    target + BLOCKNUM_SIZE_BYTES() * ((nbytes + blocksize-1) / blocksize);
-
+        #ifndef NDEBUG
+            unsigned char* target_end =
+                target + BLOCKNUM_SIZE_BYTES() * ((nbytes + blocksize-1) / blocksize);
+        #endif
             if(DisplayBlockSelections)
             {
                 std::printf("%s <size %llu, block size %llu>\n",
@@ -1729,8 +1730,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             {
             #ifndef NDEBUG
                 assertbegin();
-                //const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
-                //const void* tgt_end  = (const void*)target_end;
+                const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
+                const void* tgt_end  = (const void*)target_end;
                 assert2var(tgt_next, tgt_end);
                 assert(tgt_next <= tgt_end);
                 assertflush();
