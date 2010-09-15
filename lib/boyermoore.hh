@@ -6,6 +6,10 @@
 
 #include <limits.h> // UCHAR_MAX
 
+#ifndef UCHAR_MAX
+#define UCHAR_MAX ((unsigned char)~0u)
+#endif
+
 namespace BoyerMooreSearch
 {
     struct occtable_type

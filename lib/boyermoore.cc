@@ -32,7 +32,7 @@ void InitOcc(occtable_type& occ, const unsigned char* needle, const size_t needl
      * of bmBc at http://www-igm.univ-mlv.fr/%7Elecroq/string/node14.html.
      */
 
-    for(unsigned a=0; a<UCHAR_MAX+1; ++a)
+    for(unsigned a=0; a<=UCHAR_MAX; ++a)
         occ[a] = needle_length;
 
     if(unlikely(needle_length <= 1)) return;
