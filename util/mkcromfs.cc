@@ -413,6 +413,8 @@ namespace cromfs_creator
     {
         // Step 1: Scan the contents of this directory.
         //         Ignore entries which were not wanted (through MatchFile).
+        assert(result_dirinfo);
+        assert(collection);
 
     #ifdef USE_RECURSIVE_OMP_READDIR
         dircollection tmpcollection;
@@ -454,7 +456,7 @@ namespace cromfs_creator
         for(size_t p=collection_begin_pos; p<collection_end_pos; ++p)
         {
         #ifdef USE_RECURSIVE_OMP_READDIR
-          #pragma omp task firstprivate(p) shared(path)
+          #pragma omp task default(none) firstprivate(p,collection,result_dirinfo) shared(path)
           {
         #endif
             uint_fast64_t bytesize = 0;
