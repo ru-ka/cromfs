@@ -39,10 +39,10 @@ if(strlen($argv[2]))
 function calcversion($versionstring)
 {
   $k = '.'.str_replace('.', '..', $versionstring).'.';
-  $k = ereg_replace('([^0-9])([0-9][0-9a-z][0-9a-z][0-9a-z][^0-9a-z])', '\1-\2', $k);
-  $k = ereg_replace('([^0-9])([0-9][0-9a-z][0-9a-z][^0-9a-z])', '\1--\2', $k);
-  $k = ereg_replace('([^0-9])([0-9][0-9a-z][^0-9a-z])', '\1---\2', $k);
-  $k = ereg_replace('([^0-9])([0-9][^0-9a-z])', '\1----\2', $k);
+  $k = preg_replace('/([^0-9])([0-9][0-9a-z][0-9a-z][0-9a-z][^0-9a-z])/', '\1-\2', $k);
+  $k = preg_replace('/([^0-9])([0-9][0-9a-z][0-9a-z][^0-9a-z])/', '\1--\2', $k);
+  $k = preg_replace('/([^0-9])([0-9][0-9a-z][^0-9a-z])/', '\1---\2', $k);
+  $k = preg_replace('/([^0-9])([0-9][^0-9a-z])/', '\1----\2', $k);
   $k = str_replace('.', '', $k);
   $k = str_pad($k, 6*5, '-');
   # Reverse:
@@ -106,7 +106,7 @@ function Open($files, $keeplist=array())
   
   $pick = '';
   foreach($files as $fn)
-    if(ereg('\.tar\.gz$', $fn))
+    if(preg_match('@\.tar\.gz$@', $fn))
     {
       $pick = $fn;
       break;
@@ -123,7 +123,7 @@ function Open($files, $keeplist=array())
   @mkdir($subtmpdir, 0700);
   chdir($subtmpdir);
   
-  if(ereg('\.tar\.gz$', $pick))
+  if(preg_match('@\.tar\.gz$@', $pick))
   {
     print "\ttar xfz ../".shellfix($pick)."\n";
     exec('tar xfz ../../'.shellfix($pick));
@@ -305,11 +305,11 @@ function MakePatch($progname, $v1, $v2, $paks1, $paks2)
   // Available packages for prog1: print_r($paks1);
   // Available packages for prog2: print_r($paks2);
   
-  $v1 = ereg_replace('(-----)*$', '', $v1);
-  $v2 = ereg_replace('(-----)*$', '', $v2);
+  $v1 = preg_replace('/(-----)*$/', '', $v1);
+  $v2 = preg_replace('/(-----)*$/', '', $v2);
   
-  $v1string = ereg_replace('\.$', '', preg_replace('|(.....)|e', '(str_replace("-","","$1"))."."', $v1));
-  $v2string = ereg_replace('\.$', '', preg_replace('|(.....)|e', '(str_replace("-","","$1"))."."', $v2));
+  $v1string = preg_replace('/\.$/', '', preg_replace('|(.....)|e', '(str_replace("-","","$1"))."."', $v1));
+  $v2string = preg_replace('/\.$/', '', preg_replace('|(.....)|e', '(str_replace("-","","$1"))."."', $v2));
   
   $files1 = Array();
   foreach($paks1 as $ext)
@@ -365,8 +365,8 @@ $fp = opendir('.');
 $f = array();
 while(($fn = readdir($fp)))
 {
-  if(ereg('\.sh\.(gz|bz2)$', $fn))continue;
-  if(ereg('^patch-.*-[0-9].*-[0-9].*\...*', $fn))
+  if(preg_match('@\.sh\.(gz|bz2)$@', $fn))continue;
+  if(preg_match('@^patch-.*-[0-9].*-[0-9].*\...*@', $fn))
   {
     preg_match(
       '/^patch-(.*(?:-opt)?)-([0-9][0-9.a-z-]*)-([0-9][0-9.a-z-]*)\.([a-z0-9]+)$/', $fn, $tab);
