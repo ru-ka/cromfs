@@ -19,7 +19,7 @@ CPPFLAGS += -I.. -I../lib -I../lib/lzo
 CPPFLAGS += -D_7ZIP_ST
 
 tags: FORCE
-	make -C .. tags
+	+make -C .. tags
 
 include depfun.mak
 

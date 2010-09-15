@@ -46,7 +46,7 @@ public:
                       fd, pos_aligned_down);
     }
 
-    bool ReMapIfNecessary(int fd, uint_fast64_t pos, uint_fast64_t length)
+    bool ReMapIfNecessary(int /*fd*/, uint_fast64_t pos, uint_fast64_t length)
     {
         uint_fast64_t pos_aligned_down = pos & ~(MMAP_PAGESIZE-UINT64_C(1));
         size_t new_align_factor = pos - pos_aligned_down;

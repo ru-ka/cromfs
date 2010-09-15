@@ -165,6 +165,9 @@ CXXFLAGS += -O3 -fno-rtti
 CPPFLAGS += `pkg-config --cflags fuse`
 LDLIBS   += `pkg-config --libs fuse`
 
+# singlethreaded version of lzma
+CPPFLAGS += -D_7ZIP_ST
+
 OBJS=\
 	cromfs.o fuse-ops.o fuse-main.o \
 	lib/cromfs-inodefun.o \
@@ -179,13 +182,16 @@ DEPFUN_INSTALL=ignore
 PROGS = cromfs-driver cromfs-driver-static-$(FUSE_STATIC) util/mkcromfs util/unmkcromfs util/cvcromfs
 DOCS  = doc/FORMAT README.html doc/ChangeLog doc/*.txt
 
+all: $(PROGS)
+	@echo
+	@echo Finished compiling. These were created:
+	@- ls -al cromfs-driver cromfs-driver-static util/mkcromfs util/unmkcromfs util/cvcromfs
+
 all-strip: all FORCE
 	- strip cromfs-driver util/mkcromfs util/unmkcromfs util/cvcromfs
 	@echo
 	@echo Finished compiling. These were created:
 	@- ls -al cromfs-driver cromfs-driver-static util/mkcromfs util/unmkcromfs util/cvcromfs
-
-all: $(PROGS)
 
 cromfs-driver: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
@@ -200,18 +206,18 @@ cromfs-driver-static: $(OBJS)
 	- upx --best $@
 
 util/mkcromfs: FORCE
-	make -C util mkcromfs
+	+make -C util mkcromfs
 
 util/unmkcromfs: FORCE
-	make -C util unmkcromfs
+	+make -C util unmkcromfs
 
 util/cvcromfs: FORCE
-	make -C util cvcromfs
+	+make -C util cvcromfs
 
 clean: FORCE
 	rm -rf $(OBJS) $(PROGS) install *.pchi
 	rm -f cromfs-driver-static.??? configure.log
-	make -C util clean
+	+make -C util clean
 
 distclean: clean
 	rm -f {,lib,util}/.{lib,}depend

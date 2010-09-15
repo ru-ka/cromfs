@@ -84,11 +84,11 @@ lzmatest: lzmatest.o $(OBJS_LZMA)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 tags: FORCE
-	make -C .. tags
+	+make -C .. tags
 .libdepend: ../lib/.depend
 	perl -pe 's@([-+a-zA-Z0-9._/]+)@../lib/$$1@g' < "$<" > "$@"
 ../lib/.depend: FORCE
-	make -C ../lib depend
+	+make -C ../lib depend
 include depfun.mak
 include .libdepend
 

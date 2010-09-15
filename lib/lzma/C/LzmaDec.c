@@ -128,7 +128,7 @@ Out:
     = kMatchSpecLenStart + 2 : State Init Marker
 */
 
-static int MY_FAST_CALL LzmaDec_DecodeReal(CLzmaDec *p, SizeT limit, const Byte *bufLimit)
+static int MY_FAST_CALL LzmaDec_DecodeReal(CLzmaDec *p, SizeT limit_parm, const Byte *bufLimit)
 {
   CLzmaProb *probs = p->probs;
 
@@ -375,10 +375,10 @@ static int MY_FAST_CALL LzmaDec_DecodeReal(CLzmaDec *p, SizeT limit, const Byte 
 
       len += kMatchMinLen;
 
-      if (limit == dicPos)
+      if (limit_parm == dicPos)
         return SZ_ERROR_DATA;
       {
-        SizeT rem = limit - dicPos;
+        SizeT rem = limit_parm - dicPos;
         unsigned curLen = ((rem < len) ? (unsigned)rem : len);
         SizeT pos = (dicPos - rep0) + ((dicPos < rep0) ? dicBufSize : 0);
 
@@ -408,7 +408,7 @@ static int MY_FAST_CALL LzmaDec_DecodeReal(CLzmaDec *p, SizeT limit, const Byte 
       }
     }
   }
-  while (dicPos < limit && buf < bufLimit);
+  while (dicPos < limit_parm && buf < bufLimit);
   NORMALIZE;
   p->buf = buf;
   p->range = range;

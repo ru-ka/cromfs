@@ -738,8 +738,10 @@ namespace cromfs_creator
             }
 
             assertbegin();
+            #ifndef NDEBUG
             assert4var(num_blocks, inode.blocklist.size(), ent.bytesize, inode.bytesize);
             assert(num_blocks   == inode.blocklist.size());
+            #endif
             assert(ent.bytesize == inode.bytesize);
             assertflush();
 

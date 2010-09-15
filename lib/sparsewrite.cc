@@ -365,7 +365,7 @@ bool SparseWrite(int fd,
              /*fprintf(stderr, "But writing %04llX..%04llX from %p\n", \
                  BufferedPos, BufferedPos+BufferedSize-1, BufferedBegin); */ \
             ssize_t res = pwrite64(fd, BufferedBegin, BufferedSize, BufferedPos); \
-            if(res != BufferedSize) return false; \
+            if((size_t)res != BufferedSize) return false; \
         } \
         BufferedSize = 0; BufferedBegin = Buffer; BufferedPos = WritePos; \
     } while(0)

@@ -1710,8 +1710,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             unsigned char* target = s.GetBlockTarget();
             uint_fast64_t nbytes  = source->size();
             uint_fast64_t blocksize = s.GetBlockSize();
-            unsigned char* target_end =
-                target + BLOCKNUM_SIZE_BYTES() * ((nbytes + blocksize-1) / blocksize);
+            //unsigned char* target_end =
+            //    target + BLOCKNUM_SIZE_BYTES() * ((nbytes + blocksize-1) / blocksize);
 
             if(DisplayBlockSelections)
             {
@@ -1727,12 +1727,14 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             //printf("rangebegin %p\nrange  end %p...\n", target, target_end);
             for(uint_fast64_t offset=0; offset<nbytes; offset += blocksize)
             {
+            #ifndef NDEBUG
                 assertbegin();
                 //const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
                 //const void* tgt_end  = (const void*)target_end;
                 assert2var(tgt_next, tgt_end);
                 assert(tgt_next <= tgt_end);
                 assertflush();
+            #endif
 
                 if(DisplayBlockSelections
                 || total_done - last_report_pos >= 1048576*4) // at 4 MB intervals
