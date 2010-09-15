@@ -361,6 +361,7 @@ template si::~CompressedHashLayer();
 template void si::extract(newhash_t,uint_least32_t&) const;
 template void si::set(newhash_t,const uint_least32_t&);
 template void si::unset(newhash_t);
+template void si::Resize(uint_fast64_t);
 template bool si::has(newhash_t)const;
 template uint_fast64_t si::GetLength()const;
 template void si::Merge(const si&, uint_fast32_t);
