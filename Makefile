@@ -201,9 +201,10 @@ cromfs-driver-static-0: ;
 
 cromfs-driver-static: $(OBJS)
 	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
+	- strip $@
 	- strip -R.comment $@
 	# Note: It does not matter if upx cannot run.
-	- upx --best $@
+	- upx-ucl --best --ultra-brute $@ || upx-nrv --best --ultra-brute $@ || upx --best --ultra-brute $@
 
 util/mkcromfs: FORCE
 	+make -C util mkcromfs
