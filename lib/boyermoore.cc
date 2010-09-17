@@ -194,15 +194,19 @@ size_t SearchIn(const unsigned char* haystack, const size_t haystack_length,
 
     const size_t needle_length_minus_1 = needle_length-1;
     const size_t search_room = haystack_length-needle_length;
+    const char last_needle_char = needle[needle_length_minus_1];
 
     size_t hpos=0;
     while(hpos <= search_room)
     {
         //fprintf(stderr, "haystack_length=%u needle_length=%u\n", hpos, needle_length);
-
-        const size_t match_len = backwards_match_len(
-            needle, haystack+hpos, needle_length);
-        if(match_len == needle_length) return hpos;
+        size_t match_len = 0;
+        if(last_needle_char == haystack[hpos+needle_length_minus_1])
+        {
+            match_len = backwards_match_len(
+                needle, haystack+hpos, needle_length);
+            if(match_len == needle_length) return hpos;
+        }
 
         const size_t mpos = needle_length_minus_1 - match_len;
 
@@ -239,6 +243,7 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
 
     size_t hpos = 0;
     size_t ignore_num = 0, shift = needle_length;
+    const char last_needle_char = needle[needle_length_minus_1];
 
     /* For cache locality we reuse the "generic" backwards_match_len_max_min()
      * function here multiple times, even though we could use the simpler
@@ -251,32 +256,39 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
         size_t match_len;
         if(ignore_num == 0)
         {
-            match_len = backwards_match_len_max_min(
-                needle, haystack+hpos, needle_length,
-                needle_length, /* maximum */
-                0 /* minimum */);
-            if(match_len == needle_length) return hpos;
+            match_len = 0;
+            if(last_needle_char == haystack[hpos+needle_length_minus_1])
+            {
+                match_len = backwards_match_len_max_min(
+                    needle, haystack+hpos, needle_length,
+                    needle_length, /* maximum */
+                    0 /* minimum */);
+                if(match_len == needle_length) return hpos;
+            }
         }
         else
         {
-            match_len =
-                backwards_match_len_max_min(
-                    needle, haystack+hpos, needle_length,
-                    shift, /* maximum */
-                    0 /* minimum */
-                   );
-
-            if(match_len == shift) // it matched fully
+            match_len = 0;
+            if(last_needle_char == haystack[hpos+needle_length_minus_1])
             {
-                //if(shift + ignore_num >= needle_length) return hpos;
                 match_len =
                     backwards_match_len_max_min(
                         needle, haystack+hpos, needle_length,
-                        needle_length, /* maximum */
-                        shift + ignore_num /* minimum */
-                    );
+                        shift, /* maximum */
+                        0 /* minimum */
+                       );
+                if(match_len == shift) // it matched fully
+                {
+                    //if(shift + ignore_num >= needle_length) return hpos;
+                    match_len =
+                        backwards_match_len_max_min(
+                            needle, haystack+hpos, needle_length,
+                            needle_length, /* maximum */
+                            shift + ignore_num /* minimum */
+                        );
+                }
+                if(match_len >= needle_length) return hpos;
             }
-            if(match_len >= needle_length) return hpos;
         }
 
         const size_t mpos = needle_length_minus_1 - match_len;
