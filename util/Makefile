@@ -1,4 +1,4 @@
-VERSION=1.5.9
+VERSION=1.5.9.1
 
 include Makefile.sets
 
@@ -26,9 +26,8 @@ LDOPTS += $(OPTIM)
 
 CPPFLAGS += -I../lib -I.. -I../lib/lzo
 
-# multithread versions of lzma -- Windows only
-#CPPFLAGS += -DCOMPRESS_MF_MT
-#CPPFLAGS += -DCOMPRESS_MT
+# singlethreaded version of lzma
+CPPFLAGS += -D_7ZIP_ST
 
 OBJS_LZMADEC += ../lib/lzma/C/LzmaDec.o
 OBJS_LZMA += $(OBJS_LZMADEC)
@@ -85,11 +84,11 @@ lzmatest: lzmatest.o $(OBJS_LZMA)
 	$(CXX) $(CXXFLAGS) $(LDOPTS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 tags: FORCE
-	make -C .. tags
+	+make -C .. tags
 .libdepend: ../lib/.depend
 	perl -pe 's@([-+a-zA-Z0-9._/]+)@../lib/$$1@g' < "$<" > "$@"
 ../lib/.depend: FORCE
-	make -C ../lib depend
+	+make -C ../lib depend
 include depfun.mak
 include .libdepend
 

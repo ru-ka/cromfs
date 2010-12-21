@@ -408,11 +408,13 @@ namespace cromfs_creator
        (const std::string& path,
         // Collection and result_dirinfo are made pointers instead
         // of references so that they can be used in omp task.
-        dircollection* const collection,
-        cromfs_dirinfo* const result_dirinfo)
+        dircollection* collection,
+        cromfs_dirinfo* result_dirinfo)
     {
         // Step 1: Scan the contents of this directory.
         //         Ignore entries which were not wanted (through MatchFile).
+        assert(result_dirinfo);
+        assert(collection);
 
     #ifdef USE_RECURSIVE_OMP_READDIR
         dircollection tmpcollection;
@@ -454,7 +456,7 @@ namespace cromfs_creator
         for(size_t p=collection_begin_pos; p<collection_end_pos; ++p)
         {
         #ifdef USE_RECURSIVE_OMP_READDIR
-          #pragma omp task firstprivate(p) shared(path)
+          #pragma omp task default(none) firstprivate(p,collection,result_dirinfo) shared(path)
           {
         #endif
             uint_fast64_t bytesize = 0;
@@ -738,8 +740,10 @@ namespace cromfs_creator
             }
 
             assertbegin();
+            #ifndef NDEBUG
             assert4var(num_blocks, inode.blocklist.size(), ent.bytesize, inode.bytesize);
             assert(num_blocks   == inode.blocklist.size());
+            #endif
             assert(ent.bytesize == inode.bytesize);
             assertflush();
 

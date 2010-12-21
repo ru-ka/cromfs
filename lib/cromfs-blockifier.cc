@@ -1180,7 +1180,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
         DataReadBuffer buf;
         #pragma omp parallel for schedule(guided) private(buf) shared(n_unique,n_collisions)
-        for(size_t a=0; a < schedule.size(); ++a)
+        //for(size_t a=0; a < schedule.size(); ++a)
+        for(long a=0; a < (long)schedule.size(); ++a) // use "long" so ICC 10.0 won't complain
         {
             schedule_item& s = schedule[a];
             datasource_t* source  = s.GetDataSource();
@@ -1709,9 +1710,10 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             unsigned char* target = s.GetBlockTarget();
             uint_fast64_t nbytes  = source->size();
             uint_fast64_t blocksize = s.GetBlockSize();
+        #ifndef NDEBUG
             unsigned char* target_end =
                 target + BLOCKNUM_SIZE_BYTES() * ((nbytes + blocksize-1) / blocksize);
-
+        #endif
             if(DisplayBlockSelections)
             {
                 std::printf("%s <size %llu, block size %llu>\n",
@@ -1726,12 +1728,14 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
             //printf("rangebegin %p\nrange  end %p...\n", target, target_end);
             for(uint_fast64_t offset=0; offset<nbytes; offset += blocksize)
             {
+            #ifndef NDEBUG
                 assertbegin();
-                //const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
-                //const void* tgt_end  = (const void*)target_end;
+                const void* tgt_next = (const void*)(target + BLOCKNUM_SIZE_BYTES());
+                const void* tgt_end  = (const void*)target_end;
                 assert2var(tgt_next, tgt_end);
                 assert(tgt_next <= tgt_end);
                 assertflush();
+            #endif
 
                 if(DisplayBlockSelections
                 || total_done - last_report_pos >= 1048576*4) // at 4 MB intervals

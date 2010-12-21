@@ -1,4 +1,4 @@
-VERSION=1.5.9
+VERSION=1.5.9.1
 
 include Makefile.sets
 
@@ -15,12 +15,11 @@ CPPFLAGS += -I.. -I../lib -I../lib/lzo
 #OPTIM += -O1 -pg -g
 #LDOPTS += -pg
 
-# multithread versions of lzma -- Windows only
-#CPPFLAGS += -DCOMPRESS_MF_MT
-#CPPFLAGS += -DCOMPRESS_MT
+# singlethreaded version of lzma
+CPPFLAGS += -D_7ZIP_ST
 
 tags: FORCE
-	make -C .. tags
+	+make -C .. tags
 
 include depfun.mak
 

@@ -112,17 +112,19 @@ struct cromfs_superblock_internal
         blktab_offs  = inotab_offs  + inotab_room;
         fblktab_offs = blktab_offs  + blktab_room;
     }
+    void SetOffsets(bool extended_header)
+    {
+        SetOffsets(extended_header ? 0x50u : 0x38u);
+    }
     void SetOffsets()
     {
         SetOffsets(
-          (rootdir_size != rootdir_room
-        || inotab_size != inotab_room
-        || blktab_size != blktab_room)
-              ? 0x50 : 0x38
-                   );
+            rootdir_size != rootdir_room
+         || inotab_size != inotab_room
+         || blktab_size != blktab_room);
     }
 
-    void ReadFromBuffer(BufferType Superblock)
+    void ReadFromBuffer(const BufferType& Superblock)
     {
         sig                     = R64(Superblock+0x0000);
         blktab_offs             = R64(Superblock+0x0008);
@@ -146,7 +148,7 @@ struct cromfs_superblock_internal
             blktab_size  = R64(Superblock+0x0048);
         }
     }
-    void WriteToBuffer(BufferType Superblock)
+    void WriteToBuffer(BufferType& Superblock)
     {
         W64(Superblock+0x00, sig);
         W64(Superblock+0x08, blktab_offs);

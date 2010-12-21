@@ -24,13 +24,13 @@ LDFLAGS=-g
 
 #####
 # These options were set by ./configure
-# at Thu Dec 17 10:35:47 EET 2009
-# for Linux chii 2.6.30 #1 SMP Wed Jun 10 11:47:47 EEST 2009 x86_64 GNU/Linux
+# at Wed Sep 15 11:58:06 EEST 2010
+# for Linux chii 2.6.34 #1 SMP Wed May 19 20:01:52 EEST 2010 x86_64 GNU/Linux
 # To change, run ./configure again.
 #
-CC=gcc-4.4
-CPP=cpp-4.4
-CXX=g++-4.4
+CC=gcc-4.5
+CPP=cpp-4.5
+CXX=g++-4.5
 OPTIM +=  -minline-stringops-dynamically -ffast-math -mrecip -fvpt -ffunction-cse -ffunction-sections -fdata-sections -mmmx -msse -msse2 -mssse3 -msahf
 CPPFLAGS +=  -fopenmp -DUSE_PTHREADS=0 -DHAS_LZO2=1 -DHAS_ASM_LZO2=0 -DHAS_VSNPRINTF -DHAS_LUTIMES -DHAS_STDINT_H -DHAS_INTTYPES_H -DHAS_READDIR_R -DHAS_UINT16_T -DHAS_LONG_LONG -DHAS_SYS_TYPES_H
 LDFLAGS +=  -fopenmp -Xlinker --gc-sections

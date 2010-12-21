@@ -127,12 +127,11 @@ public:
     /* A variant of read_file_data that restricts the read
      * to a single fblock. */
     int_fast64_t read_file_data_from_one_fblock_only
-               (const cromfs_inode_internal& inode,
-                uint_fast64_t offset,
-                unsigned char* target, uint_fast64_t size,
-                const cromfs_fblocknum_t allowed_fblocknum)
+        (const cromfs_inode_internal& inode,
+         uint_fast64_t offset,
+         unsigned char* target, uint_fast64_t size,
+         const cromfs_fblocknum_t allowed_fblocknum)
         throw (cromfs_exception, std::bad_alloc);
-
 
 protected:
     void reread_superblock()

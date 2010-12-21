@@ -22,6 +22,7 @@
 #ifdef HAS_LUTIMES
  #include <sys/time.h>
 #endif
+#include <sys/stat.h>
 
 #include <getopt.h>
 

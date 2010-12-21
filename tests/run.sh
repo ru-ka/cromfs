@@ -67,7 +67,7 @@ if [ "$CXX" = "" ]; then CXX=g++; fi
 if true; then
 	$CXX -o test-boyermoore -O3 test-boyermoore.cc -ftree-vectorize
 	echo "Testing Boyer-Moore search algorithm..."
-	./test-boyermoore
+	time ./test-boyermoore
 	rm -f test-boyermoore
 fi
 
