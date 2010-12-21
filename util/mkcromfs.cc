@@ -408,8 +408,8 @@ namespace cromfs_creator
        (const std::string& path,
         // Collection and result_dirinfo are made pointers instead
         // of references so that they can be used in omp task.
-        dircollection* const collection,
-        cromfs_dirinfo* const result_dirinfo)
+        dircollection* collection,
+        cromfs_dirinfo* result_dirinfo)
     {
         // Step 1: Scan the contents of this directory.
         //         Ignore entries which were not wanted (through MatchFile).

@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.5.6.2.
+  This is the documentation of cromfs-1.5.9.1.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlist">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -600,6 +600,11 @@ To improve the filesystem generation speed, try these tips:
      same guidelines apply as with the -j in GNU make. Currently
      this option does not affect compression power, so it is
      recommended to use it.</li>
+   <li>Use "--lzmabits 2,0,3" (or other values of your choice) to
+     make LZMA compression about 27 times faster, with a slight
+     cost of compression power. The default option is "auto",
+     which tests a number of different lzmabits values to end
+     up with hopefully optimal compression.</li>
 </ul>
 
 </div><H4 id="h3" class="level4"><a name="h3"></a>8.0.3. To control the memory usage</H4><div class="level4" id="divh3">
@@ -621,6 +626,13 @@ To control the memory usage, use these tips:
  <li>In mkcromfs, adjust the block size (--bsize). The RAM usage of mkcromfs
      is directly proportional to the number of blocks (and the filesystem size),
      so smaller blocks require more memory and larger require less.
+ <li>Adjust the --blockindexmethod option. Different values of this option
+     have different effect on the virtual memory use of mkcromfs (it does
+     not affect cromfs-driver, though).
+     Use "--blockindexmethod none" and "-A0" if you want the smallest possible
+     memory usage for your selected block size. It has an impact on the compression
+     power, but you can compensate it by using a large value for the --bruteforcelimit
+     option instead, if you don't mind longer runtime.
 </ul>
 
 </div><H4 id="h4" class="level4"><a name="h4"></a>8.0.4. To control the filesystem speed</H4><div class="level4" id="divh4">
@@ -655,7 +667,10 @@ is located at "/home/myself/books.cromfs"):
 
 </div><H2 id="vocabulary" class="level2"><a name="vocabulary"></a>9. Understanding the concepts</H2><div class="level2" id="divvocabulary">
 
-Skip over this section if you don't think yourself as technically inclined.
+Skip over this section if you don't think yourself as technically inclined.<br/>
+<br/>
+cromfs workings are explained in a nutshell
+<a href="http://bisqwit.iki.fi/src/cromfs-understandingblocksandfblocks.txt">here</a>.
 
 </div><H4 id="concept_inode" class="level4"><a name="concept_inode"></a>9.0.1. Inode</H4><div class="level4" id="divconcept_inode">
 
@@ -807,7 +822,8 @@ Theoretical requirements to use cromfs in the root filesystem:
    since version 1.2.2).</li>
  <li>An initrd, that contains the cromfs-driver program</li>
  <li>Fuse driver in the kernel (it may be loaded from the initrd).</li>
- <li>Use of pivot_root to change the root into the mounted image</li>
+ <li>Constructing an <code>unionfs</code> mount from a ramdisk
+     and the cromfs mountpoint to form a writable root</li>
  </li>
 </ul>
 
@@ -884,13 +900,15 @@ and is distributed under the terms of the
 <a href="http://www.gnu.org/licenses/gpl-3.0.html">General Public License</a>
 version 3 (GPL3).
  <br/>
-The LZMA code from LZMA SDK embedded within is licensed under LGPL.<br>
-The BWT code from libGRzip embedded within is licensed under GPL 2 or higher.
+The LZMA code from the LZMA SDK is in public domain.
+ <br/>
+The LZO code from liblzo2.03 embedded within is licensed
+under GPL version 2 or later.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml32><b id=eml18 class=nonmail>ebe0hel60s</b><span id=eml19 class=ismail>Joel</span><span id=eml20 class=nonmail><b>m@q@fxxe</b></span><span id=eml21 class=ismail> Yli</span><b id=eml22 class=nonmail>e</b><span id=eml23 class=ismail>luom</span><span id=eml24 class=nonmail><b>6nel@</b></span><span id=eml25 class=ismail>a &lt;bi</span><b id=eml26 class=nonmail>hgdmsxhcra</b><span id=eml27 class=ismail>sqwi</span><span id=eml28 class=nonmail><b>ew4cm@vs9</b></span><span id=eml29 class=ismail>t@ik</span><b id=eml30 class=nonmail>qc@jw1mq</b><span id=eml31 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=18;i<32;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml37><b id=eml23 class=nonmail>7xcek</b><span id=eml24 class=ismail>Joel</span><span id=eml25 class=nonmail><b>@4jzoep2</b></span><span id=eml26 class=ismail> Yli</span><b id=eml27 class=nonmail>sIyp@yod</b><span id=eml28 class=ismail>luom</span><span id=eml29 class=nonmail><b>l31</b></span><span id=eml30 class=ismail>a &lt;bi</span><b id=eml31 class=nonmail>7e9fVNd@@</b><span id=eml32 class=ismail>sqwi</span><span id=eml33 class=nonmail><b>7tuj2t</b></span><span id=eml34 class=ismail>t@ik</span><b id=eml35 class=nonmail>08vh</b><span id=eml36 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=23;i<37;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -979,6 +997,8 @@ to this package.
   module and the userspace programs before mounting Cromfs volumes.
   You need Fuse version 2.5.2 or newer.
  </li>
+ <li>liblzo2-dev is recommended on i386 platforms.
+  If it is missing, mkcromfs will use a version shipped in the package.</li>
 </ul>
 
 </div><H2 id="links" class="level2"><a name="links"></a>14. Links</H2><div class="level2" id="divlinks">
@@ -993,9 +1013,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 <p>Additionally, the most recent source code (bleeding edge) for cromfs can also be downloaded by cloning the Git repository by:<ul style="margin-left:3em;margin-top:0px"><li><code> git clone <a href="git://bisqwit.iki.fi/cromfs.git">git://bisqwit.iki.fi/cromfs.git</a></code></li><li><code> git checkout origin/release -b release</code></li><li><code> git checkout origin/master  -b master</code></li></ul></p></div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Tue, 16 Dec 2008 16:25:24 +0200)<br>
-  with <tt>docmaker.php</tt> (last updated: Tue, 16 Dec 2008 16:25:24 +0200)<br>
-  at Tue, 16 Dec 2008 22:19:16 +0200</small>
+       <tt>progdesc.php</tt> (last updated: Thu, 17 Dec 2009 10:54:25 +0200)<br>
+  with <tt>docmaker.php</tt> (last updated: Thu, 17 Dec 2009 10:44:32 +0200)<br>
+  at Tue, 21 Dec 2010 16:17:34 +0200</small>
  </p>
 </body>
 </html>
