@@ -23,7 +23,6 @@ CPPDEBUG=-pipe -DNDEBUG
 
 LDOPTS += $(OPTIM)
 
-
 CPPFLAGS += -I../lib -I.. -I../lib/lzo
 
 # singlethreaded version of lzma

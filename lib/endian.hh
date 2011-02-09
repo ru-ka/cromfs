@@ -13,6 +13,12 @@
 #undef LITTLE_ENDIAN_AND_UNALIGNED_ACCESS_OK
 #endif
 
+#ifdef WIN32
+# define LL_FMT "I64"
+#else
+# define LL_FMT "ll"
+#endif
+
 
 static inline uint_fast16_t R8(const void* p)
 {

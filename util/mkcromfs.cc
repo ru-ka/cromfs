@@ -664,7 +664,7 @@ namespace cromfs_creator
             if(DisplayFiles)
             {
                 std::printf(
-                    "%s ... inode %ld. Size %llu"
+                    "%s ... inode %ld. Size %"LL_FMT"u"
                 #ifndef NDEBUG
                     ", Spans from %p..%p"
                 #endif
@@ -997,10 +997,10 @@ namespace cromfs_creator
         {
         SparseWrite(out_fd, Superblock, sblock.GetSize(), 0); }
         #pragma omp section
-        { //fprintf(stderr, "root goes at %llX\n", sblock.rootdir_offs);
+        { //fprintf(stderr, "root goes at %"LL_FMT"X\n", sblock.rootdir_offs);
         SparseWrite(out_fd, &compressed_root_inode[0],   compressed_root_inode.size(), sblock.rootdir_offs); }
         #pragma omp section
-        { //fprintf(stderr, "inotab goes at %llX\n", sblock.inotab_offs);
+        { //fprintf(stderr, "inotab goes at %"LL_FMT"X\n", sblock.inotab_offs);
         SparseWrite(out_fd, &compressed_inotab_inode[0], compressed_inotab_inode.size(), sblock.inotab_offs); }
         #pragma omp section
         { SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs); }

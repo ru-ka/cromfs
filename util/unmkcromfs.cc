@@ -321,14 +321,14 @@ public:
         if(verbose >= 3)
         {
             std::printf(
-                "Superblock signature %llX\n"
-                "BlockTab at 0x%llX\n"
-                "FBlkTab at 0x%llX\n"
-                "inotab at 0x%llX (size 0x%llX)\n"
-                "rootdir at 0x%llX (size 0x%llX)\n"
+                "Superblock signature %"LL_FMT"X\n"
+                "BlockTab at 0x%"LL_FMT"X\n"
+                "FBlkTab at 0x%"LL_FMT"X\n"
+                "inotab at 0x%"LL_FMT"X (size 0x%"LL_FMT"X)\n"
+                "rootdir at 0x%"LL_FMT"X (size 0x%"LL_FMT"X)\n"
                 "FSIZE %u  BSIZE %u\n"
                 "%u fblocks, %u blocks\n"
-                "%llu bytes of files\n",
+                "%"LL_FMT"u bytes of files\n",
                 (unsigned long long)sblock.sig,
                 (unsigned long long)sblock.blktab_offs,
                 (unsigned long long)sblock.fblktab_offs,
@@ -357,7 +357,7 @@ public:
         std::printf("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         std::printf("<simgraph>\n");
         std::printf(" <volume>\n");
-        std::printf("  <total_size>%llu</total_size>\n", (unsigned long long)sblock.bytes_of_files);
+        std::printf("  <total_size>%"LL_FMT"u</total_size>\n", (unsigned long long)sblock.bytes_of_files);
         ScanDirectories();
 
         std::printf("  <num_inodes>%lu</num_inodes>\n", (unsigned long)inode_files.size());
@@ -379,7 +379,7 @@ public:
                 if(!first)  std::printf("</inode>\n");
                 first=false;
                 prev = i->first;
-                std::printf("  <inode id=\"%llu\">", (unsigned long long)prev);
+                std::printf("  <inode id=\"%"LL_FMT"u\">", (unsigned long long)prev);
                 inodelist.push_back(prev);
             }
             std::printf("<file>%s</file>",
@@ -470,15 +470,15 @@ public:
                     intersecting_size += i->upper - i->lower;
                 }
 
-                std::printf("  <match inode1=\"%llu\" inode2=\"%llu\">",
+                std::printf("  <match inode1=\"%"LL_FMT"u\" inode2=\"%"LL_FMT"u\">",
                     (unsigned long long)ino_a,
                     (unsigned long long)ino_b);
 
                 /*
-                std::printf("<!-- asize %llu, bsize %llu -->\n",
+                std::printf("<!-- asize %"LL_FMT"u, bsize %"LL_FMT"u -->\n",
                     size_a, size_b);*/
 
-                std::printf("<bytes>%llu</bytes><ratio>%.10f",
+                std::printf("<bytes>%"LL_FMT"u</bytes><ratio>%.10f",
                     (unsigned long long)intersecting_size,
                     intersecting_size / (double)std::min(size_a, size_b)
                            );
@@ -879,7 +879,7 @@ public:
                 {
                     if(ino.blocklist[a] >= blktab.size())
                     {
-                        ThreadSafeConsole.erroroneliner("inode %u (used by %s) is corrupt (block #%u indicates block %llu, but block table has only %llu)\n",
+                        ThreadSafeConsole.erroroneliner("inode %u (used by %s) is corrupt (block #%u indicates block %"LL_FMT"u, but block table has only %"LL_FMT"u)\n",
                             (unsigned)inonum, filename.c_str(),
                             a,
                             (unsigned long long)ino.blocklist[a],
@@ -907,7 +907,7 @@ public:
 
                     if(block_startoffs + read_size > fblock.size())
                     {
-                        ThreadSafeConsole.erroroneliner("block %u (block #%u/%u of inode %u, %llu/%llu bytes) is corrupt (points to bytes %llu-%llu, fblock %u size is %llu)\n",
+                        ThreadSafeConsole.erroroneliner("block %u (block #%u/%u of inode %u, %"LL_FMT"u/%"LL_FMT"u bytes) is corrupt (points to bytes %"LL_FMT"u-%"LL_FMT"u, fblock %u size is %"LL_FMT"u)\n",
                             (unsigned)ino.blocklist[a],
                             a, (unsigned)ino.blocklist.size(),
                             (unsigned)inonum,
@@ -1035,7 +1035,7 @@ private:
         if(verbose >= 1)
         {
             if(verbose >= 2) std::printf("%6u ", (unsigned)inonum);
-            std::printf("%s%3u %u/%-3u %11llu %s %s%s%s\n",
+            std::printf("%s%3u %u/%-3u %11"LL_FMT"u %s %s%s%s\n",
                 TranslateMode(ino.mode).c_str(),
                 (unsigned)fblist.size(),
                 (unsigned)ino.uid,
@@ -1106,7 +1106,7 @@ private:
                     fblist.insert(blktab[ino.blocklist[a]].fblocknum);
                 else
                 {
-                    fprintf(stderr, "Inode %llu (%s) is corrupt. It refers to block %u which does not exist (%u blocks exist).\n",
+                    fprintf(stderr, "Inode %"LL_FMT"u (%s) is corrupt. It refers to block %u which does not exist (%u blocks exist).\n",
                         (unsigned long long)inonum, entname.c_str(),
                         (unsigned) ino.blocklist[a],
                         (unsigned) blktab.size());
@@ -1187,7 +1187,7 @@ private:
             }
             else if(ino.bytesize > 0)
             {
-                std::fprintf(stderr, "inode %llu (%s) is corrupt. It has mode %0o (%s) but non-zero size %llu\n",
+                std::fprintf(stderr, "inode %"LL_FMT"u (%s) is corrupt. It has mode %0o (%s) but non-zero size %"LL_FMT"u\n",
                     (unsigned long long)inonum,
                     entname.c_str(),
                     (unsigned)ino.mode,

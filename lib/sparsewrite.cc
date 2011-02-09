@@ -352,7 +352,7 @@ bool SparseWrite(int fd,
     size_t BufSize,
     uint_fast64_t WritePos)
 {
-    /*fprintf(stderr, "Normally, would write %04llX..%04llX from %p\n",
+    /*fprintf(stderr, "Normally, would write %04"LL_FMT"X..%04"LL_FMT"X from %p\n",
         WritePos, WritePos+BufSize-1, Buffer);*/
 #if 0
     return pwrite64(fd, Buffer, BufSize, WritePos) == (ssize_t)BufSize;
@@ -362,7 +362,7 @@ bool SparseWrite(int fd,
     #define FlushBuf() do { \
         if(BufferedSize) \
         { \
-             /*fprintf(stderr, "But writing %04llX..%04llX from %p\n", \
+             /*fprintf(stderr, "But writing %04"LL_FMT"X..%04"LL_FMT"X from %p\n", \
                  BufferedPos, BufferedPos+BufferedSize-1, BufferedBegin); */ \
             ssize_t res = pwrite64(fd, BufferedBegin, BufferedSize, BufferedPos); \
             if((size_t)res != BufferedSize) return false; \

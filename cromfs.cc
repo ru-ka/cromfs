@@ -200,14 +200,14 @@ void cromfs::reread_superblock()
 
 #if SBLOCK_DEBUG
     fprintf(stderr,
-        "Superblock signature %llX\n"
-        "BlockTab at 0x%llX\n"
-        "FBlkTab at 0x%llX\n"
-        "inotab at 0x%llX (size 0x%llX)\n"
-        "rootdir at 0x%llX (size 0x%llX)\n"
+        "Superblock signature %"LL_FMT"X\n"
+        "BlockTab at 0x%"LL_FMT"X\n"
+        "FBlkTab at 0x%"LL_FMT"X\n"
+        "inotab at 0x%"LL_FMT"X (size 0x%"LL_FMT"X)\n"
+        "rootdir at 0x%"LL_FMT"X (size 0x%"LL_FMT"X)\n"
         "FSIZE %u  BSIZE %u\n"
         "%u fblocks, %u blocks\n"
-        "%llu bytes of files\n",
+        "%"LL_FMT"u bytes of files\n",
         (unsigned long long)sblock.sig,
         (unsigned long long)sblock.blktab_offs,
         (unsigned long long)sblock.fblktab_offs,
@@ -324,7 +324,7 @@ void cromfs::reread_fblktab()
         }
 
 #if FBLOCK_DEBUG
-        fprintf(stderr, "FBLOCK %u: size(%u)at(%llu (0x%llX))\n",
+        fprintf(stderr, "FBLOCK %u: size(%u)at(%"LL_FMT"u (0x%"LL_FMT"X))\n",
             (unsigned)fblktab.size(),
             (unsigned)fblock.length,
             (unsigned long long)fblock.filepos,
@@ -468,7 +468,7 @@ cromfs_inode_internal cromfs::read_special_inode
             get_inode_header(Buf, 0x18, inode, 0, CROMFS_BSIZE);
 
 #if INODE_DEBUG
-            printf("read_special_inode(%lld): %s\n",
+            printf("read_special_inode(%"LL_FMT"d): %s\n",
                 (long long)offset,
                 DumpInode(inode).c_str());
 #endif
@@ -507,7 +507,7 @@ const cromfs_inode_internal cromfs::read_inode(cromfs_inodenum_t inodenum)
     get_inode_header(Buf, INODE_HEADER_SIZE(), inode, storage_opts, CROMFS_BSIZE);
 
 #if INODE_DEBUG
-    fprintf(stderr, "returning inode %llu: %s\n",
+    fprintf(stderr, "returning inode %"LL_FMT"u: %s\n",
         (unsigned long long)inodenum,
         DumpInode(inode).c_str());
 #endif
@@ -534,7 +534,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
 
     uint_fast64_t nblocks = CalcSizeInBlocks(result.bytesize, result.blocksize);
 
-    //fprintf(stderr, "%llu bytes: %llu blocks\n",
+    //fprintf(stderr, "%"LL_FMT"u bytes: %"LL_FMT"u blocks\n",
     //    (unsigned long long)result.bytesize, (unsigned long long)nblocks);
 
     uint_fast64_t inode_blocktable_offset = GetInodeOffset(inodenum) + INODE_HEADER_SIZE();
@@ -633,7 +633,7 @@ cromfs_cached_fblock cromfs::read_fblock_uncached(cromfs_fblocknum_t fblocknum) 
     const uint_fast64_t filepos   = fblktab[fblocknum].filepos;
 
 #if FBLOCK_DEBUG
-    fprintf(stderr, "- - - - reading fblock %u (%u bytes) from filepos = %llu\n",
+    fprintf(stderr, "- - - - reading fblock %u (%u bytes) from filepos = %"LL_FMT"u\n",
         (unsigned)fblocknum, (unsigned)comp_size,
         (unsigned long long)filepos);
 #endif
@@ -695,7 +695,7 @@ int_fast64_t cromfs::read_file_data_from_one_fblock_only(
 
 #if READFILE_DEBUG >= 2
         fprintf(stderr,
-            "- File offset %llu (block %u(b%u f%u) @%u, consume %llu bytes of %llu) -> %p\n",
+            "- File offset %"LL_FMT"u (block %u(b%u f%u) @%u, consume %"LL_FMT"u bytes of %"LL_FMT"u) -> %p\n",
                 (unsigned long long)offset,
                 (unsigned)begin_block_index,
                 (unsigned)blocknum,
@@ -748,7 +748,7 @@ int_fast64_t cromfs::read_file_data(
 {
 #if READFILE_DEBUG
     fprintf(stderr,
-        "read_file_data, offset=%llu, target=%p, size=%llu = %s\n",
+        "read_file_data, offset=%"LL_FMT"u, target=%p, size=%"LL_FMT"u = %s\n",
         (unsigned long long)offset,
         target,
         (unsigned long long)size,

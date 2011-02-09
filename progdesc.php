@@ -125,8 +125,8 @@ and by no means a scientific study, but here goes:
  <tr align=left>
   <th>Feature</th>
    <th>Cromfs</th>
-   <th>Cramfs</th>
-   <th>Squashfs (3.3)</th>
+   <th>Cramfs (1.1)</th>
+   <th>Squashfs (4.2)</th>
    <th>Cloop</th>
   </tr>
  <tr align=left>
@@ -182,7 +182,7 @@ and by no means a scientific study, but here goes:
   <th>Compression method</th>
    <td class=good>LZMA</td>
    <td class=hmm>gzip (patches exist to use LZMA)</td>
-   <td class=hmm>gzip (patches exist to use LZMA)</td>
+   <td class=good>gzip, LZO (since 4.1), XZ (LZMA2, since 4.2)</td>
    <td class=good>gzip or LZMA</td>
   </tr>
  <tr align=left>
