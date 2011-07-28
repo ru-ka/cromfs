@@ -336,9 +336,12 @@ namespace cromfs_creator
 
     #ifdef USE_RECURSIVE_OMP_READDIR
       {
-        int dirent_len = offsetof(dirent, d_name) + pathconf(path.c_str(), _PC_NAME_MAX) + 1;
-        std::vector<char> dirent_buf(dirent_len);
+        struct dirent dummy;
+        int dirent_len = ((char*)(&dummy.d_name) - (char*)(&dummy))
+                       + pathconf(path.c_str(), _PC_NAME_MAX)
+                       + 1;
         dirent* dent = 0;
+        std::vector<char> dirent_buf(dirent_len);
         while(readdir_r(dir, (dirent*)&dirent_buf[0], &dent)==0 && dent)
             dnames.push_back(dent->d_name);
       }
