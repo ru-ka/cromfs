@@ -296,9 +296,10 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
         const size_t gcShift  = skip[mpos];
         const ssize_t turboShift = ignore_num - match_len;
 
-        shift = gcShift;
-        if(bcShift    > shift) shift = bcShift;
-        if(turboShift > shift) shift = turboShift;
+        ssize_t tmp = gcShift;
+        if(bcShift    > tmp) tmp = bcShift;
+        if(turboShift > tmp) tmp = turboShift;
+        shift = tmp;
 
         if(shift == gcShift)
             ignore_num = std::min( needle_length - shift, match_len);
