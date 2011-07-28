@@ -244,7 +244,7 @@ void mkcromfs_fblock::
         else
         {
             EnsureOpen();
-            Buffer.LoadFrom(fd, req_offset, req_size);
+            Buffer.LoadFrom(fd, req_size, req_offset);
         }
     }
     else // it's compressed and we must not save it decompressed.
@@ -312,7 +312,7 @@ void mkcromfs_fblock::InitCompressedDataReadBuffer(DataReadBuffer& Buffer, uint_
     if(!mapped)
     {
         // Failed to map it.
-        Buffer.LoadFrom(fd, 0, size = filesize);
+        Buffer.LoadFrom(fd, size = filesize, 0);
     }
     // It's compressed and mapped.
     Buffer.AssignRefFrom(mapped.get_ptr(), size = filesize);
