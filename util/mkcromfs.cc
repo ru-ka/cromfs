@@ -2273,6 +2273,12 @@ int main(int argc, char** argv)
         std::printf("Writing %s...\n", outfn.c_str());
     }
 
+    if(access( (path + "/.").c_str(), R_OK) < 0)
+    {
+        perror(path.c_str());
+        return errno;
+    }
+
     int fd = open(outfn.c_str(), O_RDWR | O_CREAT | O_LARGEFILE, 0644);
     if(fd < 0)
     {
