@@ -370,7 +370,7 @@ else
   T_CWARNINGS="-Waggregate-return -Wshadow -Winline \
     -Wstrict-prototypes \
     -Wmissing-prototypes"
-  T_CXXWARNINGS="-Woverloaded-virtual -Weffc++ -Wno-non-virtual-dtor"
+  T_CXXWARNINGS="-Woverloaded-virtual -Wno-non-virtual-dtor"
 
   for s in $T_WARNINGS;do
     do_echo -n "Checking if your compiler supports $s... "
