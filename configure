@@ -1,11 +1,21 @@
 #!/bin/bash
 
+DEBUG=0
+
+if test x"$1" = x"--debug" \
+     -o x"$1" = x"--enable-debug" ; then
+  DEBUG=1
+  echo "Debugging enabled"
+  shift
+fi
+
 if test x"$1" = x"-h" -o x"$1" = x"--help" ; then
   echo "Usage: ./configure [options]"
   echo ""
   echo "available options:"
   echo ""
-  echo "  --help                   print this message"
+  echo "  -h, --help               print this message"
+  echo "  --debug, --enable-debug  enable debugging"
   echo ""
   exit 1
 fi
@@ -311,6 +321,8 @@ WARNINGS=""
 CWARNINGS=""
 CXXWARNINGS=""
 
+OPTIM="$OPTIM -O3"
+
 if [ "$CC" = "icc" ]; then
   #do_echo -n "Checking if your compiler supports -pch... "
   #if cc_check '<stdio.h>' '-pch' 'int x,y[100];for(x=0; x<100;++x)y[x]=5;'; then
@@ -429,6 +441,10 @@ else
 fi
 
 do_echo "Updating Makefile.sets ..."
+
+if [ "$DEBUG" = "1" ]; then
+  OPTIM="-O1 -fno-inline -g"
+fi
 
 DATE="`LC_ALL=C date`"
 UNAME="`uname -a`"

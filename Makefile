@@ -160,7 +160,7 @@ ARCHFILES=\
 include Makefile.sets
 
 #CXXFLAGS += -O1 -fno-inline -g
-CXXFLAGS += -O3 -fno-rtti
+CXXFLAGS +=
 
 CPPFLAGS += `pkg-config --cflags fuse`
 LDLIBS   += `pkg-config --libs fuse`

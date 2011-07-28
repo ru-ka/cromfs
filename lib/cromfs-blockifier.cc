@@ -713,7 +713,7 @@ void cromfs_blockifier::SpecialAutoIndex(const cromfs_fblocknum_t fblocknum)
 
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
 
-#if 1 /* NES indexing */
+#if 0 /* NES indexing */
     {
         static const unsigned char NES_SIG[4] = {'N','E','S',0x1A};
         static const BoyerMooreNeedle nes_needle(NES_SIG, 4);
@@ -751,7 +751,7 @@ void cromfs_blockifier::SpecialAutoIndex(const cromfs_fblocknum_t fblocknum)
     }
 #endif
 
-#if 1 /* GameBoy indexing */
+#if 0 /* GameBoy indexing */
     {
         static const unsigned char GB_SIG[4] = {0xCE,0xED,0x66,0x66};
         static const BoyerMooreNeedle gb_needle(GB_SIG, 4);
