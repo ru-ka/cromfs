@@ -493,6 +493,9 @@ To improve the compression, try these tips:
 <ul>
  <li>Do not change --lzmafastbytes. The default value is 273,
      which is the maximum possible.</li>
+ <li>Specify values for --lzmabits , such as --lzmabits 2,0,3 .
+     This will make the final compression phase considerably
+     faster.</li>
  <li>Adjust the block size (--bsize) in mkcromfs. If your files
      have a lot identical content, aligned at a certain boundary,
      use that boundary as the block size value. If you are uncertain,
