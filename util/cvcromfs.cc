@@ -272,7 +272,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     );
 
     std::printf("Converting the root directory inode...\n- ");
-    //std::fprintf(stderr, "root goes at %llX\n", write_offs);
+    //std::fprintf(stderr, "root goes at %"LL_FMT"X\n", write_offs);
     sblock.rootdir_size =
         ConvertBuffer(infd, outfd,
                      sblock.rootdir_offs,
@@ -294,7 +294,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     ReadWriteInotabAttrs.read_old  = OrigVer >= 3;
     ReadWriteInotabAttrs.write_new = Ver >= 3;
 
-    //std::fprintf(stderr, "inotab goes at %llX\n", write_offs);
+    //std::fprintf(stderr, "inotab goes at %"LL_FMT"X\n", write_offs);
     sblock.inotab_size =
         ConvertBuffer(infd, outfd,
                      sblock.inotab_offs,
@@ -346,7 +346,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
 
     int_fast64_t size_diff = write_offs - sblock.fblktab_offs;
 
-    std::printf("Converting fblocks... size difference so far: %lld bytes\n",
+    std::printf("Converting fblocks... size difference so far: %"LL_FMT"d bytes\n",
         (long long)size_diff);
 
     uint_fast64_t read_begin = sblock.fblktab_offs;
@@ -427,7 +427,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
     struct stat64 st;
     fstat64(outfd, &st);
 
-    std::printf("Output file size: %lld bytes (actual disk space used: %lld bytes)\n",
+    std::printf("Output file size: %"LL_FMT"d bytes (actual disk space used: %"LL_FMT"d bytes)\n",
         (long long)write_offs,
         (long long)(st.st_blocks * 512));
 
@@ -479,7 +479,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "cvcromfs v"VERSION" - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "cvcromfs v"VERSION" - Copyright (C) 1992,2011 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Converts cromfs images between different versions.\n"
                     "\n"

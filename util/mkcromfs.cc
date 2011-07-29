@@ -336,9 +336,12 @@ namespace cromfs_creator
 
     #ifdef USE_RECURSIVE_OMP_READDIR
       {
-        int dirent_len = offsetof(dirent, d_name) + pathconf(path.c_str(), _PC_NAME_MAX) + 1;
-        std::vector<char> dirent_buf(dirent_len);
+        struct dirent dummy;
+        int dirent_len = ((char*)(&dummy.d_name) - (char*)(&dummy))
+                       + pathconf(path.c_str(), _PC_NAME_MAX)
+                       + 1;
         dirent* dent = 0;
+        std::vector<char> dirent_buf(dirent_len);
         while(readdir_r(dir, (dirent*)&dirent_buf[0], &dent)==0 && dent)
             dnames.push_back(dent->d_name);
       }
@@ -664,7 +667,7 @@ namespace cromfs_creator
             if(DisplayFiles)
             {
                 std::printf(
-                    "%s ... inode %ld. Size %llu"
+                    "%s ... inode %ld. Size %"LL_FMT"u"
                 #ifndef NDEBUG
                     ", Spans from %p..%p"
                 #endif
@@ -997,10 +1000,10 @@ namespace cromfs_creator
         {
         SparseWrite(out_fd, Superblock, sblock.GetSize(), 0); }
         #pragma omp section
-        { //fprintf(stderr, "root goes at %llX\n", sblock.rootdir_offs);
+        { //fprintf(stderr, "root goes at %"LL_FMT"X\n", sblock.rootdir_offs);
         SparseWrite(out_fd, &compressed_root_inode[0],   compressed_root_inode.size(), sblock.rootdir_offs); }
         #pragma omp section
-        { //fprintf(stderr, "inotab goes at %llX\n", sblock.inotab_offs);
+        { //fprintf(stderr, "inotab goes at %"LL_FMT"X\n", sblock.inotab_offs);
         SparseWrite(out_fd, &compressed_inotab_inode[0], compressed_inotab_inode.size(), sblock.inotab_offs); }
         #pragma omp section
         { SparseWrite(out_fd, &compressed_blktab[0], compressed_blktab.size(), sblock.blktab_offs); }
@@ -1574,7 +1577,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "mkcromfs v"VERSION" - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "mkcromfs v"VERSION" - Copyright (C) 1992,2011 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Usage: mkcromfs [<options>] <input_path> <target_image>\n"
                     "\n"
@@ -2268,6 +2271,12 @@ int main(int argc, char** argv)
     if(DisplayEndProcess)
     {
         std::printf("Writing %s...\n", outfn.c_str());
+    }
+
+    if(access( (path + "/.").c_str(), R_OK) < 0)
+    {
+        perror(path.c_str());
+        return errno;
     }
 
     int fd = open(outfn.c_str(), O_RDWR | O_CREAT | O_LARGEFILE, 0644);

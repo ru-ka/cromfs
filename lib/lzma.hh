@@ -13,10 +13,10 @@ extern unsigned LZMA_LiteralContextBits;
 
 /* decompress LZMA-compressed data. */
 const std::vector<unsigned char> LZMADeCompress
-    (const unsigned char* data, size_t length);
+    (const unsigned char* data, std::size_t length);
 
 const std::vector<unsigned char> LZMADeCompress
-    (const unsigned char* data, size_t length, bool& ok);
+    (const unsigned char* data, std::size_t length, bool& ok);
 
 static inline const std::vector<unsigned char> LZMADeCompress
     (const std::vector<unsigned char>& buf)
@@ -28,7 +28,7 @@ static inline const std::vector<unsigned char> LZMADeCompress
 
 /* LZMA-compress data with current settings. */
 const std::vector<unsigned char> LZMACompress
-    (const unsigned char* data, size_t length);
+    (const unsigned char* data, std::size_t length);
 
 static inline const std::vector<unsigned char> LZMACompress
     (const std::vector<unsigned char>& buf)
@@ -36,7 +36,7 @@ static inline const std::vector<unsigned char> LZMACompress
 
 /* LZMA-compress data with given settings. */
 const std::vector<unsigned char> LZMACompress
-    (const unsigned char* data, size_t length,
+    (const unsigned char* data, std::size_t length,
      unsigned pb,
      unsigned lp,
      unsigned lc);
@@ -49,7 +49,7 @@ static inline const std::vector<unsigned char> LZMACompress
      { return LZMACompress(&buf[0], buf.size(), pb,lp,lc); }
 
 const std::vector<unsigned char> LZMACompress(
-    const unsigned char* data, size_t length,
+    const unsigned char* data, std::size_t length,
     unsigned pb,
     unsigned lp,
     unsigned lc,
@@ -68,11 +68,11 @@ static inline const std::vector<unsigned char> LZMACompress(
  * so a context parameter ("why") is also given.
  */
 const std::vector<unsigned char> LZMACompressHeavy
-    (const unsigned char* data, size_t length,
+    (const unsigned char* data, std::size_t length,
      const char* why = "?");
 
 const std::vector<unsigned char> LZMACompressAuto
-    (const unsigned char* data, size_t length,
+    (const unsigned char* data, std::size_t length,
      const char* why = "?");
 
 static inline const std::vector<unsigned char> LZMACompressHeavy
@@ -88,7 +88,7 @@ static inline const std::vector<unsigned char> LZMACompressAuto
 const std::vector<unsigned char>
     DoLZMACompress(int HeavyLevel,
         const unsigned char* data,
-        size_t               length,
+        std::size_t          length,
         const char* why = "?");
 
 static inline const std::vector<unsigned char>

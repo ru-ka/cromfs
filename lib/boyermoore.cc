@@ -3,9 +3,7 @@
 #include "threadfun.hh" // for InterruptibleContext
 #include "stringsearchutil.hh"
 
-#ifndef __GNUC__
 #include "autodealloc.hh"
-#endif
 
 #include <cstdio>
 
@@ -71,13 +69,12 @@ void InitSkip(skiptable_type& skip, const unsigned char* needle, const size_t ne
 
     const size_t needle_length_minus_1 = needle_length-1;
 
-#ifdef __GNUC__
-    __extension__ size_t suff[needle_length+1]; // variable size array is a GCC extension
-#else
+    // Allocate this array from heap rather than stack.
+    // Stack is faster, but fails if the array is very large.
     size_t* suff = new size_t[needle_length+1];
     autodealloc_array<size_t> suff_dealloc(suff);
     //std::vector<size_t> suff(needle_length+1);
-#endif
+
     suff[needle_length] = needle_length;
 
     size_t j = 0; // index for writing into skip[]
@@ -299,7 +296,10 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
         const size_t gcShift  = skip[mpos];
         const ssize_t turboShift = ignore_num - match_len;
 
-        shift = std::max(std::max((ssize_t)gcShift, bcShift), turboShift);
+        ssize_t tmp = gcShift;
+        if(bcShift    > tmp) tmp = bcShift;
+        if(turboShift > tmp) tmp = turboShift;
+        shift = tmp;
 
         if(shift == gcShift)
             ignore_num = std::min( needle_length - shift, match_len);

@@ -2,7 +2,7 @@
   This library is released under the MIT license. See FSBAllocator.html
   for further information and documentation.
 
-Copyright (c) 2008 Juha Nieminen
+Copyright (c) 2008-2011 Juha Nieminen
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -77,18 +77,29 @@ class FSBAllocator_Mutex
 };
 #endif
 
-#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC
+#if defined(FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC) || defined(FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC_WITH_SCHED)
 #undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
 #undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OPENMP
 #undef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_PTHREAD
 #define FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC_WITH_SCHED
+#include <sched.h>
+#endif
 class FSBAllocator_Mutex
 {
     volatile int lockFlag;
 
  public:
     FSBAllocator_Mutex(): lockFlag(0) {}
-    void lock() { while(!__sync_bool_compare_and_swap(&lockFlag, 0, 1)) {} }
+    void lock()
+    {
+        while(!__sync_bool_compare_and_swap(&lockFlag, 0, 1))
+        {
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_GCC_WITH_SCHED
+            sched_yield();
+#endif
+        }
+    }
     void unlock() { lockFlag = 0; }
 };
 #endif
@@ -113,7 +124,7 @@ class FSBAllocator_ElemAllocator
         MemBlock():
             block(0),
             firstFreeUnitIndex(Data_t(-1)),
-            allocatedElementsAmount(0), endIndex()
+            allocatedElementsAmount(0)
         {}
 
         bool isFull() const
@@ -168,11 +179,11 @@ class FSBAllocator_ElemAllocator
     {
         std::vector<MemBlock> data;
 
-        BlocksVector() : data() { data.reserve(1024); }
+        BlocksVector() { data.reserve(1024); }
 
         ~BlocksVector()
         {
-            for(size_t i = 0; i < data.size(); ++i)
+            for(std::size_t i = 0; i < data.size(); ++i)
                 data[i].clear();
         }
     };
@@ -181,22 +192,18 @@ class FSBAllocator_ElemAllocator
     static std::vector<Data_t> blocksWithFree;
 
 #ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
-    static FSBAllocator_Mutex& getMutex()
-    {
-        static FSBAllocator_Mutex mutex;
-        return mutex;
-    }
+    static FSBAllocator_Mutex mutex;
 
 #ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
     struct Lock: boost::mutex::scoped_lock
     {
-        Lock(): boost::mutex::scoped_lock(getMutex()) {}
+        Lock(): boost::mutex::scoped_lock(mutex) {}
     };
 #else
     struct Lock
     {
-        Lock() { getMutex().lock(); }
-        ~Lock() { getMutex().unlock(); }
+        Lock() { mutex.lock(); }
+        ~Lock() { mutex.unlock(); }
     };
 #endif
 #endif
@@ -250,63 +257,63 @@ template<unsigned ElemSize>
 std::vector<typename FSBAllocator_ElemAllocator<ElemSize>::Data_t>
 FSBAllocator_ElemAllocator<ElemSize>::blocksWithFree;
 
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+template<unsigned ElemSize>
+FSBAllocator_Mutex FSBAllocator_ElemAllocator<ElemSize>::mutex;
+#endif
 
 
 template<unsigned ElemSize>
 class FSBAllocator2_ElemAllocator
 {
-    static const size_t BlockElements = 1024;
+    static const std::size_t BlockElements = 1024;
 
-    static const size_t DSize = sizeof(size_t);
-    static const size_t ElemSizeInDSize = (ElemSize + (DSize-1)) / DSize;
-    static const size_t BlockSize = BlockElements*ElemSizeInDSize;
+    static const std::size_t DSize = sizeof(std::size_t);
+    static const std::size_t ElemSizeInDSize = (ElemSize + (DSize-1)) / DSize;
+    static const std::size_t BlockSize = BlockElements*ElemSizeInDSize;
 
     struct Blocks
     {
-        std::vector<size_t*> ptrs;
+        std::vector<std::size_t*> ptrs;
 
         Blocks()
         {
             ptrs.reserve(256);
-            ptrs.push_back(new size_t[BlockSize]);
+            ptrs.push_back(new std::size_t[BlockSize]);
         }
 
         ~Blocks()
         {
-            for(size_t i = 0; i < ptrs.size(); ++i)
+            for(std::size_t i = 0; i < ptrs.size(); ++i)
                 delete[] ptrs[i];
         }
     };
 
     static Blocks blocks;
-    static size_t headIndex;
-    static size_t* freeList;
-    static size_t allocatedElementsAmount;
+    static std::size_t headIndex;
+    static std::size_t* freeList;
+    static std::size_t allocatedElementsAmount;
 
 #ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
-    static FSBAllocator_Mutex& getMutex()
-    {
-        static FSBAllocator_Mutex mutex;
-        return mutex;
-    }
+    static FSBAllocator_Mutex mutex;
 
 #ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_BOOST
     struct Lock: boost::mutex::scoped_lock
     {
-        Lock(): boost::mutex::scoped_lock(getMutex()) {}
+        Lock(): boost::mutex::scoped_lock(mutex) {}
     };
 #else
     struct Lock
     {
-        Lock() { getMutex().lock(); }
-        ~Lock() { getMutex().unlock(); }
+        Lock() { mutex.lock(); }
+        ~Lock() { mutex.unlock(); }
     };
 #endif
 #endif
 
     static void freeAll()
     {
-        for(size_t i = 1; i < blocks.ptrs.size(); ++i)
+        for(std::size_t i = 1; i < blocks.ptrs.size(); ++i)
             delete[] blocks.ptrs[i];
         blocks.ptrs.resize(1);
         headIndex = 0;
@@ -324,18 +331,18 @@ class FSBAllocator2_ElemAllocator
 
         if(freeList)
         {
-            size_t* retval = freeList;
-            freeList = reinterpret_cast<size_t*>(*freeList);
+            std::size_t* retval = freeList;
+            freeList = reinterpret_cast<std::size_t*>(*freeList);
             return retval;
         }
 
         if(headIndex == BlockSize)
         {
-            blocks.ptrs.push_back(new size_t[BlockSize]);
+            blocks.ptrs.push_back(new std::size_t[BlockSize]);
             headIndex = 0;
         }
 
-        size_t* retval = &(blocks.ptrs.back()[headIndex]);
+        std::size_t* retval = &(blocks.ptrs.back()[headIndex]);
         headIndex += ElemSizeInDSize;
         return retval;
     }
@@ -348,8 +355,8 @@ class FSBAllocator2_ElemAllocator
             Lock lock;
 #endif
 
-            size_t* sPtr = (size_t*)ptr;
-            *sPtr = reinterpret_cast<size_t>(freeList);
+            std::size_t* sPtr = (std::size_t*)ptr;
+            *sPtr = reinterpret_cast<std::size_t>(freeList);
             freeList = sPtr;
 
             if(--allocatedElementsAmount == 0)
@@ -357,7 +364,7 @@ class FSBAllocator2_ElemAllocator
         }
     }
 
-    static void cleanSweep(size_t unusedValue = size_t(-1))
+    static void cleanSweep(std::size_t unusedValue = std::size_t(-1))
     {
 #ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
         Lock lock;
@@ -365,19 +372,19 @@ class FSBAllocator2_ElemAllocator
 
         while(freeList)
         {
-            size_t* current = freeList;
-            freeList = reinterpret_cast<size_t*>(*freeList);
+            std::size_t* current = freeList;
+            freeList = reinterpret_cast<std::size_t*>(*freeList);
             *current = unusedValue;
         }
 
-        for(size_t i = headIndex; i < BlockSize; i += ElemSizeInDSize)
+        for(std::size_t i = headIndex; i < BlockSize; i += ElemSizeInDSize)
             blocks.ptrs.back()[i] = unusedValue;
 
-        for(size_t blockInd = 1; blockInd < blocks.ptrs.size();)
+        for(std::size_t blockInd = 1; blockInd < blocks.ptrs.size();)
         {
-            size_t* block = blocks.ptrs[blockInd];
-            size_t freeAmount = 0;
-            for(size_t i = 0; i < BlockSize; i += ElemSizeInDSize)
+            std::size_t* block = blocks.ptrs[blockInd];
+            std::size_t freeAmount = 0;
+            for(std::size_t i = 0; i < BlockSize; i += ElemSizeInDSize)
                 if(block[i] == unusedValue)
                     ++freeAmount;
 
@@ -390,16 +397,16 @@ class FSBAllocator2_ElemAllocator
             else ++blockInd;
         }
 
-        const size_t* lastBlock = blocks.ptrs.back();
+        const std::size_t* lastBlock = blocks.ptrs.back();
         for(headIndex = BlockSize; headIndex > 0; headIndex -= ElemSizeInDSize)
             if(lastBlock[headIndex-ElemSizeInDSize] != unusedValue)
                 break;
 
-        const size_t lastBlockIndex = blocks.ptrs.size() - 1;
-        for(size_t blockInd = 0; blockInd <= lastBlockIndex; ++blockInd)
+        const std::size_t lastBlockIndex = blocks.ptrs.size() - 1;
+        for(std::size_t blockInd = 0; blockInd <= lastBlockIndex; ++blockInd)
         {
-            size_t* block = blocks.ptrs[blockInd];
-            for(size_t i = 0; i < BlockSize; i += ElemSizeInDSize)
+            std::size_t* block = blocks.ptrs[blockInd];
+            for(std::size_t i = 0; i < BlockSize; i += ElemSizeInDSize)
             {
                 if(blockInd == lastBlockIndex && i == headIndex)
                     break;
@@ -416,22 +423,26 @@ typename FSBAllocator2_ElemAllocator<ElemSize>::Blocks
 FSBAllocator2_ElemAllocator<ElemSize>::blocks;
 
 template<unsigned ElemSize>
-size_t FSBAllocator2_ElemAllocator<ElemSize>::headIndex = 0;
+std::size_t FSBAllocator2_ElemAllocator<ElemSize>::headIndex = 0;
 
 template<unsigned ElemSize>
-size_t* FSBAllocator2_ElemAllocator<ElemSize>::freeList = 0;
+std::size_t* FSBAllocator2_ElemAllocator<ElemSize>::freeList = 0;
 
 template<unsigned ElemSize>
-size_t FSBAllocator2_ElemAllocator<ElemSize>::allocatedElementsAmount = 0;
+std::size_t FSBAllocator2_ElemAllocator<ElemSize>::allocatedElementsAmount = 0;
 
+#ifdef FSBALLOCATOR_USE_THREAD_SAFE_LOCKING_OBJECT
+template<unsigned ElemSize>
+FSBAllocator_Mutex FSBAllocator2_ElemAllocator<ElemSize>::mutex;
+#endif
 
 
 template<typename Ty>
 class FSBAllocator
 {
  public:
-    typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
+    typedef std::size_t size_type;
+    typedef std::ptrdiff_t difference_type;
     typedef Ty *pointer;
     typedef const Ty *const_pointer;
     typedef Ty& reference;
@@ -455,11 +466,7 @@ class FSBAllocator
     template<class Other>
     FSBAllocator& operator=(const FSBAllocator<Other>&) { return *this; }
 
-    pointer allocate(size_type
-                     #ifndef NDEBUG
-                       count
-                     #endif
-                      , const void* = 0)
+    pointer allocate(size_type count, const void* = 0)
     {
         assert(count == 1);
         return static_cast<pointer>
@@ -489,8 +496,8 @@ template<typename Ty>
 class FSBAllocator2
 {
  public:
-    typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
+    typedef std::size_t size_type;
+    typedef std::ptrdiff_t difference_type;
     typedef Ty *pointer;
     typedef const Ty *const_pointer;
     typedef Ty& reference;
@@ -538,12 +545,12 @@ class FSBAllocator2
 
     size_type max_size() const throw() { return 1; }
 
-    void cleanSweep(size_t unusedValue = size_t(-1))
+    void cleanSweep(std::size_t unusedValue = std::size_t(-1))
     {
         FSBAllocator2_ElemAllocator<sizeof(Ty)>::cleanSweep(unusedValue);
     }
 };
 
-typedef FSBAllocator2<size_t> FSBRefCountAllocator;
+typedef FSBAllocator2<std::size_t> FSBRefCountAllocator;
 
 #endif

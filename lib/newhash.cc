@@ -52,7 +52,7 @@
  *   http://www.burtleburtle.net/bob/hash/evahash.html
  *   http://www.cris.com/~Ttwang/tech/inthash.htm
  *
- * Copyright (C) 2009 Joel Yliluoma (http://iki.fi/bisqwit/)
+ * Copyright (C) 2011 Joel Yliluoma (http://iki.fi/bisqwit/)
  */
 
 template<typename T>

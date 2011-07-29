@@ -1,4 +1,4 @@
-VERSION=1.5.9.1
+VERSION=1.5.10
 ARCHNAME=cromfs-$(VERSION)
 
 ARCHDIR=archives/
@@ -160,7 +160,7 @@ ARCHFILES=\
 include Makefile.sets
 
 #CXXFLAGS += -O1 -fno-inline -g
-CXXFLAGS += -O3 -fno-rtti
+CXXFLAGS +=
 
 CPPFLAGS += `pkg-config --cflags fuse`
 LDLIBS   += `pkg-config --libs fuse`

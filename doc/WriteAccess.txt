@@ -1,6 +1,6 @@
 Cromfs - thoughts about write access
 
-cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2011 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
 

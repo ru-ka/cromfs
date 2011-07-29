@@ -52,14 +52,14 @@ public:
 
     template<typename Valuetype>
     void set(const Key& lo, const Key& up, const Valuetype& val);
-    size_t erase(const Key& lo, const Key& up);
+    std::size_t erase(const Key& lo, const Key& up);
     void erase(const Key& value) { erase(value, value+1); }
 
     /* Adds the given value to each item in the given range */
     void offset(const Key& lo, const Key& up, long offset, bool delete_when_zero = true);
 
-    size_t erase_before(const Key& lo);
-    size_t erase_after(const Key& up);
+    std::size_t erase_before(const Key& lo);
+    std::size_t erase_after(const Key& up);
 
     typedef typename Cont::const_iterator const_iterator;
 

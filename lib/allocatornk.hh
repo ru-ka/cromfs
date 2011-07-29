@@ -98,7 +98,7 @@ struct allocatorNk_pool
             mask <<= 1;
             if(unlikely(res == (uint_fast64_t)Extent))
             {
-                allocatorNk_printf("res=%llu, Extent=%llu\n",
+                allocatorNk_printf("res=%"LL_FMT"u, Extent=%"LL_FMT"u\n",
                     (unsigned long long) res,
                     (unsigned long long) Extent);
                 goto gives_null;

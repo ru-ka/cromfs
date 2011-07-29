@@ -127,7 +127,7 @@ redo:;
     }
 /*
     fprintf(stderr,
-        "CRC=%08X, new=%08X..%08llX; prev=%08X..%08llX; next=%08X..%08llX - will %s\n",
+        "CRC=%08X, new=%08X..%08"LL_FMT"X; prev=%08X..%08"LL_FMT"X; next=%08X..%08"LL_FMT"X - will %s\n",
         index,
         new_begin, new_end,
         prev==data.end() ? 0 : prev->first,

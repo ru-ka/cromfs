@@ -1,4 +1,4 @@
-VERSION=1.5.9.1
+VERSION=1.5.10
 
 include Makefile.sets
 
@@ -22,7 +22,6 @@ CPPDEBUG=-pipe -DNDEBUG
 #LDOPTS += -pg
 
 LDOPTS += $(OPTIM)
-
 
 CPPFLAGS += -I../lib -I.. -I../lib/lzo
 

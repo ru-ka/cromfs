@@ -1,8 +1,19 @@
 Cromfs changelog
 
-cromfs - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2011 Bisqwit (http://iki.fi/bisqwit/)
 License: GPL3
 Homepage: http://bisqwit.iki.fi/source/cromfs.html
+
+1.5.10 2011-07-29 Joel Yliluoma <bisqwit@iki.fi>
+- Update FSBAllocator version (GCC 4.6 compatibility; thanks Juha Nieminen)
+- Compilation fixes for GCC 4.6
+- Added configure option: --enable debug
+- Fixed a bug that caused mkcromfs to crash when using large block sizes
+- Fixed a bug that caused mkcromfs to crash when given
+  a file name rather than a directory name (thanks David Flater)
+- Fixed a bug that caused mkcromfs to malfunction in certain situations
+- Documentation updates (thanks David Flater)
+- Improve chances of successful compilation on a WIN32 platform
 
 1.5.9.1 2010-12-21 Joel Yliluoma <bisqwit@iki.fi>
 - Update LZMA version ("minor fixes")

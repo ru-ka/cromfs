@@ -125,8 +125,8 @@ and by no means a scientific study, but here goes:
  <tr align=left>
   <th>Feature</th>
    <th>Cromfs</th>
-   <th>Cramfs</th>
-   <th>Squashfs (3.3)</th>
+   <th>Cramfs (1.1)</th>
+   <th>Squashfs (4.2)</th>
    <th>Cloop</th>
   </tr>
  <tr align=left>
@@ -182,7 +182,7 @@ and by no means a scientific study, but here goes:
   <th>Compression method</th>
    <td class=good>LZMA</td>
    <td class=hmm>gzip (patches exist to use LZMA)</td>
-   <td class=hmm>gzip (patches exist to use LZMA)</td>
+   <td class=good>gzip, LZO (since 4.1), XZ (LZMA2, since 4.2)</td>
    <td class=good>gzip or LZMA</td>
   </tr>
  <tr align=left>
@@ -493,6 +493,9 @@ To improve the compression, try these tips:
 <ul>
  <li>Do not change --lzmafastbytes. The default value is 273,
      which is the maximum possible.</li>
+ <li>Specify values for --lzmabits , such as --lzmabits 2,0,3 .
+     This will make the final compression phase considerably
+     faster.</li>
  <li>Adjust the block size (--bsize) in mkcromfs. If your files
      have a lot identical content, aligned at a certain boundary,
      use that boundary as the block size value. If you are uncertain,

@@ -40,7 +40,7 @@ static void DisplayProgress(
     const char* suffix = "")
 {
     char Buf[4096];
-    std::sprintf(Buf, "%s: %5.2f%% (%llu/%llu)%s",
+    std::sprintf(Buf, "%s: %5.2f%% (%"LL_FMT"u/%"LL_FMT"u)%s",
         label,
         pos
         * 100.0
@@ -713,7 +713,7 @@ void cromfs_blockifier::SpecialAutoIndex(const cromfs_fblocknum_t fblocknum)
 
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
 
-#if 1 /* NES indexing */
+#if 0 /* NES indexing */
     {
         static const unsigned char NES_SIG[4] = {'N','E','S',0x1A};
         static const BoyerMooreNeedle nes_needle(NES_SIG, 4);
@@ -751,7 +751,7 @@ void cromfs_blockifier::SpecialAutoIndex(const cromfs_fblocknum_t fblocknum)
     }
 #endif
 
-#if 1 /* GameBoy indexing */
+#if 0 /* GameBoy indexing */
     {
         static const unsigned char GB_SIG[4] = {0xCE,0xED,0x66,0x66};
         static const BoyerMooreNeedle gb_needle(GB_SIG, 4);
@@ -864,10 +864,15 @@ template<typename schedule_item, size_t max_open>
 class schedule_cache
 {
     std::vector<schedule_item>& schedule;
+#ifndef WIN32
     typedef
         std::list<size_t,
             FSBAllocator<size_t>
                  > open_list_t;
+#else
+    // Microsoft STL errors here if FSBAllocator is used.
+    typedef std::list<size_t> open_list_t;
+#endif
     open_list_t open_list;
     size_t n_open;
     MutexType lock;
@@ -1191,7 +1196,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
             if(DisplayBlockSelections)
             {
-                std::printf("%s <size %llu, block size %llu>\n",
+                std::printf("%s <size %"LL_FMT"u, block size %"LL_FMT"u>\n",
                     source->getname().c_str(),
                     (unsigned long long)nbytes,
                     (unsigned long long)blocksize);
@@ -1314,7 +1319,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
             if(DisplayBlockSelections)
             {
-                std::printf("%s <size %llu, block size %llu>\n",
+                std::printf("%s <size %"LL_FMT"u, block size %"LL_FMT"u>\n",
                     source->getname().c_str(),
                     (unsigned long long)nbytes,
                     (unsigned long long)blocksize);
@@ -1346,7 +1351,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                 if(offset+eat > nbytes) eat = nbytes-offset;
 
                 /*
-                std::printf("Eating %llu bytes @ %llu",
+                std::printf("Eating %"LL_FMT"u bytes @ %"LL_FMT"u",
                     (unsigned long long) eat,
                     (unsigned long long) offset);
                 */
@@ -1525,7 +1530,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                                 // It is an exact match.
                                 if(identical_lock.TryLock())
                                 {
-                                    //std::printf("... matches block %llu\n", (unsigned long long)other);
+                                    //std::printf("... matches block %"LL_FMT"u\n", (unsigned long long)other);
                                     #pragma omp flush(identical_found)
                                     if(!identical_found)
                                     {
@@ -1624,7 +1629,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                                     // It is an exact match.
                                     if(identical_lock.TryLock())
                                     {
-                                        //std::printf("... matches block %llu\n", (unsigned long long)other);
+                                        //std::printf("... matches block %"LL_FMT"u\n", (unsigned long long)other);
                                         #pragma omp flush(identical_found)
                                         if(!identical_found)
                                         {
@@ -1716,7 +1721,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
         #endif
             if(DisplayBlockSelections)
             {
-                std::printf("%s <size %llu, block size %llu>\n",
+                std::printf("%s <size %"LL_FMT"u, block size %"LL_FMT"u>\n",
                     source->getname().c_str(),
                     (unsigned long long)nbytes,
                     (unsigned long long)blocksize);
@@ -1808,8 +1813,8 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     {
                         std::fprintf(stderr,
                             "Invalid reuse indication %lu = %lu. Not identical %u bytes:\n"
-                            "1: Position%14llu in %s\n"
-                            "2: Position%14llu in %s\n",
+                            "1: Position%14"LL_FMT"u in %s\n"
+                            "2: Position%14"LL_FMT"u in %s\n",
                             (unsigned long) blocks_done,
                             (unsigned long) other,
                             (unsigned) eat,
