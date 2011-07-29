@@ -443,7 +443,15 @@ fi
 do_echo "Updating Makefile.sets ..."
 
 if [ "$DEBUG" = "1" ]; then
-  OPTIM="-O1 -fno-inline -g"
+  OPTIM="-O1 -fno-inline"
+  do_echo -n "Checking if your compiler supports -ggdb3... "
+  if cc_check '<stdio.h>' "-ggdb3" ''; then
+    OPTIM="$OPTIM -ggdb3"
+    echo "Yes"
+  else
+    OPTIM="$OPTIM -g"
+    echo "No"
+  fi
 fi
 
 DATE="`LC_ALL=C date`"

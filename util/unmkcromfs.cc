@@ -1284,7 +1284,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "unmkcromfs v"VERSION" - Copyright (C) 1992,2009 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "unmkcromfs v"VERSION" - Copyright (C) 1992,2011 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Extracts (the) contents of a cromfs image without mounting it.\n"
                     "\n"
