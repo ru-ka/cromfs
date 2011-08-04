@@ -65,9 +65,11 @@ public:
     {
         return SearchIn(&haystack[0], haystack.size());
     }
-    size_t SearchIn(const std::string& haystack, unsigned beginpos=0) const
+    size_t SearchIn(const std::string& haystack, size_t beginpos=0) const
     {
-        return SearchIn((const unsigned char*)&haystack[beginpos], haystack.size()-beginpos)+beginpos;
+        const unsigned char* ptr = (const unsigned char*) &haystack[0];
+        size_t              size = haystack.size();
+        return SearchIn(ptr+beginpos, size-beginpos) + beginpos;
     }
     size_t SearchIn(const unsigned char* haystack, const size_t hlen) const
     {
@@ -81,9 +83,11 @@ public:
     {
         return SearchInTurbo(&haystack[0], haystack.size());
     }
-    size_t SearchInTurbo(const std::string& haystack, unsigned beginpos=0) const
+    size_t SearchInTurbo(const std::string& haystack, size_t beginpos=0) const
     {
-        return SearchInTurbo((const unsigned char*)&haystack[beginpos], haystack.size()-beginpos)+beginpos;
+        const unsigned char* ptr = (const unsigned char*) &haystack[0];
+        size_t              size = haystack.size();
+        return SearchInTurbo(ptr+beginpos, size-beginpos) + beginpos;
     }
     size_t SearchInTurbo(const unsigned char* haystack, const size_t hlen) const
     {
@@ -101,7 +105,12 @@ public:
     {
         return SearchInHorspool(&haystack[0], haystack.size());
     }
-
+    size_t SearchInHorspool(const std::string& haystack, size_t beginpos=0) const
+    {
+        const unsigned char* ptr = (const unsigned char*) &haystack[0];
+        size_t              size = haystack.size();
+        return SearchInHorspool(ptr+beginpos, size-beginpos) + beginpos;
+    }
     size_t SearchInHorspool(const unsigned char* haystack, const size_t hlen) const
     {
         return BoyerMooreSearch::SearchInHorspool(haystack,hlen, occ, needle, nlen);

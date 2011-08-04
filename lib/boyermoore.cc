@@ -191,7 +191,7 @@ size_t SearchIn(const unsigned char* haystack, const size_t haystack_length,
 
     const size_t needle_length_minus_1 = needle_length-1;
     const size_t search_room = haystack_length-needle_length;
-    const char last_needle_char = needle[needle_length_minus_1];
+    const unsigned char last_needle_char = needle[needle_length_minus_1];
 
     size_t hpos=0;
     while(hpos <= search_room)
@@ -240,7 +240,7 @@ size_t SearchInTurbo(const unsigned char* haystack, const size_t haystack_length
 
     size_t hpos = 0;
     size_t ignore_num = 0, shift = needle_length;
-    const char last_needle_char = needle[needle_length_minus_1];
+    const unsigned char last_needle_char = needle[needle_length_minus_1];
 
     /* For cache locality we reuse the "generic" backwards_match_len_max_min()
      * function here multiple times, even though we could use the simpler

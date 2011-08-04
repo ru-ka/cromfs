@@ -19,7 +19,7 @@ static const std::vector<unsigned char>
 
     for(unsigned a=0; a<len; ++a)
     {
-        result[a] = std::rand() % 4;
+        result[a] = (std::rand() % 4) * 0x40;
     }
 
     return result;
