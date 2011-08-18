@@ -22,6 +22,11 @@
 // Rename the R8..R64 access functions, because
 // some systems (such as Ubuntu 9.04 armel) define
 // these names as enum fields in sys/context.h.
+#undef R8
+#undef R16
+#undef R24
+#undef R32
+#undef R64
 #define R8 Access_R8
 #define R16 Access_R16
 #define R16r Access_R16r

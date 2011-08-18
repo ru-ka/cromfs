@@ -204,6 +204,16 @@ EOF
 fi
 
 
+do_echo -n "Checking for pkg-config... "
+if pkg-config --version &> /dev/null; then
+  do_echo Yes
+else
+  do_echo No
+  do_echo "Warning: Cromfs configure script needs pkg-config in order"
+  do_echo "to determine which other packages are installed and how"
+  do_echo "to use them. Please install pkg-config."
+fi
+
 do_echo -n "Checking for fuse (dynamic)... "
 fusetry="`pkg-config --cflags --libs fuse`"
 if cc_check '<fuse_lowlevel.h>' "-DFUSE_USE_VERSION=25 $fusetry" ''; then
