@@ -179,7 +179,8 @@ LDLIBS += $(FUSELIBS)
 
 DEPFUN_INSTALL=ignore
 
-PROGS = cromfs-driver cromfs-driver-static-$(FUSE_STATIC) util/mkcromfs util/unmkcromfs util/cvcromfs
+PROGS = cromfs-driver util/mkcromfs util/unmkcromfs util/cvcromfs
+OPTIONAL_PROGS = cromfs-driver-static-$(FUSE_STATIC)
 DOCS  = doc/FORMAT README.html doc/ChangeLog doc/*.txt
 
 all: $(PROGS)
@@ -227,6 +228,7 @@ distclean: clean
 install: $(PROGS) FORCE
 	- mkdir install install/progs install/docs
 	cp -p $(PROGS) install/progs/
+	- cp -p $(OPTIONAL_PROGS) install/progs/
 	cp -p $(DOCS) install/docs/
 	- strip install/progs/*
 	@echo "*****************************************"
