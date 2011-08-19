@@ -19,7 +19,7 @@ const std::vector<unsigned char> EncodeBlockTable
 
             //fprintf(stderr, "Writing P block %u = %u:%u\n", a,fblocknum,startoffs);
 
-            W32(&raw_blktab[a*onesize], fblocknum * FSIZE + startoffs);
+            put_32(&raw_blktab[a*onesize], fblocknum * FSIZE + startoffs);
         }
     else
         for(unsigned a=0; a<blocks.size(); ++a)
@@ -29,8 +29,8 @@ const std::vector<unsigned char> EncodeBlockTable
 
             //fprintf(stderr, "Writing NP block %u = %u:%u\n", a,fblocknum,startoffs);
 
-            W32(&raw_blktab[a*onesize+0], fblocknum);
-            W32(&raw_blktab[a*onesize+4], startoffs);
+            put_32(&raw_blktab[a*onesize+0], fblocknum);
+            put_32(&raw_blktab[a*onesize+4], startoffs);
         }
 
     return raw_blktab;

@@ -83,7 +83,7 @@ static const std::vector<unsigned char> LZMADeCompress
         return std::vector<unsigned char> ();
     }
 
-    uint_least64_t out_sizemax = R64(&buf[LZMA_PROPS_SIZE]);
+    uint_least64_t out_sizemax = get_64(&buf[LZMA_PROPS_SIZE]);
 
     if(out_sizemax >= (size_t)~0ULL)
     {
@@ -315,8 +315,8 @@ void cromfs::reread_fblktab()
 
         cromfs_fblock_internal fblock;
         fblock.filepos = startpos+4;
-        fblock.length  = R32(Buf);
-        //uint_fast64_t orig_length = R64(Buf+9); // <- not interesting
+        fblock.length  = get_32(Buf);
+        //uint_fast64_t orig_length = get_64(Buf+9); // <- not interesting
 
         if(fblock.length <= LZMA_PROPS_SIZE+8)
         {
@@ -480,7 +480,7 @@ cromfs_inode_internal cromfs::read_special_inode
 
                 LongFileRead reader(fd, offset+0x18, 4*nblocks);
                 for(unsigned n=0; n<nblocks; ++n)
-                    inode.blocklist[n] = R32(reader.GetAddr() + n*4);
+                    inode.blocklist[n] = get_32(reader.GetAddr() + n*4);
             }
         }
     }
@@ -556,7 +556,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
                        "inode block table");
 
         for(unsigned n=0; n<nblocks; ++n)
-            result.blocklist[n] = Rn(&blocklist[n * b], b);
+            result.blocklist[n] = get_n(&blocklist[n * b], b);
     }
     else
     {
@@ -566,7 +566,7 @@ const cromfs_inode_internal cromfs::read_inode_and_blocks(cromfs_inodenum_t inod
 
         /* Fix endianess after raw read */
         for(unsigned n=0; n<nblocks; ++n)
-            result.blocklist[n] = R32(&result.blocklist[n]);
+            result.blocklist[n] = get_32(&result.blocklist[n]);
     }
 
     return result;
@@ -923,7 +923,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
         //fprintf(stderr, "GORE!!! 3\n");
         throw EIO;
     }
-    uint_fast32_t num_files = R32(DirHeader);
+    uint_fast32_t num_files = get_32(DirHeader);
 
 #if READDIR_DEBUG
     fprintf(stderr, "read_dir(%s)(%u,%u): num_files=%u\n",
@@ -960,7 +960,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
 
             /* Fix endianess after raw read */
             for(unsigned n=0; n<num_addrs_to_read; ++n)
-                entry_offsets[n] = R32(&entry_offsets[n]);
+                entry_offsets[n] = get_32(&entry_offsets[n]);
 
             const unsigned name_buf_size = entry_offsets[num_to_read] - entry_offsets[0];
             std::vector<unsigned char> name_buf(name_buf_size);
@@ -994,7 +994,7 @@ const cromfs_dirinfo cromfs::read_dir(cromfs_inodenum_t inonum,
 
                 const unsigned char* name_data = &name_buf[name_offs];
 
-                uint_fast64_t inonumber   = R64(&name_data[0]);
+                uint_fast64_t inonumber   = get_64(&name_data[0]);
                 const unsigned char* filename = &name_data[8];
 
                 /* The name must be terminated by a nul pointer. */
@@ -1050,7 +1050,7 @@ cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
         //fprintf(stderr, "GORE!!! 3\n");
         throw EIO;
     }
-    uint_fast32_t num_files = R32(DirHeader);
+    uint_fast32_t num_files = get_32(DirHeader);
 
     std::vector<uint_least32_t> entry_offsets(num_files+1);
     std::vector<bool>           offs_read(num_files);
@@ -1065,7 +1065,7 @@ cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
     /* Fix endianess after raw read */
     for(unsigned n=0; n<num_files; ++n)
     {
-        entry_offsets[n] = R32(&entry_offsets[n]);
+        entry_offsets[n] = get_32(&entry_offsets[n]);
         offs_read[n] = true;
     }
 #endif
@@ -1094,12 +1094,12 @@ cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
                                "dir offset list");
                 if(read_offs == 0)
                 {
-                    entry_offsets[middle] = R32(&entry_offsets[middle]);
+                    entry_offsets[middle] = get_32(&entry_offsets[middle]);
                     offs_read[middle] = true;
                 }
                 if(n_read == 8 || read_offs == 4)
                 {
-                    entry_offsets[middle+1] = R32(&entry_offsets[middle+1]);
+                    entry_offsets[middle+1] = get_32(&entry_offsets[middle+1]);
                     offs_read[middle+1] = true;
                 }
             }
@@ -1124,7 +1124,7 @@ cromfs_inodenum_t cromfs::dir_lookup(cromfs_inodenum_t inonum,
                        entry_buf.size(),
                        "dir entry");
 
-        uint_fast64_t inonumber   = R64(&entry_buf[0]);
+        uint_fast64_t inonumber   = get_64(&entry_buf[0]);
         const unsigned char* filename = &entry_buf[8];
 
         /* The name must be terminated by a nul pointer. */

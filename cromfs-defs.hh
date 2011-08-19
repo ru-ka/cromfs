@@ -126,14 +126,14 @@ struct cromfs_superblock_internal
 
     void ReadFromBuffer(const BufferType& Superblock)
     {
-        sig                     = R64(Superblock+0x0000);
-        blktab_offs             = R64(Superblock+0x0008);
-        fblktab_offs            = R64(Superblock+0x0010);
-        inotab_offs             = R64(Superblock+0x0018);
-        rootdir_offs            = R64(Superblock+0x0020);
-        fsize                   = R32(Superblock+0x0028);
-        bsize                   = R32(Superblock+0x002C);
-        bytes_of_files          = R64(Superblock+0x0030);
+        sig                     = get_64(Superblock+0x0000);
+        blktab_offs             = get_64(Superblock+0x0008);
+        fblktab_offs            = get_64(Superblock+0x0010);
+        inotab_offs             = get_64(Superblock+0x0018);
+        rootdir_offs            = get_64(Superblock+0x0020);
+        fsize                   = get_32(Superblock+0x0028);
+        bsize                   = get_32(Superblock+0x002C);
+        bytes_of_files          = get_64(Superblock+0x0030);
 
         RecalcRoom();
 
@@ -143,27 +143,27 @@ struct cromfs_superblock_internal
 
         if(GetSize() >= 0x50)
         {
-            rootdir_size = R64(Superblock+0x0038);
-            inotab_size  = R64(Superblock+0x0040);
-            blktab_size  = R64(Superblock+0x0048);
+            rootdir_size = get_64(Superblock+0x0038);
+            inotab_size  = get_64(Superblock+0x0040);
+            blktab_size  = get_64(Superblock+0x0048);
         }
     }
     void WriteToBuffer(BufferType& Superblock)
     {
-        W64(Superblock+0x00, sig);
-        W64(Superblock+0x08, blktab_offs);
-        W64(Superblock+0x10, fblktab_offs);
-        W64(Superblock+0x18, inotab_offs);
-        W64(Superblock+0x20, rootdir_offs);
-        W32(Superblock+0x28, fsize);
-        W32(Superblock+0x2C, bsize);
-        W64(Superblock+0x30, bytes_of_files);
+        put_64(Superblock+0x00, sig);
+        put_64(Superblock+0x08, blktab_offs);
+        put_64(Superblock+0x10, fblktab_offs);
+        put_64(Superblock+0x18, inotab_offs);
+        put_64(Superblock+0x20, rootdir_offs);
+        put_32(Superblock+0x28, fsize);
+        put_32(Superblock+0x2C, bsize);
+        put_64(Superblock+0x30, bytes_of_files);
 
         if(rootdir_offs >= 0x50)
         {
-            W64(Superblock+0x0038, rootdir_size);
-            W64(Superblock+0x0040, inotab_size);
-            W64(Superblock+0x0048, blktab_size);
+            put_64(Superblock+0x0038, rootdir_size);
+            put_64(Superblock+0x0040, inotab_size);
+            put_64(Superblock+0x0048, blktab_size);
         }
     }
 

@@ -291,7 +291,7 @@ const std::vector<unsigned char> LZMACompress(
 
     MemReader is(data, length);
     MemWriter os;
-    W64(propsEncoded+LZMA_PROPS_SIZE, length);
+    put_64(propsEncoded+LZMA_PROPS_SIZE, length);
     os.buf.insert(os.buf.end(), propsEncoded, propsEncoded+LZMA_PROPS_SIZE+8);
 
     res = LzmaEnc_Encode(p, &os, &is, 0, &LZMAalloc, &LZMAalloc);
@@ -320,7 +320,7 @@ const std::vector<unsigned char> LZMADeCompress
         return std::vector<unsigned char> ();
     }
 
-    uint_least64_t out_sizemax = R64(&data[LZMA_PROPS_SIZE]);
+    uint_least64_t out_sizemax = get_64(&data[LZMA_PROPS_SIZE]);
 
     /*if(out_sizemax >= (size_t)~0ULL)
     {

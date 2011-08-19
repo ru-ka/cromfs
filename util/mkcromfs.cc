@@ -925,7 +925,7 @@ namespace cromfs_creator
 
                 // Poke in the storage opts again, because storage_opts may have
                 // been changed since the last write due to EnablePackedBlocks.
-                W32(&raw_inotab_inode[0], storage_opts);
+                put_32(&raw_inotab_inode[0], storage_opts);
 
                 std::fflush(stdout);
 
@@ -1088,7 +1088,7 @@ namespace cromfs_creator
             }
 
             { unsigned char Buf[64];
-              W32(Buf, lzma_length);
+              put_32(Buf, lzma_length);
               SparseWrite(out_fd, Buf, 4, fblk_offset);
               fblk_offset += 4;
             }
@@ -1195,7 +1195,7 @@ namespace cromfs_creator
                 unsigned char SizeBuffer[4];
                 LongFileRead(out_fd, fblock_pos, 4, SizeBuffer);
 
-                uint_fast64_t fblock_lzma_size = R32(SizeBuffer);
+                uint_fast64_t fblock_lzma_size = get_32(SizeBuffer);
 
                 std::vector<unsigned char> fblockdata(fblock_lzma_size);
 
@@ -1246,7 +1246,7 @@ namespace cromfs_creator
                     (unsigned long)fblock_pos);
 
                 { unsigned char SizeBuffer[64];
-                  W32(SizeBuffer, lzma_length);
+                  put_32(SizeBuffer, lzma_length);
                   LongFileWrite(out_fd, fblock_pos, 4, SizeBuffer); }
 
                 SparseWrite(out_fd, lzma_buffer.Buffer, lzma_length, fblock_pos+4);

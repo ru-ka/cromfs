@@ -49,17 +49,17 @@ struct InodeToucher: public BlockToucher
             i = Read.begin(); i != Read.end(); ++i)
             switch(i->second.width)
             {
-                case 2: i->second.value = R16(&Buffer[i->first]); break;
-                case 4: i->second.value = R32(&Buffer[i->first]); break;
-                case 8: i->second.value = R64(&Buffer[i->first]); break;
+                case 2: i->second.value = get_16(&Buffer[i->first]); break;
+                case 4: i->second.value = get_32(&Buffer[i->first]); break;
+                case 8: i->second.value = get_64(&Buffer[i->first]); break;
             }
         for(std::map<uint_fast64_t, Oper>::const_iterator
             i = Write.begin(); i != Write.end(); ++i)
             switch(i->second.width)
             {
-                case 2: W16(&Buffer[i->first], i->second.value); break;
-                case 4: W32(&Buffer[i->first], i->second.value); break;
-                case 8: W64(&Buffer[i->first], i->second.value); break;
+                case 2: put_16(&Buffer[i->first], i->second.value); break;
+                case 4: put_32(&Buffer[i->first], i->second.value); break;
+                case 8: put_64(&Buffer[i->first], i->second.value); break;
             }
     }
 };
@@ -73,7 +73,7 @@ struct StorageOptToucher: public BlockToucher
     virtual bool NeedsData() const { return read_old || write_new; }
     virtual void Got(std::vector<unsigned char>& Buffer)
     {
-        if(read_old) old_opts = R32(&Buffer[0]);
+        if(read_old) old_opts = get_32(&Buffer[0]);
 
         if(old_opts &   CROMFS_OPT_24BIT_BLOCKNUMS)
             new_opts |= CROMFS_OPT_24BIT_BLOCKNUMS;
@@ -84,7 +84,7 @@ struct StorageOptToucher: public BlockToucher
         if(old_opts &   CROMFS_OPT_VARIABLE_BLOCKSIZES)
             new_opts |= CROMFS_OPT_VARIABLE_BLOCKSIZES;
 
-        if(write_new) W32(&Buffer[0], new_opts);
+        if(write_new) put_32(&Buffer[0], new_opts);
     }
 };
 struct BlkTabConverter: public BlockToucher
@@ -112,11 +112,11 @@ struct BlkTabConverter: public BlockToucher
                 uint_fast32_t fblocknum = 0;
                 uint_fast32_t startoffs = 0;
                 if(HadPacked)
-                    fblocknum = R32(&Buffer[a*4]) / fsize,
-                    startoffs = R32(&Buffer[a*4]) % fsize;
+                    fblocknum = get_32(&Buffer[a*4]) / fsize,
+                    startoffs = get_32(&Buffer[a*4]) % fsize;
                 else
-                    fblocknum = R32(&Buffer[a*8+0]),
-                    startoffs = R32(&Buffer[a*8+4]);
+                    fblocknum = get_32(&Buffer[a*8+0]),
+                    startoffs = get_32(&Buffer[a*8+4]);
                 blktab[a].define(fblocknum, startoffs/*, bsize,fsize*/);
             }
 
@@ -128,12 +128,12 @@ struct BlkTabConverter: public BlockToucher
                 uint_fast32_t fblocknum = blktab[a].fblocknum;
                 uint_fast32_t startoffs = blktab[a].startoffs;
                 if(WantPacked)
-                    W32(&Buffer[a*4],
+                    put_32(&Buffer[a*4],
                         fblocknum * fsize
                       + startoffs);
                 else
-                    W32(&Buffer[a*8+0], fblocknum),
-                    W32(&Buffer[a*8+4], startoffs);
+                    put_32(&Buffer[a*8+0], fblocknum),
+                    put_32(&Buffer[a*8+4], startoffs);
             }
         }
     }
@@ -367,8 +367,8 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
 
         cromfs_fblock_internal fblock;
         fblock.filepos = read_offs+4;
-        fblock.length  = R32(Buf+0);
-        //uint_fast64_t orig_size = R64(Buf+9);
+        fblock.length  = get_32(Buf+0);
+        //uint_fast64_t orig_size = get_64(Buf+9);
 
         double position = (read_offs-read_begin) * 100.0 / (read_end-read_begin);
 
@@ -401,7 +401,7 @@ static bool Convert(const std::string& fsfile, const std::string& outfn,
             }
         }
 
-        W32(Buf, new_size);
+        put_32(Buf, new_size);
         pwrite64(outfd, Buf, 4, write_offs);
 
         if(storage_opts & CROMFS_OPT_SPARSE_FBLOCKS)

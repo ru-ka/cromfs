@@ -51,7 +51,7 @@ const std::vector<unsigned char>
     std::vector<unsigned char> entries;                  // buffer for names
     entries.reserve(dir.size() * (8 + 10)); // 10 = guestimate of average fn length
 
-    W32(&result[0], dir.size());
+    put_32(&result[0], dir.size());
 
     unsigned entrytableoffs = result.size();
     unsigned entryoffs = 0;
@@ -62,11 +62,11 @@ const std::vector<unsigned char>
         const std::string&     name = i->first;
         const cromfs_inodenum_t ino = i->second;
 
-        W32(&result[4 + diroffset*4], entrytableoffs + entryoffs);
+        put_32(&result[4 + diroffset*4], entrytableoffs + entryoffs);
 
         entries.resize(entryoffs + 8 + name.size() + 1);
 
-        W64(&entries[entryoffs], ino);
+        put_64(&entries[entryoffs], ino);
         std::memcpy(&entries[entryoffs+8], name.c_str(), name.size()+1);
         //^ basically strcpy, but since we already know the length, this is faster
 

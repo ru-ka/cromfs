@@ -204,14 +204,14 @@ public:
     c128 operator~ () const { return ~value; }
 };
 
-c128 R128(const void* p)
+c128 get_128(const void* p)
 {
   #ifdef LITTLE_ENDIAN_AND_UNALIGNED_ACCESS_OK
     return *(const uint128_t*)p;
   #else
     const unsigned char* data = (const unsigned char*)p;
-    c128 res( R64(data) );
-    c128 res2( R64(data + 8) );
+    c128 res( get_64(data) );
+    c128 res2( get_64(data + 8) );
     res |= res2 << 64;
     return res;
   #endif
@@ -223,10 +223,10 @@ static inline c128 RnSubstitute(const void* p, unsigned bytes)
     {
         case 1: case 2: case 3: case 4:
         case 5: case 6: case 7: case 8:
-            return Rn(p, bytes);
-        case 16: return R128(p);
+            return get_n(p, bytes);
+        case 16: return get_128(p);
     }
-    return c128(R64(data)) | (c128(Rn(data+8, bytes-8)) << 64);
+    return c128(get_64(data)) | (c128(get_n(data+8, bytes-8)) << 64);
 }
 #define Rn RnSubstitute
 
@@ -246,18 +246,18 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     c128 b(a), c(a);
     while(len >= 16*3)
     {
-        a += (c128)R128(buf+0);
-        b += (c128)R128(buf+16);
-        c += (c128)R128(buf+32);
+        a += (c128)get_128(buf+0);
+        b += (c128)get_128(buf+16);
+        c += (c128)get_128(buf+32);
         mix128z(a,b,c);
         buf += 48; len -= 48;
     }
     /*------------------------------------- handle the last 47 bytes */
     if(len > 0)
     {
-        if(len >= 32)      { a += (c128)R128(buf); b += (c128)R128(buf+16); c += (c128)Rn(buf+32,len-32); }
-        else if(len >= 16) { a += (c128)R128(buf); b += (c128)Rn(buf+16, len-16); }
-        else               { a += (c128)Rn(buf, len); }
+        if(len >= 32)      { a += (c128)get_128(buf); b += (c128)get_128(buf+16); c += (c128)get_n(buf+32,len-32); }
+        else if(len >= 16) { a += (c128)get_128(buf); b += (c128)get_n(buf+16, len-16); }
+        else               { a += (c128)get_n(buf, len); }
         final128z(a,b,c);
     }
     /*-------------------------------------------- report the result */
@@ -271,23 +271,23 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     c64 b(a), c(a);
     while(len >= 8*3)
     {
-        a += (c64)R64(buf+0);
-        b += (c64)R64(buf+8);
-        c += (c64)R64(buf+16);
+        a += (c64)get_64(buf+0);
+        b += (c64)get_64(buf+8);
+        c += (c64)get_64(buf+16);
         mix64z(a,b,c);
         buf += 24; len -= 24;
     }
     /*------------------------------------- handle the last 23 bytes */
     if(len > 0)
     {
-        if(len >= 16)     { a += (c64)R64(buf); b += (c64)R64(buf+8); c += (c64)Rn(buf+16,len-16); }
-        else if(len >= 8) { a += (c64)R64(buf); b += (c64)Rn(buf+8, len-8); }
-        else              { a += (c64)Rn(buf, len); }
+        if(len >= 16)     { a += (c64)get_64(buf); b += (c64)get_64(buf+8); c += (c64)get_n(buf+16,len-16); }
+        else if(len >= 8) { a += (c64)get_64(buf); b += (c64)get_n(buf+8, len-8); }
+        else              { a += (c64)get_n(buf, len); }
         final64z(a,b,c);
     }
     /*-------------------------------------------- report the result */
   #ifdef USE_MMX
-    newhash_t result = R32(&c.value); /* Note: this returns just the lowest 32 bits of the hash */
+    newhash_t result = get_32(&c.value); /* Note: this returns just the lowest 32 bits of the hash */
     MMX_clear();
     return result;
   #else
@@ -302,18 +302,18 @@ newhash_t newhash_calc_upd(newhash_t c, const unsigned char* buf, unsigned long 
     a = b = c;
     while(len >= 4*3)
     {
-        a += R32(buf+0);
-        b += R32(buf+4);
-        c += R32(buf+8);
+        a += get_32(buf+0);
+        b += get_32(buf+4);
+        c += get_32(buf+8);
         mix32z(a,b,c);
         buf += 12; len -= 12;
     }
     /*------------------------------------- handle the last 11 bytes */
     if(len > 0)
     {
-        if(len >= 8)      { a += (c32)R32(buf); b += (c32)R32(buf+4); c += (c32)Rn(buf+8,len-8); }
-        else if(len >= 4) { a += (c32)R32(buf); b += (c32)Rn(buf+4, len-4); }
-        else              { a += (c32)Rn(buf, len); }
+        if(len >= 8)      { a += (c32)get_32(buf); b += (c32)get_32(buf+4); c += (c32)get_n(buf+8,len-8); }
+        else if(len >= 4) { a += (c32)get_32(buf); b += (c32)get_n(buf+4, len-4); }
+        else              { a += (c32)get_n(buf, len); }
         final32z(a,b,c);
     }
     /*-------------------------------------------- report the result */

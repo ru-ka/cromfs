@@ -997,9 +997,9 @@ static void VerifyInodeIntact(
     bool has_variable_blocksizes = storage_opts & CROMFS_OPT_VARIABLE_BLOCKSIZES;
 
     const unsigned char* inodeheader = blockdata_begin - INODE_HEADER_SIZE();
-    const uint_fast32_t inomode    = R32(inodeheader+0x00);
-    const uint_fast64_t inolength  = R64(inodeheader+0x10);
-    const uint_fast32_t inoblksize = has_variable_blocksizes ? R32(inodeheader+0x18) : blocksize;
+    const uint_fast32_t inomode    = get_32(inodeheader+0x00);
+    const uint_fast64_t inolength  = get_64(inodeheader+0x10);
+    const uint_fast32_t inoblksize = has_variable_blocksizes ? get_32(inodeheader+0x18) : blocksize;
     const long calc_bsize = CalcBSIZEfor(name);
 
     const void* inodehdr = (const void*)inodeheader;
@@ -1794,10 +1794,10 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
 
                     // Find the blocknumber
                     uint_fast64_t blockindex2 = filepos / blocksize2;
-                    uint_fast64_t blocknum = Rn(target2 + blockindex2 * BLOCKNUM_SIZE_BYTES(), BLOCKNUM_SIZE_BYTES());
+                    uint_fast64_t blocknum = get_n(target2 + blockindex2 * BLOCKNUM_SIZE_BYTES(), BLOCKNUM_SIZE_BYTES());
                     // Write the blocknumber here
                     //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
-                    Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
+                    put_n(target, blocknum, BLOCKNUM_SIZE_BYTES());
                 #if 0
                     assertbegin();
                     assert8var(blocknum, blocks_done,other, blocks.size(), filepos, blocksize2, blocksize, blockindex2);
@@ -1852,7 +1852,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                     {
                         cromfs_blocknum_t blocknum = Execute(reuse, eat);
                         //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
-                        Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
+                        put_n(target, blocknum, BLOCKNUM_SIZE_BYTES());
                     }
                     else
                     {
@@ -1863,7 +1863,7 @@ void cromfs_blockifier::FlushBlockifyRequests(const char* purpose)
                         cromfs_blocknum_t blocknum = Execute(write);
 
                         //printf("writing to %p (%u)...\n", target, BLOCKNUM_SIZE_BYTES());
-                        Wn(target, blocknum, BLOCKNUM_SIZE_BYTES());
+                        put_n(target, blocknum, BLOCKNUM_SIZE_BYTES());
                     }
                 }
                 target += BLOCKNUM_SIZE_BYTES(); // where block number will be written to.

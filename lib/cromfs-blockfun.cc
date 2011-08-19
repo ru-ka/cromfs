@@ -23,7 +23,7 @@ const std::vector<cromfs_block_internal> DecodeBlockTable
         #pragma omp parallel for schedule(static)
         for(long a=0; a < (long)blktab.size(); ++a)
         {
-            uint_fast32_t value = R32(&blktab_data[a*onesize]);
+            uint_fast32_t value = get_32(&blktab_data[a*onesize]);
             uint_fast32_t fblocknum = value / FSIZE,
                           startoffs = value % FSIZE;
 
@@ -37,8 +37,8 @@ const std::vector<cromfs_block_internal> DecodeBlockTable
         #pragma omp parallel for schedule(static)
         for(long a=0; a < (long)blktab.size(); ++a)
         {
-            uint_fast32_t fblocknum = R32(&blktab_data[a*onesize+0]),
-                          startoffs = R32(&blktab_data[a*onesize+4]);
+            uint_fast32_t fblocknum = get_32(&blktab_data[a*onesize+0]),
+                          startoffs = get_32(&blktab_data[a*onesize+4]);
             //fprintf(stderr, "NP block %u defined as %u:%u\n", a, (unsigned)fblocknum, (unsigned)startoffs);
             blktab[a].define(fblocknum, startoffs/*, CROMFS_BSIZE,CROMFS_FSIZE*/);
         }
