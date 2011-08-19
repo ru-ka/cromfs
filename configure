@@ -79,7 +79,7 @@ do_echo() {
 
 cpu_check() {
   do_echo -n "Checking if your CPU supports $1... "
-  if grep flags /proc/cpuinfo |sed 's/.*://'|tr ' ' '\012'|grep -q '^'"$2"'$'; then
+  if grep '^\(flags\|Features\)' /proc/cpuinfo |sed 's/.*://'|tr ' ' '\012'|grep -q '^'"$2"'$'; then
     if cc_check '<stdio.h>' "$3" 'puts("ok");'; then
       OPTIM="$OPTIM $3"
       BEST_CPUFEATURE="$3"
@@ -436,6 +436,7 @@ if [ ! "$CC" = "icc" ]; then
   cpu_check SSSE3 ssse3 -mssse3 __SSSE3__
   #cpu_check ABM   abm   -abm    __SSE4_2__
   cpu_check sahf  lahf_lm -msahf HAS_SAHF
+  cpu_check VFP   vfp   -mfpu=vfp __VFP_FP__
 else
   # ICC can only take one (1) cpu feature flag, so we test these options
   # in age succession and choose the options from the last succeeding test.
