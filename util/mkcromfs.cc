@@ -155,7 +155,9 @@ namespace cromfs_creator
         }
     }
 
-    static void FinalCompressFblock(cromfs_fblocknum_t fblocknum,
+    static void FinalCompressFblock(
+        cromfs_fblocknum_t fblocknum,
+        cromfs_fblocknum_t fblockcount,
         mkcromfs_fblock& fblock,
         uint_fast64_t& compressed_total,
         uint_fast64_t& uncompressed_total)
@@ -183,8 +185,8 @@ namespace cromfs_creator
 
         if(DisplayEndProcess)
         {
-            std::printf(" [%d] %u -> %u\n",
-                (int)fblocknum,
+            std::printf(" [%ld/%ld] %u -> %u\n",
+                (long)fblocknum, (long)fblockcount.
                 (unsigned)fblock_rawlength,
                 (unsigned)fblock_lzma.size());
             std::fflush(stdout);
@@ -1047,10 +1049,11 @@ namespace cromfs_creator
          * and cromfs_fblocknum_t is unsigned.
          */
 
+        cromfs_fblocknum_t fblockcount = fblocks.size();
       #pragma omp parallel for ordered schedule(dynamic) \
             reduction(+:compressed_total) \
             reduction(+:uncompressed_total)
-        for(long/*cromfs_fblocknum_t*/ fblocknum=0; fblocknum<(long)fblocks.size(); ++fblocknum)
+        for(long/*cromfs_fblocknum_t*/ fblocknum=0; fblocknum<(long)fblockcount; ++fblocknum)
         {
           #ifdef _OPENMP
             omp_set_num_threads(backup_max_threads);
@@ -1060,7 +1063,8 @@ namespace cromfs_creator
 
           #pragma omp flush(terminate_for)
             if(!terminate_for)
-                FinalCompressFblock(fblocknum, fblock, compressed_total, uncompressed_total);
+                FinalCompressFblock(fblocknum,fblockcount,
+                                    fblock, compressed_total, uncompressed_total);
 
           #pragma omp ordered
           {
@@ -1231,7 +1235,7 @@ namespace cromfs_creator
                 {
                     std::printf(" it existed, compressing...\n");
                     uint_fast64_t com=0, uncom=0;
-                    FinalCompressFblock(fblocknum, fblock, com, uncom);
+                    FinalCompressFblock(fblocknum,fblocks.size(), fblock, com, uncom);
                 }
 
                 DataReadBuffer lzma_buffer;
