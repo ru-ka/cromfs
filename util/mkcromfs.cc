@@ -1,5 +1,10 @@
 #define __STDC_CONSTANT_MACROS
 
+#include "cromfs-defs.hh"
+#include "threadfun.hh"
+#include "assert++.hh"
+#include "autodealloc.hh"
+
 #include <vector>
 #include <cstdio>
 #include <cstdlib>
@@ -25,13 +30,6 @@
 #ifdef _OPENMP
 # include <omp.h>
 #endif
-
-#include "cromfs-defs.hh"
-#include "threadfun.hh"
-#include "assert++.hh"
-#include "autodealloc.hh"
-
-
 
 #include "mkcromfs_sets.hh"
 #include "sparsewrite.hh"

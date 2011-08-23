@@ -19,24 +19,6 @@
 # define LL_FMT "ll"
 #endif
 
-// Rename the R8..R64 access functions, because
-// some systems (such as Ubuntu 9.04 armel) define
-// these names as enum fields in sys/context.h.
-#undef R8
-#undef R16
-#undef R24
-#undef R32
-#undef R64
-#define R8 Access_R8
-#define R16 Access_R16
-#define R16r Access_R16r
-#define R24 Access_R24
-#define R24r Access_R24r
-#define R32 Access_R32
-#define R32r Access_R32r
-#define R64 Access_R64
-#define R64r Access_R64r
-
 
 static inline uint_fast16_t R8(const void* p)
 {
