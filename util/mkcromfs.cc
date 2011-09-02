@@ -184,7 +184,7 @@ namespace cromfs_creator
         if(DisplayEndProcess)
         {
             std::printf(" [%ld/%ld] %u -> %u\n",
-                (long)fblocknum, (long)fblockcount.
+                (long)fblocknum, (long)fblockcount,
                 (unsigned)fblock_rawlength,
                 (unsigned)fblock_lzma.size());
             std::fflush(stdout);
@@ -1233,7 +1233,7 @@ namespace cromfs_creator
                 {
                     std::printf(" it existed, compressing...\n");
                     uint_fast64_t com=0, uncom=0;
-                    FinalCompressFblock(fblocknum,fblocks.size(), fblock, com, uncom);
+                    FinalCompressFblock(fblocknum,-1/*fblocks.size()*/, fblock, com, uncom);
                 }
 
                 DataReadBuffer lzma_buffer;
