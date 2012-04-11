@@ -23,7 +23,7 @@ SMALL    {font-size:70%}
   <h1>Cromfs: Compressed ROM filesystem for Linux (user-space)</h1>
   <h2 class=level2> 0. Contents </h2>
   
-  This is the documentation of cromfs-1.5.9.1.
+  This is the documentation of cromfs-1.5.10.
 <div class=toc><table cellspacing=0 cellpadding=0 class=toc><tr><td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;1. <a href="#h0">Purpose</a><br>&nbsp;&nbsp;&nbsp;2. <a href="#news">News</a><br>&nbsp;&nbsp;&nbsp;3. <a href="#overview">Overview</a><br>&nbsp;&nbsp;&nbsp;4. <a href="#limits">Limitations</a><br>&nbsp;&nbsp;&nbsp;5. <a href="#status">Development status</a><br>&nbsp;&nbsp;&nbsp;6. <a href="#compare">Comparing to other filesystems</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.1. <a href="#compression">Compression tests</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;6.2. <a href="#speed">Speed tests</a><br>&nbsp;&nbsp;&nbsp;7. <a href="#usage">Getting started</a><br>&nbsp;&nbsp;&nbsp;8. <a href="#tips">Tips</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.1. <a href="#h1">To improve compression</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.2. <a href="#h2">To improve mkcromfs speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.3. <a href="#h3">To control the memory usage</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.4. <a href="#h4">To control the filesystem speed</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;8.0.5. <a href="#h5">Using cromfs with automount</a><br></td>
 <td width="50%" valign=middle align=left nowrap class=toc>&nbsp;&nbsp;&nbsp;9. <a href="#vocabulary">Understanding the concepts</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.1. <a href="#concept_inode">Inode</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.2. <a href="#concept_block">Block</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.3. <a href="#concept_fblock">Fblock</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.4. <a href="#concept_blocknumber">Block number and block table</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.5. <a href="#concept_datalocator">Data locator</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.6. <a href="#concept_blockindex">Block indexing (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.7. <a href="#concept_random_compress">Random compress period (mkcromfs only)</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;9.0.8. <a href="#concept_faq">Where are the inodes stored then?</a><br>&nbsp;&nbsp;&nbsp;10. <a href="#bootfs">Using cromfs in bootdisks and tiny Linux distributions</a><br>&nbsp;&nbsp;&nbsp;11. <a href="#otheruse">Other applications of cromfs</a><br>&nbsp;&nbsp;&nbsp;12. <a href="#copying">Copying and contributing</a><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;12.1. <a href="#wishlist">Contribution wishes</a><br>&nbsp;&nbsp;&nbsp;13. <a href="#requ">Requirements</a><br>&nbsp;&nbsp;&nbsp;14. <a href="#links">Links</a><br>&nbsp;&nbsp;&nbsp;15. <a href="#download">Downloading</a><br></td>
 </tr></table></div><H2 id="h0" class="level2"><a name="h0"></a>1. Purpose</H2><div class="level2" id="divh0">
@@ -136,8 +136,8 @@ and by no means a scientific study, but here goes:
  <tr align=left>
   <th>Feature</th>
    <th>Cromfs</th>
-   <th>Cramfs</th>
-   <th>Squashfs (3.3)</th>
+   <th>Cramfs (1.1)</th>
+   <th>Squashfs (4.2)</th>
    <th>Cloop</th>
   </tr>
  <tr align=left>
@@ -193,7 +193,7 @@ and by no means a scientific study, but here goes:
   <th>Compression method</th>
    <td class=good>LZMA</td>
    <td class=hmm>gzip (patches exist to use LZMA)</td>
-   <td class=hmm>gzip (patches exist to use LZMA)</td>
+   <td class=good>gzip, LZO (since 4.1), XZ (LZMA2, since 4.2)</td>
    <td class=good>gzip or LZMA</td>
   </tr>
  <tr align=left>
@@ -504,6 +504,9 @@ To improve the compression, try these tips:
 <ul>
  <li>Do not change --lzmafastbytes. The default value is 273,
      which is the maximum possible.</li>
+ <li>Specify values for --lzmabits , such as --lzmabits 2,0,3 .
+     This will make the final compression phase considerably
+     faster.</li>
  <li>Adjust the block size (--bsize) in mkcromfs. If your files
      have a lot identical content, aligned at a certain boundary,
      use that boundary as the block size value. If you are uncertain,
@@ -907,8 +910,8 @@ under GPL version 2 or later.
  <p/>
 Patches and other related material can be submitted to the
 author
-by e-mail at:<span id=eml37><b id=eml23 class=nonmail>7xcek</b><span id=eml24 class=ismail>Joel</span><span id=eml25 class=nonmail><b>@4jzoep2</b></span><span id=eml26 class=ismail> Yli</span><b id=eml27 class=nonmail>sIyp@yod</b><span id=eml28 class=ismail>luom</span><span id=eml29 class=nonmail><b>l31</b></span><span id=eml30 class=ismail>a &lt;bi</span><b id=eml31 class=nonmail>7e9fVNd@@</b><span id=eml32 class=ismail>sqwi</span><span id=eml33 class=nonmail><b>7tuj2t</b></span><span id=eml34 class=ismail>t@ik</span><b id=eml35 class=nonmail>08vh</b><span id=eml36 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
-s='';for(i=23;i<37;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
+by e-mail at:<span id=eml19><b id=eml5 class=nonmail>C168c8f</b><span id=eml6 class=ismail>Joel</span><span id=eml7 class=nonmail><b>akee8hs6a</b></span><span id=eml8 class=ismail> Yli</span><b id=eml9 class=nonmail>wv.lr@adg</b><span id=eml10 class=ismail>luom</span><span id=eml11 class=nonmail><b>k5ojcmsn.</b></span><span id=eml12 class=ismail>a &lt;bi</span><b id=eml13 class=nonmail>.8riilga</b><span id=eml14 class=ismail>sqwi</span><span id=eml15 class=nonmail><b>irzthq@.7</b></span><span id=eml16 class=ismail>t@ik</span><b id=eml17 class=nonmail>d/@psz</b><span id=eml18 class=ismail>i.fi&gt;</span></span><script type="text/javascript"><!--
+s='';for(i=5;i<19;){document.getElementById('eml'+i++).innerHTML='';s+=document.getElementById('eml'+i++).innerHTML;}document.getElementById('eml'+i).innerHTML='<'+'a href="mailto:'+s+'">'+s+'<'+'/a>';
 --></script>
  <p/>
 The author also wishes to hear if you use cromfs, and for what you
@@ -1013,9 +1016,9 @@ to this package.
    is at <a href="http://iki.fi/bisqwit/source/cromfs.html">http://iki.fi/bisqwit/source/cromfs.html</a>.<br>
    Check there for new versions.
 <p>Additionally, the most recent source code (bleeding edge) for cromfs can also be downloaded by cloning the Git repository by:<ul style="margin-left:3em;margin-top:0px"><li><code> git clone <a href="git://bisqwit.iki.fi/cromfs.git">git://bisqwit.iki.fi/cromfs.git</a></code></li><li><code> git checkout origin/release -b release</code></li><li><code> git checkout origin/master  -b master</code></li></ul></p></div> <p align=right><small>Generated from
-       <tt>progdesc.php</tt> (last updated: Thu, 17 Dec 2009 10:54:25 +0200)<br>
-  with <tt>docmaker.php</tt> (last updated: Thu, 17 Dec 2009 10:44:32 +0200)<br>
-  at Tue, 21 Dec 2010 16:17:34 +0200</small>
+       <tt>progdesc.php</tt> (last updated: Fri, 29 Jul 2011 14:21:49 +0300)<br>
+  with <tt>docmaker.php</tt> (last updated: Fri, 29 Jul 2011 14:21:49 +0300)<br>
+  at Fri, 29 Jul 2011 14:21:50 +0300</small>
  </p>
 </body>
 </html>
