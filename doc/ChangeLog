@@ -6,6 +6,8 @@ Homepage: http://bisqwit.iki.fi/source/cromfs.html
 
 1.5.10.1 2012-04-11 Joel Yliluoma <bisqwit@iki.fi>
 - Compilation fixes for GCC 4.7 (thanks Gaetan bisson)
+- Compilation workarounds on Arm platforms (thanks Tomas Cech)
+- Misc. patches by Tomas Cech
 
 1.5.10 2011-07-29 Joel Yliluoma <bisqwit@iki.fi>
 - Update FSBAllocator version (GCC 4.6 compatibility; thanks Juha Nieminen)
