@@ -122,23 +122,23 @@ public:
 
     void Del(K index, const V& b)
     {
-        for(typename autoindex_base::iterator i = lower_bound(index);
+        for(typename autoindex_base::iterator i = this->lower_bound(index);
             i != autoindex_base::end() && i->first == index;
             ++i)
         {
-            if(i->second == b) { erase(i); ++deleted; break; }
+            if(i->second == b) { this->erase(i); ++deleted; break; }
         }
     }
     void Add(K index, const V& b)
     {
-        insert(std::make_pair(index, b));
+        this->insert(std::make_pair(index, b));
         ++added;
     }
     bool Find(K index, V& res, find_index_t& nmatch) const
     {
         if(nmatch.first)
         {
-            nmatch.i     = lower_bound(index);
+            nmatch.i     = this->lower_bound(index);
             nmatch.first = false;
         }
         if(nmatch.i == autoindex_base::end()) { nmatch.last = true; return false; }

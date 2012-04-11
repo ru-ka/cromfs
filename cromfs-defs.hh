@@ -14,6 +14,7 @@ See doc/FORMAT for the documentation of the filesystem structure.
 
 #include "lib/endian.hh"
 
+#include <unistd.h>
 #include <vector>
 #include <string>
 #include <map>

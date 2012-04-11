@@ -479,7 +479,7 @@ int main(int argc, char** argv)
             case 'h':
             {
                 std::printf(
-                    "cvcromfs v"VERSION" - Copyright (C) 1992,2011 Bisqwit (http://iki.fi/bisqwit/)\n"
+                    "cvcromfs v"VERSION" - Copyright (C) 1992,2012 Bisqwit (http://iki.fi/bisqwit/)\n"
                     "\n"
                     "Converts cromfs images between different versions.\n"
                     "\n"

@@ -1,5 +1,5 @@
 /*
-cromfs - Copyright (C) 1992,2011 Bisqwit (http://iki.fi/bisqwit/)
+cromfs - Copyright (C) 1992,2012 Bisqwit (http://iki.fi/bisqwit/)
 Licence: GPL3
 
 cromfs-ops.cc: The filesystem access functions for Fuse. It translates
