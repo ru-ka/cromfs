@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <unistd.h>
 #include <sys/types.h>
+#include <cstring>
 
 #ifdef __GNUC__
 # define likely(x)       __builtin_expect(!!(x), 1)
@@ -311,9 +312,9 @@ bool is_zero_block(const unsigned char* data, std::size_t size)
     return true;
 
 #else
- #if 0
+ #if 1
     /* Memchr might use an algorithm optimized for aligned word-size access */
-    return !std::memchr(Buffer, '\0', size);
+    return !std::memchr(data, '\0', size);
  #else
     /* attempt of a faster implementation using aligned word access where possible */
 

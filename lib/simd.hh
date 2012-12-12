@@ -100,7 +100,7 @@ struct c64_MMX: public c64_common
         // bytes:  76543210
         // shorts: 33221100
         // take:        H L
-        return data[0] | *(short*)(data+1);
+        return data[0] | *(const short*)(data+1);
         //return data[0] | ((*(const unsigned int*)data) >> 8);
     }
     short Extract88_from_1616hi() const
@@ -109,7 +109,7 @@ struct c64_MMX: public c64_common
         // bytes:  76543210
         // shorts: 33221100
         // take:    H L
-        return data[0] | *(short*)(data+1);
+        return data[0] | *(const short*)(data+1);
         //return data[0] | ((*(const unsigned int*)data) >> 8);
     }
 
@@ -314,7 +314,7 @@ struct c64_nonMMX: public c64_common
         /* ICC says [error: type of cast must be integral or enum]
          * on the return value cast,
          * so we cannot use this code on ICC. Fine for GCC. */
-        return (uint_least64_t)_m_punpcklbw(*(__m64*)&p.value, *(__m64*)&value);
+        return (uint_least64_t)_m_punpcklbw(*(const __m64*)&p.value, *(const __m64*)&value);
     #else
         uint_fast64_t a=value, b=p.value;
         return expand32_8(a) | (expand32_8(b) << 8);
@@ -323,7 +323,7 @@ struct c64_nonMMX: public c64_common
     c64 unpackhbw(const c64& p) const
     {
     #if defined(__MMX__) && !defined(__ICC)
-        return (uint_least64_t)_m_punpckhbw(*(__m64*)&p.value, *(__m64*)&value);
+        return (uint_least64_t)_m_punpckhbw(*(const __m64*)&p.value, *(const __m64*)&value);
     #else
         uint_fast64_t a=value, b=p.value;
         return expand32_8(a>>32) | (expand32_8(b>>32) << 8);
@@ -332,7 +332,7 @@ struct c64_nonMMX: public c64_common
     c64 unpacklwd(const c64& p) const
     {
     #if defined(__MMX__) && !defined(__ICC)
-        return (uint_least64_t)_m_punpcklwd(*(__m64*)&p.value, *(__m64*)&value);
+        return (uint_least64_t)_m_punpcklwd(*(const __m64*)&p.value, *(const __m64*)&value);
     #else
         uint_fast64_t a=value, b=p.value;
         return expand32_16(a) | (expand32_16(b) << 16);
@@ -341,7 +341,7 @@ struct c64_nonMMX: public c64_common
     c64 unpackhwd(const c64& p) const
     {
     #if defined(__MMX__) && !defined(__ICC)
-        return (uint_least64_t)_m_punpckhwd(*(__m64*)&p.value, *(__m64*)&value);
+        return (uint_least64_t)_m_punpckhwd(*(const __m64*)&p.value, *(const __m64*)&value);
     #else
         uint_fast64_t a=value, b=p.value;
         return expand32_16(a>>32) | (expand32_16(b>>32) << 16);
@@ -351,7 +351,7 @@ struct c64_nonMMX: public c64_common
     c64 unpackldq(const c64& p) const
     {
     #if defined(__MMX__) && !defined(__ICC)
-        return (uint_least64_t)_m_punpckldq(*(__m64*)&p.value, *(__m64*)&value);
+        return (uint_least64_t)_m_punpckldq(*(const __m64*)&p.value, *(const __m64*)&value);
     #else
         return value | (p.value << 32);
     #endif
