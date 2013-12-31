@@ -26,6 +26,7 @@ THE SOFTWARE.
 #ifndef INCLUDE_FSBALLOCATOR_HH
 #define INCLUDE_FSBALLOCATOR_HH
 
+#include <stddef.h>
 #include <new>
 #include <cassert>
 #include <vector>

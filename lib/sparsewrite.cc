@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <unistd.h>
 #include <sys/types.h>
+#include <stddef.h>
 #include <cstring>
 
 #ifdef __GNUC__

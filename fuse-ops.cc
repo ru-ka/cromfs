@@ -17,6 +17,7 @@ the fuse_reply_err() function.
 #include <cerrno>
 #include <fcntl.h>
 #include <cstring>
+#include <unistd.h>
 #include <sys/statvfs.h>
 #include <cstring> /* for std::memset */
 #include <cstdio> /* fprintf */

@@ -1,6 +1,7 @@
 #ifndef HHlzmaHH
 #define HHlzmaHH
 
+#include <stddef.h>
 #include <vector>
 
 extern int LZMA_verbose;

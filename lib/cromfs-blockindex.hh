@@ -2,7 +2,9 @@
 #define bqtCromfsBlockIndexHH
 
 #include "../cromfs-defs.hh"
-
+#include "range.hh"
+ 
+#include <algorithm>
 #include <vector>
 #include <string>
 
