@@ -201,7 +201,7 @@ cromfs-driver-static-1: cromfs-driver-static
 cromfs-driver-static-0: ;
 
 cromfs-driver-static: $(OBJS)
-	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
+	$(CXX) -static $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS) -ldl
 	- strip $@
 	- strip -R.comment $@
 	# Note: It does not matter if upx cannot run.
