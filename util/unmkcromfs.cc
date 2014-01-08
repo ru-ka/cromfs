@@ -620,7 +620,7 @@ public:
             const std::string target = GetTargetPath(targetdir, i->first);
 
         #ifdef HAS_LUTIMES
-            struct timeval tv[2] = { { ino.time, 0 }, { ino.time, 0 } };
+            struct timeval tv[2] = { { (time_t)ino.time, 0 }, { (time_t)ino.time, 0 } };
             if(lutimes(target.c_str(), tv) < 0)
             {
                 if(!S_ISLNK(ino.mode) && errno == ENOSYS) goto try_utime;
@@ -629,7 +629,7 @@ public:
             continue;
         #endif
         try_utime:;
-            struct utimbuf data = { ino.time, ino.time };
+            struct utimbuf data = { (time_t) ino.time, (time_t) ino.time };
 
             /* Note: It is not possible to use utime() to change symlinks' modtime */
             /* Note: utime() cannot change the "change time" either. */

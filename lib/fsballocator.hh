@@ -467,7 +467,7 @@ class FSBAllocator
     template<class Other>
     FSBAllocator& operator=(const FSBAllocator<Other>&) { return *this; }
 
-    pointer allocate(size_type count, const void* = 0)
+    pointer allocate(size_type /*count*/, const void* = 0)
     {
         assert(count == 1);
         return static_cast<pointer>

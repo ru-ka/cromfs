@@ -711,7 +711,9 @@ void cromfs_blockifier::SpecialAutoIndex(const cromfs_fblocknum_t fblocknum)
      * identical block detection.
      */
 
+#if 0
     const mkcromfs_fblock& fblock = fblocks[fblocknum];
+#endif
 
 #if 0 /* NES indexing */
     {
