@@ -208,18 +208,18 @@ cromfs-driver-static: $(OBJS)
 	- upx-ucl --best --ultra-brute $@ || upx-nrv --best --ultra-brute $@ || upx --best --ultra-brute $@
 
 util/mkcromfs: FORCE
-	+make -C util mkcromfs
+	+$(MAKE) -C util mkcromfs
 
 util/unmkcromfs: FORCE
-	+make -C util unmkcromfs
+	+$(MAKE) -C util unmkcromfs
 
 util/cvcromfs: FORCE
-	+make -C util cvcromfs
+	+$(MAKE) -C util cvcromfs
 
 clean: FORCE
 	rm -rf $(OBJS) $(PROGS) install *.pchi
 	rm -f cromfs-driver-static.??? configure.log
-	+make -C util clean
+	+$(MAKE) -C util clean
 
 distclean: clean
 	rm -f {,lib,util}/.{lib,}depend
